@@ -11,7 +11,7 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-10-16T12:44:05Z"
+generated_at = "2026-10-20T02:34:32Z"
 
 # --- ENGINE STATUS (v4.3.1) ---
 # .opencode/  -> first-class primary agent engine, now targeting OpenCode v2
@@ -105,6 +105,7 @@ paths = [
     "tools/compaction_pruner.py",
     "tools/config/coverage-budget.json",
     "tools/config/lint-budget.json",
+    "tools/config/model-roles.json",
     "tools/coverage_gate.py",
     "tools/deploy.py",
     "tools/dsh_delegate.py",
@@ -114,6 +115,7 @@ paths = [
     "tools/gui/index.html",
     "tools/gui_server.py",
     "tools/harness_config.py",
+    "tools/jev_decide.py",
     "tools/kilo_cli_delegate.py",
     "tools/kilo_server_manager.py",
     "tools/kilo_usage_report.py",
@@ -138,6 +140,7 @@ paths = [
     "tools/test_benchmark_executors.py",
     "tools/test_boundary_audit.py",
     "tools/test_check_lint_budget.py",
+    "tools/test_check_model_catalog.py",
     "tools/test_check_skips.py",
     "tools/test_checklist_gate.py",
     "tools/test_claude_engine.py",
@@ -163,10 +166,12 @@ paths = [
     "tools/test_gui_server.py",
     "tools/test_harness_config.py",
     "tools/test_integration.py",
+    "tools/test_jev_decide.py",
     "tools/test_kilo_cli_delegate.py",
     "tools/test_kilo_executor_mode.py",
     "tools/test_kilo_server_manager.py",
     "tools/test_kilo_usage_report.py",
+    "tools/test_model_roles.py",
     "tools/test_opencode_delegate.py",
     "tools/test_secret_patterns.py",
     "tools/test_session_analytics.py",

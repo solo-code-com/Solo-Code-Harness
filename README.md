@@ -105,11 +105,13 @@ python tools/deploy.py
 ## Model Providers & the 4-Role Pipeline
 
 Four providers are generated into `.opencode/opencode.json` — `commandcode`, `freemodel`,
-`deepseek`, `openrouter` — with **92 model ids** declared in `tools/opencode_engine.py`. Their base
-URLs come from `.env`, and only `freemodel`'s template appends a path (`${OPENAI_BASE_URL}/v1`); the
-others are interpolated verbatim, so nothing may strip a trailing `/v1` from them.
-`tools/check_model_catalog.py` checks the ids against `GET /models` (plus `--probe`); ids are never
-taken from memory.
+`deepseek`, `openrouter` — with **104 model ids** declared in `tools/opencode_engine.py`
+(commandcode 94, freemodel 3, deepseek 2, openrouter 5). Their base URLs come from `.env`, and
+only `freemodel`'s template appends a path (`${OPENAI_BASE_URL}/v1`); the others are interpolated
+verbatim, so nothing may strip a trailing `/v1` from them.
+`tools/check_model_catalog.py` checks the ids against `GET /models` (plus `--probe`), and probes
+`POST /systemone` for the Jev decision model, which `/models` never lists; ids are never taken
+from memory.
 
 Work is routed through four roles, declared in `.kilo/agents/jev.md`:
 
@@ -457,10 +459,12 @@ python tools/deploy.py
 ## Provider model & pipeline 4 vai trò
 
 Bốn provider được sinh vào `.opencode/opencode.json` — `commandcode`, `freemodel`, `deepseek`,
-`openrouter` — với **92 model id** khai trong `tools/opencode_engine.py`. Base URL lấy từ `.env`,
-và **chỉ** template của `freemodel` thêm đường dẫn (`${OPENAI_BASE_URL}/v1`); các cái còn lại dùng
-nguyên văn, nên không được cắt `/v1` của chúng. `tools/check_model_catalog.py` đối chiếu id với
-`GET /models` (kèm `--probe`); id không bao giờ lấy từ trí nhớ.
+`openrouter` — với **104 model id** (commandcode 94, freemodel 3, deepseek 2, openrouter 5) khai
+trong `tools/opencode_engine.py`. Base URL lấy từ `.env`, và **chỉ** template của `freemodel` thêm
+đường dẫn (`${OPENAI_BASE_URL}/v1`); các cái còn lại dùng nguyên văn, nên không được cắt `/v1` của
+chúng. `tools/check_model_catalog.py` đối chiếu id với `GET /models` (kèm `--probe`), và probe
+`POST /systemone` cho Jev decision model — model này không hề xuất hiện trong `/models`; id không
+bao giờ lấy từ trí nhớ.
 
 Việc được định tuyến qua 4 vai trò, khai ở `.kilo/agents/jev.md`:
 

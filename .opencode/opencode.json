@@ -203,6 +203,20 @@
             "output": 65536
           }
         },
+        "minimax-m3.1-flash": {
+          "modelID": "minimax/minimax-m3.1-flash",
+          "name": "MiniMax M3.1 Flash",
+          "limit": {
+            "context": 1000000
+          }
+        },
+        "minimax-m3.1-flash-free": {
+          "modelID": "minimax/minimax-m3.1-flash:free",
+          "name": "MiniMax M3.1 Flash (free)",
+          "limit": {
+            "context": 1000000
+          }
+        },
         "qwen3.6-max-preview": {
           "modelID": "Qwen/Qwen3.6-Max-Preview",
           "name": "Qwen 3.6 Max Preview",
@@ -433,6 +447,13 @@
           "limit": {
             "context": 262144,
             "output": 65536
+          }
+        },
+        "beam-free": {
+          "modelID": "reflection/beam:free",
+          "name": "Beam 1.0 (free)",
+          "limit": {
+            "context": 1048576
           }
         },
         "step-3.5-flash": {
@@ -693,13 +714,6 @@
           "name": "Nemotron 3.5 Super VL",
           "limit": {
             "context": 262144
-          }
-        },
-        "cat-jam": {
-          "modelID": "stealth/cat-jam:free",
-          "name": "Cat Jam",
-          "limit": {
-            "context": 1048576
           }
         },
         "muse-spark-1.1": {

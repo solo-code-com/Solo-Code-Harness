@@ -27,6 +27,7 @@ for _entry in (str(ROOT), str(TOOLS)):
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
 
+import opencode_engine  # noqa: E402
 import session_control  # noqa: E402
 import session_registry  # noqa: E402
 
@@ -91,6 +92,65 @@ def test_prefer_real_executable_noop_on_posix(tmp_path):
     assert opencode_delegate._prefer_real_executable(
         str(shim), platform="linux"
     ) == str(shim)
+
+
+# ── model resolution ──────────────────────────────────────────────────────────
+
+
+class _FakeEngine:
+    """Stands in for tools/opencode_engine.py: only the agent-model map is read."""
+
+    @staticmethod
+    def _build_agent_models():
+        return {"jev": {"model": "openrouter/jev-router"}}
+
+
+def test_resolve_model_gives_the_orchestrator_its_own_model(monkeypatch):
+    monkeypatch.setattr(opencode_delegate, "_load_sibling", lambda name: _FakeEngine())
+
+    assert (
+        opencode_delegate.resolve_model(free=False, model=None, agent="jev")
+        == "openrouter/jev-router"
+    )
+
+
+def test_resolve_model_prefers_an_explicit_model():
+    assert (
+        opencode_delegate.resolve_model(free=False, model="commandcode/x", agent="jev")
+        == "commandcode/x"
+    )
+
+
+def test_resolve_model_leaves_other_agents_alone():
+    assert (
+        opencode_delegate.resolve_model(
+            free=False, model=None, agent="solo-code-engineer"
+        )
+        is None
+    )
+
+
+def test_resolve_model_free_wins_over_everything():
+    assert (
+        opencode_delegate.resolve_model(free=True, model="m", agent="jev")
+        == opencode_delegate.FREE_MODEL
+    )
+
+
+def test_resolve_model_defaults_without_agent_or_override(monkeypatch):
+    monkeypatch.setattr(opencode_delegate, "_model_override", lambda role: None)
+
+    assert (
+        opencode_delegate.resolve_model(free=False, model=None, agent=None)
+        == opencode_delegate.DEFAULT_MODEL
+    )
+
+
+def test_orchestrator_model_matches_the_single_source_of_truth():
+    assert (
+        opencode_delegate.resolve_model(free=False, model=None, agent="jev")
+        == opencode_engine._build_agent_models()["jev"]["model"]
+    )
 
 
 def test_parse_json_events_extracts_text_session_and_tokens():

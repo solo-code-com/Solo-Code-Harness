@@ -1,0 +1,29 @@
+{
+  "_comment": "Reference only. NOT edited by generators. .claude/ agents keep the session default: its generator deliberately omits a model.",
+  "roles": {
+    "deep-reasoning": "commandcode/claude-opus-5.5",
+    "independent-review": "commandcode/gpt-6.1-sol",
+    "adversarial-review": "commandcode/gemini-4-argon",
+    "fast-broad": "commandcode/gemini-3.8-flash",
+    "mechanical": "commandcode/gemini-3.1-flash-lite",
+    "default-executor": "commandcode/deepseek-v4.1-flash",
+    "orchestrator": "openrouter/jev-router"
+  },
+  "agents": {
+    "architect": "deep-reasoning",
+    "planner": "deep-reasoning",
+    "code-reviewer": "independent-review",
+    "security-auditor": "independent-review",
+    "python-reviewer": "independent-review",
+    "typescript-reviewer": "independent-review",
+    "database-reviewer": "independent-review",
+    "code-skeptic": "adversarial-review",
+    "web-performance-auditor": "fast-broad",
+    "test-engineer": "mechanical",
+    "tdd-guide": "mechanical",
+    "refactor-cleaner": "mechanical",
+    "code-simplifier": "mechanical",
+    "solo-code-engineer": "default-executor",
+    "jev": "orchestrator"
+  }
+}

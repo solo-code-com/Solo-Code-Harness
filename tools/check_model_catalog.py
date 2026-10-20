@@ -32,6 +32,13 @@ import opencode_engine as engine  # noqa: E402
 
 UA = "opencode/1.0"
 
+#: The decision model behind `POST /systemone`. It is absent from `GET /models` -- that listing
+#: only carries the chat, responses and messages models -- so a listing check cannot see it.
+SYSTEMONE_MODEL = "typesafe/jev"
+SYSTEMONE_QUESTION = {
+    "urgent": {"type": "noul", "instructions": "Is this request urgent?"}
+}
+
 #: The raw `.env` values, unnormalised: the paths below already carry their `/v1`.
 RAW_ENV: dict[str, str] = env_file.parse_env_file(
     Path(__file__).resolve().parent.parent / ".env"
@@ -172,6 +179,51 @@ def probe(model_ref: str, timeout: int) -> tuple[bool, str]:
     return True, str(content).strip()[:40]
 
 
+def probe_systemone(base: str, key: str, timeout: int) -> tuple[str, str]:
+    """POST the System One endpoint once and report whether the decision model answers.
+
+    `typesafe/jev` is absent from the `/models` listing, so "the catalog is ok" says nothing
+    about it: only an answer from `/systemone` proves the model is still served and named the
+    same (measured 2026-10-20). A drift here means the endpoint answers with a body the
+    wrapper cannot read; an unreachable endpoint is reported, not failed, like any provider.
+    """
+    url = base.rstrip("/") + "/systemone"
+    payload = json.dumps(
+        {
+            "model": SYSTEMONE_MODEL,
+            "state": "ping",
+            "questions": SYSTEMONE_QUESTION,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(  # noqa: S310 - operator-configured https endpoint
+        url,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": UA,
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:120].replace("\n", " ")
+        return "unreachable", f"HTTP {exc.code}: {detail}"
+    except Exception as exc:  # noqa: BLE001
+        return "unreachable", type(exc).__name__
+    try:
+        value = body["answers"]["urgent"]["noul"]
+    except (KeyError, IndexError, TypeError):
+        return "drift", f"unexpected body: {json.dumps(body)[:100]}"
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return "drift", f"noul is not a number: {value!r}"
+    if not 0.0 <= float(value) <= 1.0:
+        return "drift", f"noul out of range: {float(value)}"
+    return "ok", f"noul={float(value):.2f}"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Check model catalogs against the providers"
@@ -266,15 +318,42 @@ def main(argv: list[str] | None = None) -> int:
             drift += 1
         report.append(row)
 
+    # `/systemone` is its own route with its own model, so it gets its own row: the listing
+    # above cannot report on a model the listing never carries.
+    base_ref, _path, key_env, _catalog, _curated = PROVIDERS["commandcode"]
+    base = raw.get(base_ref or "", "")
+    key = raw.get(key_env, "") or os.environ.get(key_env, "")
+    row = {
+        "provider": "systemone",
+        "model": SYSTEMONE_MODEL,
+        "base_env": base_ref,
+        "key_env": key_env,
+        "declared": None,
+    }
+    if not base or not key:
+        row.update(
+            {
+                "status": f"skipped ({'base' if not base else 'key'} missing)",
+                "detail": "",
+            }
+        )
+    else:
+        status, detail = probe_systemone(base, key, args.timeout)
+        row.update({"status": status, "detail": detail})
+        if status == "drift":
+            drift += 1
+    report.append(row)
+
     if args.json:
         print(json.dumps(report, indent=1))
     else:
         print(f"{'provider':14} {'models':>13}  {'key env':22} status")
         for row in report:
-            counts = f"{row.get('declared', '-')}/{row.get('live', '-')}"
-            print(
-                f"{row['provider']:14} {counts:>13}  {row['key_env']:22} {row['status']}"
+            counts = row.get("model") or (
+                f"{row.get('declared', '-')}/{row.get('live', '-')}"
             )
+            line = f"{row['provider']:14} {counts:>13}  {row['key_env']:22} {row['status']}"
+            print(f"{line}  {row['detail']}" if row.get("detail") else line)
             if row.get("missing"):
                 print(f"      served but undeclared: {', '.join(row['missing'][:6])}")
             if row.get("stale"):

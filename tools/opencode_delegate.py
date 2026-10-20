@@ -106,6 +106,29 @@ def _model_override(role: str) -> str | None:
     return _load_sibling("env_file").model_override(role)
 
 
+def resolve_model(*, free: bool, model: str | None, agent: str | None) -> str | None:
+    """The `--model` value to hand the CLI, or None to let OpenCode choose.
+
+    OpenCode v2.0.32 ignores an agent's own `model` when `run --agent` gets no `--model`
+    (measured 2026-10-20: `--agent jev` ran commandcode/deepseek-v4-pro while `debug agents`
+    resolved openrouter/jev-router), so the orchestrator's model is passed explicitly. Other
+    agents keep None: their callers already name a model, and an agent with no model of its
+    own should still fall back to its own config rather than to the project default.
+    """
+    if free:
+        return FREE_MODEL
+    if model:
+        return model
+    if agent == ORCHESTRATOR_AGENT:
+        # One source of truth: model-roles.json, through the engine's own resolver, which
+        # already carries the operator's fallback to the default executor.
+        engine = _load_sibling("opencode_engine")
+        return engine._build_agent_models()[ORCHESTRATOR_AGENT]["model"]
+    if agent:
+        return None
+    return _model_override("opencode") or DEFAULT_MODEL
+
+
 def _error_result(error: str) -> dict[str, Any]:
     """The shaped empty result every failure path in this module returns."""
     return {
@@ -266,16 +289,22 @@ def run_opencode_cli(
     if agent != ORCHESTRATOR_AGENT:
         # Workers need unattended writes; the orchestrator must not have them.
         cmd.append("--auto")
-    if model:  # omitted with --agent, so the agent's own configured model applies
+    if model:  # the orchestrator's model is passed explicitly; v2.0.32 ignores an agent's own model
         cmd += ["--model", model]
     if agent:  # e.g. the `jev` orchestrator agent
         cmd += ["--agent", agent]
     if session:  # continue (or create) a session, for a conversation
         cmd += ["--session", session]
 
-    _stderr(
-        f"Running: opencode run ... --model {model or '(agent default)'} --format json --auto"
-    )
+    # Built from what the argv actually got: the orchestrator runs without --auto.
+    running = "Running: opencode run ..."
+    if agent:
+        running += f" --agent {agent}"
+    running += f" --model {model}" if model else " --model (agent default)"
+    running += " --format json"
+    if agent != ORCHESTRATOR_AGENT:
+        running += " --auto"
+    _stderr(running)
 
     registry = _load_sibling("session_registry")
     try:
@@ -376,8 +405,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--model",
         default=None,
-        help=f"Model in provider/model format (default: {DEFAULT_MODEL}; omitted "
-        "with --agent so the agent's own model applies)",
+        help=f"Model in provider/model format (default: {DEFAULT_MODEL}; the jev agent's "
+        "own model is passed explicitly, other agents resolve it from their config)",
     )
     parser.add_argument(
         "--directory",
@@ -422,19 +451,13 @@ def main(argv: list[str] | None = None) -> int:
     _stderr(f"Using OpenCode binary: {opencode_binary}")
 
     # ── Resolve the model ──
-    # With an agent and no explicit model, send no `--model` at all so the agent's
-    # own configuration decides (the `jev` agent runs on openrouter/jev-router);
-    # otherwise the harness default applies -- and a `.env` override wins over that
-    # default, so a provider outage is one line in `.env`, not a code edit.
+    # An explicit --model wins; the orchestrator's model is passed explicitly because
+    # v2.0.32 ignores an agent's own model on `run --agent` (measured 2026-10-20); any
+    # other agent keeps None so its own configuration decides. Otherwise the harness
+    # default applies -- and a `.env` override wins over that default, so a provider
+    # outage is one line in `.env`, not a code edit.
     _load_project_env()
-    if args.free:
-        model = FREE_MODEL
-    elif args.model:
-        model = args.model
-    elif args.agent:
-        model = None
-    else:
-        model = _model_override("opencode") or DEFAULT_MODEL
+    model = resolve_model(free=args.free, model=args.model, agent=args.agent)
 
     # ── Prepend guardrail unless disabled ──
     prompt = args.prompt

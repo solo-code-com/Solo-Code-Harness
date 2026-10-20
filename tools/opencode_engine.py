@@ -244,6 +244,16 @@ _PROVIDER_MODELS: dict[str, dict[str, Any]] = {
         "name": "MiniMax M3-50%",
         "limit": {"context": 1024000, "output": 65536},
     },
+    "minimax-m3.1-flash": {
+        "modelID": "minimax/minimax-m3.1-flash",
+        "name": "MiniMax M3.1 Flash",
+        "limit": {"context": 1000000},
+    },
+    "minimax-m3.1-flash-free": {
+        "modelID": "minimax/minimax-m3.1-flash:free",
+        "name": "MiniMax M3.1 Flash (free)",
+        "limit": {"context": 1000000},
+    },
     "qwen3.6-max-preview": {
         "modelID": "Qwen/Qwen3.6-Max-Preview",
         "name": "Qwen 3.6 Max Preview",
@@ -388,6 +398,11 @@ _PROVIDER_MODELS: dict[str, dict[str, Any]] = {
         "modelID": "stealth/glyph-cluster:free",
         "name": "Glyph ClusterFree",
         "limit": {"context": 262144, "output": 65536},
+    },
+    "beam-free": {
+        "modelID": "reflection/beam:free",
+        "name": "Beam 1.0 (free)",
+        "limit": {"context": 1048576},
     },
     "step-3.5-flash": {
         "modelID": "stepfun/Step-3.5-Flash",
@@ -566,11 +581,6 @@ _PROVIDER_MODELS: dict[str, dict[str, Any]] = {
         "name": "Nemotron 3.5 Super VL",
         "limit": {"context": 262144},
     },
-    "cat-jam": {
-        "modelID": "stealth/cat-jam:free",
-        "name": "Cat Jam",
-        "limit": {"context": 1048576},
-    },
     "muse-spark-1.1": {
         "modelID": "meta/muse-spark-1.1",
         "name": "Muse Spark 1.1",
@@ -662,11 +672,34 @@ _JEV_AGENT_MODEL = "openrouter/jev-router"
 _JEV_AGENT_FALLBACK = "commandcode/deepseek-v4.1-flash"
 
 
+# The per-agent model assignment lives in one place: tools/config/model-roles.json
+# maps every .kilo/agents/*.md stem to a role, and each role to a model id from the
+# catalogs above. One file beats 15 agent files x 5 engine mirrors, and moving a
+# reviewer to another vendor family is a one-line edit instead of a five-engine sync.
+_MODEL_ROLES_PATH = ROOT_DIR / "tools" / "config" / "model-roles.json"
+
+
 def _build_agent_models() -> dict[str, dict[str, str]]:
-    """Per-agent model overrides, with the operator's fallback applied."""
-    if "jev-router" in _OPENROUTER_MODELS:
-        return {"jev": {"model": _JEV_AGENT_MODEL}}
-    return {"jev": {"model": _JEV_AGENT_FALLBACK}}
+    """Per-agent model overrides, read from tools/config/model-roles.json.
+
+    Every agent the file maps gets an override; `jev` keeps the operator's rule
+    (2026-10-15): when the OpenRouter catalog does not declare the Jev router, the
+    orchestrator runs on the harness's default executor, not on the orchestrator
+    default. A missing or unreadable file leaves `jev` on that same rule.
+    """
+    models: dict[str, dict[str, str]] = {}
+    with contextlib.suppress(OSError, json.JSONDecodeError):
+        config = json.loads(_MODEL_ROLES_PATH.read_text(encoding="utf-8"))
+        roles: dict[str, Any] = config.get("roles", {})
+        for agent, role in config.get("agents", {}).items():
+            model = roles.get(role)
+            if isinstance(model, str):
+                models[agent] = {"model": model}
+    if "jev" not in models:
+        models["jev"] = {"model": _JEV_AGENT_MODEL}
+    if "jev-router" not in _OPENROUTER_MODELS:
+        models["jev"] = {"model": _JEV_AGENT_FALLBACK}
+    return models
 
 
 # Ordered shell allow/deny rules for the legacy `permission.bash` object.
@@ -791,7 +824,14 @@ def _parse_permission_block(
             indent = len(nxt) - len(nxt.lstrip(" "))
             if indent == 0:
                 break
-            key, sep, value = nxt.strip().partition(":")
+            stripped = nxt.strip()
+            # A `#` comment inside the permission block is prose about the rules,
+            # not a rule: partitioning it would emit a permission entry whose key
+            # is the comment text and whose effect is the rest of the sentence.
+            if stripped.startswith("#"):
+                i += 1
+                continue
+            key, sep, value = stripped.partition(":")
             key = key.strip().strip('"').strip("'")
             children.append((indent, key, value.strip() if sep else None))
             i += 1

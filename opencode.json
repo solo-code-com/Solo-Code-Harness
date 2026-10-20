@@ -4,6 +4,48 @@
   "small_model": "commandcode/deepseek-v4.1-flash",
   "default_agent": "jev",
   "agents": {
+    "architect": {
+      "model": "commandcode/claude-opus-5.5"
+    },
+    "planner": {
+      "model": "commandcode/claude-opus-5.5"
+    },
+    "code-reviewer": {
+      "model": "commandcode/gpt-6.1-sol"
+    },
+    "security-auditor": {
+      "model": "commandcode/gpt-6.1-sol"
+    },
+    "python-reviewer": {
+      "model": "commandcode/gpt-6.1-sol"
+    },
+    "typescript-reviewer": {
+      "model": "commandcode/gpt-6.1-sol"
+    },
+    "database-reviewer": {
+      "model": "commandcode/gpt-6.1-sol"
+    },
+    "code-skeptic": {
+      "model": "commandcode/gemini-4-argon"
+    },
+    "web-performance-auditor": {
+      "model": "commandcode/gemini-3.8-flash"
+    },
+    "test-engineer": {
+      "model": "commandcode/gemini-3.1-flash-lite"
+    },
+    "tdd-guide": {
+      "model": "commandcode/gemini-3.1-flash-lite"
+    },
+    "refactor-cleaner": {
+      "model": "commandcode/gemini-3.1-flash-lite"
+    },
+    "code-simplifier": {
+      "model": "commandcode/gemini-3.1-flash-lite"
+    },
+    "solo-code-engineer": {
+      "model": "commandcode/deepseek-v4.1-flash"
+    },
     "jev": {
       "model": "openrouter/jev-router"
     }
