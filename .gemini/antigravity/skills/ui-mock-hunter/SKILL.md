@@ -25,7 +25,7 @@ Khi bạn tham gia xây dựng hoặc review một file component (Ví dụ: `.t
 Nếu bạn phát hiện Mock Data:
 1. **Không được bỏ qua:** Bạn không được phép "để đó tính sau" trừ khi user có yêu cầu "Hãy cứ dùng mock data".
 2. **Phản hồi ngay lập tức:** Báo cáo cho user biết "Tôi phát hiện Mock Data tại line X của file Y. Bạn có muốn tôi thay thế nó bằng một API call hay truyền qua Props không?".
-3. **Biến thành TODO:** Đổi dữ liệu giả thành một lời gọi hàm TODO, ví dụ: 
+3. **Biến thành TODO:** Đổi dữ liệu giả thành một lời gọi hàm TODO, ví dụ:
    `const data = await fetchRealData(); // TODO: implement this`
 
 ## Ví dụ:

@@ -11,7 +11,7 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-10-20T10:47:23Z"
+generated_at = "2026-10-20T11:46:14Z"
 
 # --- ENGINE STATUS (v4.3.1) ---
 # .opencode/  -> first-class primary agent engine, now targeting OpenCode v2
@@ -95,6 +95,7 @@ paths = [
     "tools/check_lint_budget.py",
     "tools/check_model_catalog.py",
     "tools/check_stdlib_only.py",
+    "tools/check_text_hygiene.py",
     "tools/claude_engine.py",
     "tools/claude_guard_compat.py",
     "tools/codex_delegate.py",
@@ -196,6 +197,7 @@ paths = [
     "tools/test_stdlib_only.py",
     "tools/test_subagent_cli.py",
     "tools/test_subagent_seam.py",
+    "tools/test_text_hygiene.py",
     "tools/test_validate_schemas.py",
     "tools/test_win_sandbox.py",
     "tools/validate_schemas.py",

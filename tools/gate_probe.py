@@ -136,7 +136,7 @@ CORPUS: list[dict] = [
     {
         "id": "generator-newline-churn",
         "defect": "A source file lacks a trailing newline and a hook adds one back.",
-        "gate": None,
+        "gate": "text_hygiene",
         "fixture": {
             "src/app.py": "print('hello')",
             "tools/add-newline.js": "// re-adds a missing trailing newline\n",
@@ -195,11 +195,17 @@ def _stdlib_only(root: Path) -> bool | str:
     return _run_script(ROOT / "tools" / "check_stdlib_only.py", root, [])
 
 
+def _text_hygiene(root: Path) -> bool | str:
+    """text_hygiene: flags a trailing-space, no-final-newline, or CRLF finding."""
+    return _run_script(ROOT / "tools" / "check_text_hygiene.py", root, [])
+
+
 ADAPTERS: dict[str, Callable[[Path], bool | str]] = {
     "boundary_audit": _boundary_audit,
     "security_scan": _security_scan,
     "hook_exit_claims": _hook_exit_claims,
     "stdlib_only": _stdlib_only,
+    "text_hygiene": _text_hygiene,
 }
 
 

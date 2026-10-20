@@ -19,7 +19,7 @@ Coordinates parallel sub-agent dispatch for independent tasks, reducing end-to-e
 
 **Agent**: planner (with task-delegation skill)
 
-**Action**: 
+**Action**:
 - Load the task-delegation skill and analyze all pending tasks
 - Build a dependency graph identifying independent vs dependent tasks
 - Group tasks into execution batches (each batch = tasks that can run simultaneously)

@@ -153,5 +153,5 @@ After marking all applicable items:
 
 ---
 
-**Template version**: 1.0 (2026-08-14)  
+**Template version**: 1.0 (2026-08-14)
 **Pattern source**: `.solocode/review-report.md`, DeepSeek harness defensive patterns

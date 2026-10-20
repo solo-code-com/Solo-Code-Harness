@@ -28,7 +28,7 @@ def run_subprocess(cmd, timeout):
     timed_out = False
     exit_code = None
     signal = None
-    
+
     try:
         result = subprocess.run(cmd, timeout=timeout)
         exit_code = result.returncode
@@ -37,7 +37,7 @@ def run_subprocess(cmd, timeout):
         # Process may have exited before we killed it
         if e.returncode is not None:
             exit_code = e.returncode
-    
+
     return {
         "timed_out": timed_out,
         "exit_code": exit_code,
@@ -82,7 +82,7 @@ async def run_agent_task(agent, task):
 ```python
 async def run_agent_task(agent, task):
     task_id = agent.followup(task)
-    
+
     # Define explicit interval: from task submission to task completion
     async for event in agent.events():
         if event.task_id == task_id and event.kind == "completed":
@@ -112,17 +112,17 @@ def cleanup(self):
 async def cleanup(self):
     # 1. Stop accepting new notifications
     self.event_registry.close()
-    
+
     # 2. Request termination
     for proc in self.processes:
         proc.kill()
-    
+
     # 3. Wait for quiescence
     await asyncio.gather(
         *[proc.wait() for proc in self.processes],
         return_exceptions=True
     )
-    
+
     # 4. Now safe to return - no orphans
 ```
 
@@ -158,7 +158,7 @@ async def notify_listeners(self, event):
 
 **Problem**: Spawned commands that inherit the full environment may leak harness credentials into output, `env` dumps, or spill files. Predictable world-readable temp paths invite symlink races and disclosure.
 
-**Rule**: 
+**Rule**:
 1. Scrub spawned command environments: drop `*KEY*`, `*SECRET*`, `*TOKEN*`, `*PASSWORD*`
 2. Use private temp directories (mode 0700)
 3. Use random filenames
@@ -172,7 +172,7 @@ import os
 def run_worker(cmd):
     # Inherits ANTHROPIC_API_KEY, DEEPSEEK_API_KEY, etc.
     subprocess.run(cmd, env=os.environ)
-    
+
     # Predictable path, world-readable
     output_file = "/tmp/worker-output.txt"
     with open(output_file, "w") as f:
@@ -190,17 +190,17 @@ def run_worker(cmd):
     # Scrub environment
     clean_env = {
         k: v for k, v in os.environ.items()
-        if not any(pattern in k.upper() for pattern in 
+        if not any(pattern in k.upper() for pattern in
                    ["KEY", "SECRET", "TOKEN", "PASSWORD"])
     }
     subprocess.run(cmd, env=clean_env)
-    
+
     # Private directory (0700) with random filename
     private_dir = Path(tempfile.mkdtemp(prefix="worker-"))
     private_dir.chmod(0o700)
-    
+
     output_file = private_dir / f"{secrets.token_hex(8)}.txt"
-    
+
     # Exclusive open, owner-only (0600)
     fd = os.open(output_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as f:
@@ -233,7 +233,7 @@ from pathlib import Path
 
 def cleanup(path):
     path = Path(path)
-    
+
     # Use lstat (not stat) to check link itself, not target
     if path.exists(follow_symlinks=False):
         if path.is_symlink():
@@ -255,15 +255,15 @@ These patterns are particularly relevant to:
 1. **Hook Lifecycle** (`.claude/hooks/*.py`, `.kilo/hooks/*.js`)
    - Hooks must report orthogonal outcomes (blocked, allowed, timeout, error)
    - Dispose must reach quiescence before returning
-   
+
 2. **Subprocess Execution** (`tools/opencode_delegate.py`, `tools/kilo_cli_delegate.py`)
    - Environment scrubbing for worker processes
    - Timeout + exit code + signal reporting
-   
+
 3. **Async Agent Communication** (future: session persistence, query system)
    - Async state is not synchronous state
    - Event-driven completion tracking
-   
+
 4. **Cleanup Paths** (`tools/snapshot_testing.py`, test fixtures)
    - Symlink-aware deletion
    - Private temp directories

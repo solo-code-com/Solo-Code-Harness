@@ -1,7 +1,7 @@
 # Executor Model Benchmark - Final Report
 
-**Date:** 2026-09-04  
-**Objective:** Find cheaper replacement for DeepSeek V4 Pro  
+**Date:** 2026-09-04
+**Objective:** Find cheaper replacement for DeepSeek V4 Pro
 **Models Tested:** GLM-5, GLM-5.1, Qwen 3.6 Plus, Qwen 3.7 Max, DeepSeek V4 Flash, DeepSeek V4 Pro
 
 ---
@@ -204,7 +204,7 @@ opencode/deepseek-v4-flash-free = $0
 
 ### Option 3: Ollama Local (Free)
 **Pros:** $0 cost
-**Cons:** 
+**Cons:**
 - Need local GPU
 - No reasoning token tracking
 - Requires proxy setup (LiteLLM)
