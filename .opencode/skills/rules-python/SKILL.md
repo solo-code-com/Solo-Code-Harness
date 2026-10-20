@@ -66,7 +66,7 @@ except ConnectionError:
     logger.warning("Retrying...")
     return fallback()
 
-# BAD  
+# BAD
 try:
     risky_operation()
 except:          # bare except

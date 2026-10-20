@@ -49,5 +49,5 @@ This skill guides the AI on how to prepare and verify source code before deployi
 > - **Linting & Code Style:** 0 ruff errors, 0 warnings.
 > - **Security Scan:** No secret leaks detected.
 > - **Tests:** 12/12 unit tests passed.
-> 
+>
 > **Verdict:** `READY TO DEPLOY`

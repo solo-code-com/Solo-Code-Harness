@@ -403,7 +403,7 @@ created: 2026-07-24
   `opencode-env.ps1` and `tools/opencode_delegate.py` stay — they are now
   defensive rather than reparative.
 
-- [decision] 2026-09-26: Feature/task state stays out of SQLite - eatures and
+- [decision] 2026-09-26: Feature/task state stays out of SQLite - Features and
   shared_memory_* remain unused (no hook or engine calls set_feature_status()).
   AGENTS.md was still mandating the old API - requirement removed, API kept only
   for back-compat. Two session stores are documented as distinct:
