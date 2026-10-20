@@ -11,7 +11,7 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-10-20T02:34:32Z"
+generated_at = "2026-10-20T05:17:48Z"
 
 # --- ENGINE STATUS (v4.3.1) ---
 # .opencode/  -> first-class primary agent engine, now targeting OpenCode v2
@@ -106,10 +106,12 @@ paths = [
     "tools/config/coverage-budget.json",
     "tools/config/lint-budget.json",
     "tools/config/model-roles.json",
+    "tools/config/review-policy.json",
     "tools/coverage_gate.py",
     "tools/deploy.py",
     "tools/dsh_delegate.py",
     "tools/env_file.py",
+    "tools/failure_ledger.py",
     "tools/garden.py",
     "tools/generate_harness.py",
     "tools/gui/index.html",
@@ -123,6 +125,7 @@ paths = [
     "tools/opencode-skip-skills.txt",
     "tools/opencode_delegate.py",
     "tools/opencode_engine.py",
+    "tools/review_receipt.py",
     "tools/session_analytics.py",
     "tools/session_control.py",
     "tools/session_persistence.py",
@@ -159,12 +162,14 @@ paths = [
     "tools/test_e2e.py",
     "tools/test_env_file.py",
     "tools/test_eval_harness.py",
+    "tools/test_failure_ledger.py",
     "tools/test_garden.py",
     "tools/test_generate_harness.py",
     "tools/test_generator_idempotency.py",
     "tools/test_guard.py",
     "tools/test_gui_server.py",
     "tools/test_harness_config.py",
+    "tools/test_hook_exit_claims.py",
     "tools/test_integration.py",
     "tools/test_jev_decide.py",
     "tools/test_kilo_cli_delegate.py",
@@ -173,6 +178,7 @@ paths = [
     "tools/test_kilo_usage_report.py",
     "tools/test_model_roles.py",
     "tools/test_opencode_delegate.py",
+    "tools/test_review_receipt.py",
     "tools/test_secret_patterns.py",
     "tools/test_session_analytics.py",
     "tools/test_session_control.py",
