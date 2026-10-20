@@ -10,7 +10,7 @@ repos:
         # One anchor reused below, so adding a checkout is a single edit -- the
         # hardcoded `cocoindex-code-main/` had gone stale while five other names
         # sat unprotected.
-        exclude: &vendored_exclude ^(\.kilo/|\.opencode/|(?:agentic-awesome-skills-main|deepseek-harness-master|open-code-review-main|antigravity-sdk-python-main|learn-harness-engineering-main)/)
+        exclude: &vendored_exclude ^(\.kilo/|\.opencode/|\.claude/skills/|\.copilot/skill/|\.gemini/antigravity/skills/|(?:agentic-awesome-skills-main|deepseek-harness-master|open-code-review-main|antigravity-sdk-python-main|learn-harness-engineering-main)/)
       - id: check-yaml
         args: [--allow-multiple-documents]
         # Deliberately not just *vendored_exclude: the Cordis patches under
