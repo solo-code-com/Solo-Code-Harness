@@ -107,8 +107,7 @@ process.stdin.on('end', () => {
 
     process.stderr.write(
       `\n[ConfigProtect] BLOCKED — modifying ${basename} is not allowed.\n` +
-      `  Fix the source code to satisfy linter/formatter rules instead of weakening the config.\n` +
-      `  If this is a legitimate config change, set CONFIG_PROTECT_BYPASS=1.\n\n`
+      `  Fix the source code to satisfy linter/formatter rules instead of weakening the config.\n\n`
     );
     process.exit(2);
   }

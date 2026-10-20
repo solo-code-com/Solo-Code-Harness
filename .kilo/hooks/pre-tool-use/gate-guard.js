@@ -772,7 +772,7 @@ process.stdin.on('end', () => {
         `\n[GateGuard] BLOCKED: ${blocked.message}\n` +
         `  Command: ${command.substring(0, 200)}\n` +
         (alts.length > 0 ? `  Safer alternatives:\n${alts.join('\n')}\n` : '') +
-        `  Bypass: GATE_GUARD_BYPASS=1\n\n`
+        '\n'
       );
       process.exit(2);
     }
@@ -786,8 +786,7 @@ process.stdin.on('end', () => {
       process.stderr.write(
         `\n[GateGuard] BLOCKED: possible secret '${secret.name}' in command. ` +
         `Use environment variables instead.\n` +
-        `  Command: ${command.substring(0, 200)}\n` +
-        `  Bypass: GATE_GUARD_BYPASS=1\n\n`
+        `  Command: ${command.substring(0, 200)}\n\n`
       );
       process.exit(2);
     }

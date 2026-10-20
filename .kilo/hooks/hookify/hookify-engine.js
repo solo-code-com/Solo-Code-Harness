@@ -16,7 +16,7 @@
  *   ---
  *   ⚠️ Dangerous command detected!
  *
- * Exit codes: always 0 (non-blocking pass-through; decisions via JSON output).
+ * Exit codes: 0 (pass-through), 2 (blocked -- a rule with `action: block` matched).
  *
  * Usage: node hookify-engine.js <eventType>
  *   eventType: bash | file | stop | prompt | all

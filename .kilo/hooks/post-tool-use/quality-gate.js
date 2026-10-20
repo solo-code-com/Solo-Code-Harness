@@ -7,8 +7,8 @@
  * Ported from ECC's quality-gate.js.
  *
  * Exit codes:
- *   0 = PASS or SKIP
- *   1 = WARNING (non-blocking)
+ *   0 = always (advisory -- findings go to stderr; a PostToolUse hook runs
+ *       after the write, so it cannot block one)
  */
 
 'use strict';
