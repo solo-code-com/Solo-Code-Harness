@@ -189,3 +189,18 @@ def test_main_counts_systemone_drift_but_not_unreachable(monkeypatch, capsys):
     )
     assert check_model_catalog.main([]) == 0
     assert "noul=0.88" in capsys.readouterr().out
+
+
+def test_role_issue_names_a_model_id_the_catalog_does_not_declare(tmp_path):
+    """A role outside the catalogs is reported, naming both the role and its id."""
+    roles = tmp_path / "model-roles.json"
+    roles.write_text(
+        json.dumps({"roles": {"default-executor": "commandcode/not-a-model"}}),
+        encoding="utf-8",
+    )
+
+    issues = check_model_catalog.model_role_issues(roles)
+
+    assert len(issues) == 1
+    assert "default-executor" in issues[0]
+    assert "commandcode/not-a-model" in issues[0]

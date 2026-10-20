@@ -6,7 +6,7 @@
 # Resolve Python: try python3, then python, then py (Windows launcher)
 PY := $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null || echo py)
 
-.PHONY: help generate generate-claude validate garden lint-budget test test-integration eval check security-scan gitleaks
+.PHONY: help generate generate-claude validate garden lint-budget lint-pin test test-integration eval check security-scan gitleaks
 
 help:
 	@echo "Solo-Code Harness — Quality Gates"
@@ -18,6 +18,7 @@ help:
 	@echo "  make validate           Validate agent/skill frontmatter schemas (.kilo/)"
 	@echo "  make garden             Drift detection (.kilo/ <-> .claude/ generated, .copilot/ parity)"
 	@echo "  make lint-budget        Ratchet for S/BLE rules absent from .ruff.toml"
+	@echo "  make lint-pin           Run the pinned ruff (the version the commit hook uses)"
 	@echo "  make test               Run full test suite (auto-discovers tools/test_*.py)"
 	@echo "  make test-integration   Copilot structure + shared-state schema checks"
 	@echo "  make check              Full CI gate: lint + validate + garden + test + security"
@@ -41,6 +42,10 @@ garden:
 
 lint-budget:
 	$(PY) tools/check_lint_budget.py
+
+# The commit hook pins ruff 0.9.1, which still raises UP038; the ruff on PATH does not.
+lint-pin:
+	$(PY) -m pre_commit run ruff --all-files
 
 test:
 	$(PY) -m pytest tools/ -v

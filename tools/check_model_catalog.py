@@ -14,6 +14,9 @@ A provider that serves a model the harness does not declare is drift, because th
 invisible to the pipelines. A declared model the provider does not serve is drift too, because
 a routing entry that 404s is worse than a missing one. OpenRouter is the exception: the harness
 declares a *curated* set there on purpose, so its extras are reported, not failed.
+
+The roles block of `tools/config/model-roles.json` is checked against the same catalogs:
+every role id must resolve, or that agent silently runs on the session default.
 """
 
 from __future__ import annotations
@@ -83,9 +86,42 @@ IGNORED_ADVERTISED: dict[str, set[str]] = {
 #: 404s. Differences for these providers are reported, never failed -- a call is the evidence.
 LISTING_UNRELIABLE: set[str] = {"freemodel"}
 
+#: `tools/config/model-roles.json` assigns each agent a role and each role a model id. A role
+#: pointing at an id no catalog declares is silent drift: the agent falls back to the session
+#: default and nothing fails, which is what that file exists to prevent.
+MODEL_ROLES = Path(__file__).resolve().parent / "config" / "model-roles.json"
+
 
 def declared_ids(catalog: dict) -> set[str]:
     return {body.get("modelID") for body in catalog.values() if body.get("modelID")}
+
+
+def role_catalog_ids() -> set[str]:
+    """Every `<provider>/<model>` id a role may name.
+
+    Same resolution as `tools/test_model_roles.py`: a catalog key and the entry's
+    `modelID` are both valid spellings, so both count as resolving.
+    """
+    ids: set[str] = set()
+    for prefix, models in (
+        ("commandcode", engine._PROVIDER_MODELS),
+        ("openrouter", engine._OPENROUTER_MODELS),
+    ):
+        for key, entry in models.items():
+            ids.add(f"{prefix}/{key}")
+            ids.add(f"{prefix}/{entry['modelID']}")
+    return ids
+
+
+def model_role_issues(path: Path = MODEL_ROLES) -> list[str]:
+    """One message per role whose model id no declared catalog resolves."""
+    config = json.loads(path.read_text(encoding="utf-8"))
+    catalog = role_catalog_ids()
+    return [
+        f"role {role!r} -> {model_id!r} (not in the declared catalogs)"
+        for role, model_id in config.get("roles", {}).items()
+        if model_id not in catalog
+    ]
 
 
 def fetch(base: str, path: str, key: str, timeout: int) -> list[dict] | None:
@@ -344,6 +380,23 @@ def main(argv: list[str] | None = None) -> int:
             drift += 1
     report.append(row)
 
+    # The roles block is static config, so this runs even when no provider answered: a role
+    # id that resolves nowhere is drift whether or not the network is up.
+    role_issues = model_role_issues()
+    report.append(
+        {
+            "provider": "model-roles",
+            "model": "roles",
+            "base_env": None,
+            "key_env": "-",
+            "declared": None,
+            "unresolved": role_issues,
+            "status": "ok" if not role_issues else "drift",
+        }
+    )
+    if role_issues:
+        drift += 1
+
     if args.json:
         print(json.dumps(report, indent=1))
     else:
@@ -358,6 +411,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"      served but undeclared: {', '.join(row['missing'][:6])}")
             if row.get("stale"):
                 print(f"      declared but unserved: {', '.join(row['stale'][:6])}")
+            if row.get("unresolved"):
+                print(f"      unresolved roles: {', '.join(row['unresolved'])}")
     return 1 if drift else 0
 
 

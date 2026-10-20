@@ -262,8 +262,8 @@ lớn kể từ v3.3.0:
   sandbox/control-plane/GUI thành **ngoại lệ có điều kiện** kèm giới hạn đã đo; catalog
   **80 model / 4 provider** (commandcode 70, freemodel 3, deepseek 2, openrouter 5) gồm
   `typesafe/jev-router` (model tên Jev); `.harness.lock`
-  regenerate được (`deploy.py --root-lock`) với `[shared_files]` phủ đủ 111 đường dẫn
-  được track.
+  regenerate được (`deploy.py --root-lock`) với `[shared_files]` phủ đủ 127 đường dẫn
+  được track (con số do generator sinh ra — regenerate lại rồi đọc, đừng đoán).
 
 - **v4.0.0**: gỡ vật lý `.opencode/` (không còn giá trị riêng); adopt
   **Kilo CLI** làm worker engine rẻ/nhanh.

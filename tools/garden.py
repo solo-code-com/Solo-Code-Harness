@@ -29,8 +29,16 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 SKIP_FILE = ROOT / "tools" / "opencode-skip-skills.txt"
 
-_SCAN_SKIP_DIRS = {".git", "node_modules", ".venv", ".pytest_cache",
-                   ".pytest_temp", ".ruff_cache", ".solocode", "__pycache__"}
+_SCAN_SKIP_DIRS = {
+    ".git",
+    "node_modules",
+    ".venv",
+    ".pytest_cache",
+    ".pytest_temp",
+    ".ruff_cache",
+    ".solocode",
+    "__pycache__",
+}
 
 
 def _doc_scan_skip_dirs(root: Path) -> set[str]:
@@ -51,7 +59,10 @@ def _doc_scan_skip_dirs(root: Path) -> set[str]:
     try:
         proc = subprocess.run(  # noqa: S603,S607 — fixed argv, no shell
             ["git", "-C", str(root), "ls-files"],  # noqa: S607 -- partial path, fixed argv
-            capture_output=True, text=True, timeout=60, check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return skip
@@ -86,9 +97,7 @@ def _load_skip_skills() -> set[str]:
     }
 
 
-def _check_parity_dir(
-    src: Path, dst: Path, dst_label: str, subdir: str
-) -> list[str]:
+def _check_parity_dir(src: Path, dst: Path, dst_label: str, subdir: str) -> list[str]:
     """Generic parity check: all src/subdir files exist in dst/subdir with same name."""
     issues: list[str] = []
     src_dir = src / subdir
@@ -201,7 +210,9 @@ def check_claude_agent_tools(src: Path, dst: Path) -> list[str]:
             _split_frontmatter as _ce_split_frontmatter,
         )
     except ImportError as exc:
-        return [f"Cannot check .claude agent tools (claude_engine import failed): {exc}"]
+        return [
+            f"Cannot check .claude agent tools (claude_engine import failed): {exc}"
+        ]
 
     issues: list[str] = []
     src_dir = src / "agents"
@@ -263,7 +274,9 @@ def check_instruction_content(src: Path, dst: Path, dst_label: str) -> list[str]
     src_names = {f.name for f in src_dir.iterdir() if f.is_file()}
     dst_names = {f.name for f in dst_dir.iterdir() if f.is_file()}
     for name in sorted(src_names & dst_names):
-        if (src_dir / name).read_text(encoding="utf-8") != (dst_dir / name).read_text(encoding="utf-8"):
+        if (src_dir / name).read_text(encoding="utf-8") != (dst_dir / name).read_text(
+            encoding="utf-8"
+        ):
             issues.append(
                 f"Content drift: {dst_label}/instruction/{name} differs from "
                 f".kilo/instruction/{name} (out of sync — resync from source of truth)"
@@ -362,13 +375,16 @@ def check_instructions_opencode(src: Path, dst: Path, dst_label: str) -> list[st
     if not src_dir.is_dir():
         return issues
     src_names = {f.stem for f in src_dir.iterdir() if f.is_file()}
-    dst_names = {
-        f.stem.replace(".instructions", "")
-        for f in dst_dir.iterdir()
-    } if dst_dir.is_dir() else set()
+    dst_names = (
+        {f.stem.replace(".instructions", "") for f in dst_dir.iterdir()}
+        if dst_dir.is_dir()
+        else set()
+    )
     missing = src_names - dst_names
     for name in sorted(missing):
-        issues.append(f"Missing instruction: {dst_label}/instruction/{name}.instructions.md")
+        issues.append(
+            f"Missing instruction: {dst_label}/instruction/{name}.instructions.md"
+        )
     return issues
 
 
@@ -418,7 +434,11 @@ def check_commands(src: Path, dst: Path, dst_label: str) -> list[str]:
     if not src_cmd.is_dir():
         return issues
     src_names = {f.name for f in src_cmd.iterdir() if f.suffix == ".md"}
-    dst_names = {f.name for f in dst_cmd.iterdir() if f.suffix == ".md"} if dst_cmd.is_dir() else set()
+    dst_names = (
+        {f.name for f in dst_cmd.iterdir() if f.suffix == ".md"}
+        if dst_cmd.is_dir()
+        else set()
+    )
     for name in sorted(src_names - dst_names):
         issues.append(f"Missing command: {dst_label}/command/{name}")
     for name in sorted(dst_names - src_names):
@@ -460,7 +480,9 @@ def _issue_matches_skip(issue: str, skip_set: set[str]) -> bool:
     return False
 
 
-def check_claude(src: Path, dst: Path, *, skip_set: set[str] | None = None) -> list[str]:
+def check_claude(
+    src: Path, dst: Path, *, skip_set: set[str] | None = None
+) -> list[str]:
     """Parity checks for the Claude engine (.claude/).
 
     Claude uses different directory names than the other engines:
@@ -482,7 +504,11 @@ def check_claude(src: Path, dst: Path, *, skip_set: set[str] | None = None) -> l
     dst_skills = dst / "skills"
     if src_skills.is_dir():
         src_names = {p.name for p in src_skills.iterdir() if p.is_dir()} - skip_set
-        dst_names = {p.name for p in dst_skills.iterdir() if p.is_dir()} if dst_skills.is_dir() else set()
+        dst_names = (
+            {p.name for p in dst_skills.iterdir() if p.is_dir()}
+            if dst_skills.is_dir()
+            else set()
+        )
         for name in sorted(src_names - dst_names):
             issues.append(f"Missing skill: .claude/skills/{name}/")
         for name in sorted(dst_names - src_names):
@@ -491,7 +517,9 @@ def check_claude(src: Path, dst: Path, *, skip_set: set[str] | None = None) -> l
         if dst_skills.is_dir():
             for entry in sorted(dst_skills.iterdir()):
                 if entry.is_dir() and not (entry / "SKILL.md").exists():
-                    issues.append(f"Skill missing SKILL.md: .claude/skills/{entry.name}")
+                    issues.append(
+                        f"Skill missing SKILL.md: .claude/skills/{entry.name}"
+                    )
 
     # Commands: .kilo/command/*.md must exist in .claude/commands/*.md
     src_cmd = src / "command"
@@ -524,7 +552,9 @@ def check_claude(src: Path, dst: Path, *, skip_set: set[str] | None = None) -> l
         if not (dst / rel).exists():
             issues.append(f"Missing {desc}: .claude/{rel}")
     if not (ROOT / "CLAUDE.md").exists():
-        issues.append("Missing rulebook: CLAUDE.md (run 'python tools/generate_harness.py --harness claude')")
+        issues.append(
+            "Missing rulebook: CLAUDE.md (run 'python tools/generate_harness.py --harness claude')"
+        )
     else:
         issues.extend(check_claude_md_regenerable())
 
@@ -594,14 +624,18 @@ def check_shared_state() -> list[str]:
                 try:
                     dt = datetime.fromisoformat(feat["last_updated"])
                     if now - dt > timedelta(days=7):
-                        issues.append(f"Stale feature: {feat['id']} in-progress since {feat['last_updated'][:10]}")
+                        issues.append(
+                            f"Stale feature: {feat['id']} in-progress since {feat['last_updated'][:10]}"
+                        )
                 except ValueError:
                     pass
 
     return issues
 
 
-def check_gemini(src: Path, dst: Path, *, skip_set: set[str] | None = None) -> list[str]:
+def check_gemini(
+    src: Path, dst: Path, *, skip_set: set[str] | None = None
+) -> list[str]:
     """Parity checks for the Gemini/Antigravity engine (.gemini/antigravity/).
 
     Gemini uses different directory names/paths than the other engines:
@@ -624,15 +658,23 @@ def check_gemini(src: Path, dst: Path, *, skip_set: set[str] | None = None) -> l
     dst_skills = dst / "skills"
     if src_skills.is_dir():
         src_names = {p.name for p in src_skills.iterdir() if p.is_dir()} - skip_set
-        dst_names = {p.name for p in dst_skills.iterdir() if p.is_dir()} if dst_skills.is_dir() else set()
+        dst_names = (
+            {p.name for p in dst_skills.iterdir() if p.is_dir()}
+            if dst_skills.is_dir()
+            else set()
+        )
         for name in sorted(src_names - dst_names):
             issues.append(f"Missing skill: .gemini/antigravity/skills/{name}/")
         for name in sorted(dst_names - src_names):
-            issues.append(f"Stale skill (no source): .gemini/antigravity/skills/{name}/")
+            issues.append(
+                f"Stale skill (no source): .gemini/antigravity/skills/{name}/"
+            )
         if dst_skills.is_dir():
             for entry in sorted(dst_skills.iterdir()):
                 if entry.is_dir() and not (entry / "SKILL.md").exists():
-                    issues.append(f"Skill missing SKILL.md: .gemini/antigravity/skills/{entry.name}")
+                    issues.append(
+                        f"Skill missing SKILL.md: .gemini/antigravity/skills/{entry.name}"
+                    )
 
     # Instructions (direct copy, same filename + identical content)
     issues.extend(check_instructions(src, dst, ".gemini/antigravity"))
@@ -648,14 +690,17 @@ def check_gemini(src: Path, dst: Path, *, skip_set: set[str] | None = None) -> l
             issues.append(".agents/skills exists but is not a directory or junction")
         else:
             try:
-                count = sum(1 for p in agents_skills.iterdir() if p.is_dir() and (p / "SKILL.md").exists())
+                count = sum(
+                    1
+                    for p in agents_skills.iterdir()
+                    if p.is_dir() and (p / "SKILL.md").exists()
+                )
                 if count == 0:
                     issues.append(".agents/skills contains no valid skills")
             except OSError as err:
                 issues.append(f".agents/skills is broken: {err}")
 
     return issues
-
 
 
 def check_opencode(src: Path, dst: Path) -> list[str]:
@@ -683,7 +728,9 @@ def check_opencode(src: Path, dst: Path) -> list[str]:
     # must NOT mirror .kilo/skill/* -- those already load from .claude/skills/.
     dst_skills = dst / "skills"
     if not (ROOT / ".claude" / "skills").is_dir():
-        issues.append("Missing skills source: .claude/skills (OpenCode-compatible location)")
+        issues.append(
+            "Missing skills source: .claude/skills (OpenCode-compatible location)"
+        )
     src_skill = src / "skill"
     if dst_skills.is_dir() and src_skill.is_dir():
         kilo_ids = {p.name for p in src_skill.iterdir() if p.is_dir()}
@@ -723,7 +770,9 @@ def check_opencode(src: Path, dst: Path) -> list[str]:
         )
         for f in sorted(src_instr.glob("*.md")):
             if f.stem not in dst_ids:
-                issues.append(f"Missing instruction skill: .opencode/skills/{f.stem}/SKILL.md")
+                issues.append(
+                    f"Missing instruction skill: .opencode/skills/{f.stem}/SKILL.md"
+                )
     agents_md = ROOT / "AGENTS.md"
     try:
         agents_text = agents_md.read_text(encoding="utf-8")
@@ -745,7 +794,9 @@ def check_opencode(src: Path, dst: Path) -> list[str]:
 
 
 def run_engine_checks(
-    src: Path, dst: Path, dst_label: str,
+    src: Path,
+    dst: Path,
+    dst_label: str,
     *,
     instruction_suffix: bool = False,
     skip_set: set[str] | None = None,
@@ -768,7 +819,9 @@ def run_engine_checks(
         ),
         (
             f"Instruction content drift ({dst_label})",
-            lambda: [] if instruction_suffix else check_instruction_content(src, dst, dst_label),
+            lambda: []
+            if instruction_suffix
+            else check_instruction_content(src, dst, dst_label),
         ),
         (f"Memory drift ({dst_label})", lambda: check_memory(src, dst, dst_label)),
         (f"Command parity ({dst_label})", lambda: check_commands(src, dst, dst_label)),
@@ -883,18 +936,43 @@ def check_manifest(root: Path) -> list[str]:
 # .gemini/ must be measured against .gemini/, never against the source of
 # truth. Comparing everything to .kilo/ produces false drift reports.
 _ENGINE_LAYOUT = {
-    ".kilo": {"skill": "skill", "agent": "agents", "command": "command", "instruction": "instruction"},
-    ".claude": {"skill": "skills", "agent": "agents", "command": "commands", "instruction": "instruction"},
-    ".copilot": {"skill": "skill", "agent": "agents", "command": "command", "instruction": "instruction"},
-    ".gemini": {"skill": "skills", "agent": "agents", "command": "commands", "instruction": "instruction"},
-    ".opencode": {"skill": "skills", "agent": "agents", "command": "commands", "instruction": "instruction"},
+    ".kilo": {
+        "skill": "skill",
+        "agent": "agents",
+        "command": "command",
+        "instruction": "instruction",
+    },
+    ".claude": {
+        "skill": "skills",
+        "agent": "agents",
+        "command": "commands",
+        "instruction": "instruction",
+    },
+    ".copilot": {
+        "skill": "skill",
+        "agent": "agents",
+        "command": "command",
+        "instruction": "instruction",
+    },
+    ".gemini": {
+        "skill": "skills",
+        "agent": "agents",
+        "command": "commands",
+        "instruction": "instruction",
+    },
+    ".opencode": {
+        "skill": "skills",
+        "agent": "agents",
+        "command": "commands",
+        "instruction": "instruction",
+    },
 }
 
 # .gemini/ nests its harness one level deeper.
 _ENGINE_ROOT = {".gemini": Path(".gemini") / "antigravity"}
 
 # Matches an engine mention anywhere on the line, e.g. "`.gemini/` commands (12)".
-_ENGINE_MENTION = re.compile(r'`?(\.(?:kilo|claude|copilot|gemini|opencode))/')
+_ENGINE_MENTION = re.compile(r"`?(\.(?:kilo|claude|copilot|gemini|opencode))/")
 
 
 def _measure_engine(root: Path, engine: str) -> dict[str, int]:
@@ -904,7 +982,9 @@ def _measure_engine(root: Path, engine: str) -> dict[str, int]:
     counts: dict[str, int] = {}
 
     skills = base / layout["skill"]
-    counts["skill"] = len([d for d in skills.iterdir() if d.is_dir()]) if skills.is_dir() else 0
+    counts["skill"] = (
+        len([d for d in skills.iterdir() if d.is_dir()]) if skills.is_dir() else 0
+    )
 
     for kind in ("agent", "command", "instruction"):
         d = base / layout[kind]
@@ -937,22 +1017,42 @@ def check_doc_counts(root: Path = ROOT) -> list[str]:
 
     # (kind, label, patterns) — label is what appears in the drift message.
     scanners = [
-        ("skill", "skills", [
-            re.compile(r'\b(\d+)\s+(?:specialized\s+|domain\s+)?skills?\b', re.IGNORECASE),
-            re.compile(r'\bskills?\s*\(\s*(\d+)\b', re.IGNORECASE),
-        ]),
-        ("agent", "agents", [
-            re.compile(r'\b(\d+)\s+(?:specialized\s+)?(?:sub)?agents?\b', re.IGNORECASE),
-            re.compile(r'\b(?:sub)?agents?\s*\(\s*(\d+)\b', re.IGNORECASE),
-        ]),
-        ("command", "commands", [
-            re.compile(r'\b(\d+)\s+(?:slash\s+)?commands?\b', re.IGNORECASE),
-            re.compile(r'\b(?:slash\s+)?commands?\s*\(\s*(\d+)\b', re.IGNORECASE),
-        ]),
-        ("instruction", "instructions", [
-            re.compile(r'\b(\d+)\s+instructions?\b', re.IGNORECASE),
-            re.compile(r'\binstructions?\s*\(\s*(\d+)\b', re.IGNORECASE),
-        ]),
+        (
+            "skill",
+            "skills",
+            [
+                re.compile(
+                    r"\b(\d+)\s+(?:specialized\s+|domain\s+)?skills?\b", re.IGNORECASE
+                ),
+                re.compile(r"\bskills?\s*\(\s*(\d+)\b", re.IGNORECASE),
+            ],
+        ),
+        (
+            "agent",
+            "agents",
+            [
+                re.compile(
+                    r"\b(\d+)\s+(?:specialized\s+)?(?:sub)?agents?\b", re.IGNORECASE
+                ),
+                re.compile(r"\b(?:sub)?agents?\s*\(\s*(\d+)\b", re.IGNORECASE),
+            ],
+        ),
+        (
+            "command",
+            "commands",
+            [
+                re.compile(r"\b(\d+)\s+(?:slash\s+)?commands?\b", re.IGNORECASE),
+                re.compile(r"\b(?:slash\s+)?commands?\s*\(\s*(\d+)\b", re.IGNORECASE),
+            ],
+        ),
+        (
+            "instruction",
+            "instructions",
+            [
+                re.compile(r"\b(\d+)\s+instructions?\b", re.IGNORECASE),
+                re.compile(r"\binstructions?\s*\(\s*(\d+)\b", re.IGNORECASE),
+            ],
+        ),
     ]
 
     for rel_path in files_to_scan:
@@ -985,18 +1085,34 @@ def check_doc_counts(root: Path = ROOT) -> list[str]:
 
 
 _PATH_IN_BACKTICKS = re.compile(
-    r'`([A-Za-z0-9_][A-Za-z0-9_./-]*\.'
-    r'(?:py|md|sh|ps1|js|mjs|cjs|json|jsonc|toml|yaml|yml|txt|sql|lock))`'
+    r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\."
+    r"(?:py|md|sh|ps1|js|mjs|cjs|json|jsonc|toml|yaml|yml|txt|sql|lock))`"
 )
 
 # A line carrying one of these is making a point ABOUT a missing/renamed path
 # (e.g. SPEC.md: "at ROOT, not `.claude/CLAUDE.md`"). Flagging those would
 # punish the docs for being precise, so they opt out explicitly.
 _PATH_NEGATION_MARKERS = (
-    "not exist", "doesn't exist", "does not exist", "never existed",
-    "no longer", "removed", "deleted", "outdated", "stale", "deprecated",
-    "instead of", "not `", "khong ton tai", "không tồn tại", "đã lỗi thời",
-    "da loi thoi", "thay vì", "thay vi", "không phải", "khong phai",
+    "not exist",
+    "doesn't exist",
+    "does not exist",
+    "never existed",
+    "no longer",
+    "removed",
+    "deleted",
+    "outdated",
+    "stale",
+    "deprecated",
+    "instead of",
+    "not `",
+    "khong ton tai",
+    "không tồn tại",
+    "đã lỗi thời",
+    "da loi thoi",
+    "thay vì",
+    "thay vi",
+    "không phải",
+    "khong phai",
 )
 
 # Generated at runtime, so absence is normal rather than drift.
@@ -1077,7 +1193,10 @@ def _script_flag_surface(root: Path, script: str) -> str:
         try:
             proc = subprocess.run(  # noqa: S603 — fixed argv, repo-local script
                 [sys.executable, script, *args],
-                capture_output=True, text=True, timeout=60, cwd=root,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                cwd=root,
             )
             return proc.stdout + proc.stderr
         except (OSError, subprocess.SubprocessError):
@@ -1086,16 +1205,16 @@ def _script_flag_surface(root: Path, script: str) -> str:
     top = _help("--help")
     parts.append(top)
     # `{show,features,sessions}` — argparse's subcommand listing
-    for match in re.finditer(r'\{([a-z0-9_,-]+)\}', top):
+    for match in re.finditer(r"\{([a-z0-9_,-]+)\}", top):
         for sub in match.group(1).split(","):
             parts.append(_help(sub, "--help"))
     return "\n".join(parts)
 
 
 _DOC_CMD = re.compile(
-    r'python3?\s+((?:tools|\.github/scripts)/[A-Za-z0-9_./-]+\.py)([^\n`]*)'
+    r"python3?\s+((?:tools|\.github/scripts)/[A-Za-z0-9_./-]+\.py)([^\n`]*)"
 )
-_LONG_FLAG = re.compile(r'(--[a-z][a-z0-9-]*)')
+_LONG_FLAG = re.compile(r"(--[a-z][a-z0-9-]*)")
 
 
 def check_doc_flags(root: Path = ROOT) -> list[str]:
@@ -1174,7 +1293,7 @@ _ENFORCE_VERB = re.compile(
     r"sẽ chặn|chặn commit|chặn bạn|từ chối|ném ra lỗi|báo lỗi và chặn)",
     re.IGNORECASE,
 )
-_SCRIPT_IN_BACKTICKS = re.compile(r'`([A-Za-z0-9_./-]+\.(?:py|js|mjs|cjs|sh))`')
+_SCRIPT_IN_BACKTICKS = re.compile(r"`([A-Za-z0-9_./-]+\.(?:py|js|mjs|cjs|sh))`")
 
 # What a script must contain to be *capable* of blocking. A hook that only
 # ever exits 0 is advisory no matter how the prose describes it.
@@ -1261,15 +1380,15 @@ def check_enforcement_claims(root: Path = ROOT) -> list[str]:
 # These three forms carry an explicit marker, so they cannot be confused.
 _SKILL_REF_FORMS = (
     # skills/<name>/SKILL.md — an actual path claim
-    re.compile(r'skills?/([a-z][a-z0-9-]{4,})/SKILL\.md'),
+    re.compile(r"skills?/([a-z][a-z0-9-]{4,})/SKILL\.md"),
     # router arrow: "├── Reviewing code? ──→ code-review-expert". The `?` is
     # required -- it marks a routing *decision*. Without it the pattern also
     # matched pipeline diagrams ("decompose → research → build → verdict"),
     # whose nodes are stages, not skills.
-    re.compile(r'\?[^\n]*?(?:→|-->)\s*`?([a-z][a-z0-9-]{4,})`?\s*$'),
+    re.compile(r"\?[^\n]*?(?:→|-->)\s*`?([a-z][a-z0-9-]{4,})`?\s*$"),
     # the word "skill" adjacent: "See `x` skill", "skill `x`"
-    re.compile(r'`([a-z][a-z0-9-]{4,})`\s+skill\b'),
-    re.compile(r'\bskill\s+`([a-z][a-z0-9-]{4,})`'),
+    re.compile(r"`([a-z][a-z0-9-]{4,})`\s+skill\b"),
+    re.compile(r"\bskill\s+`([a-z][a-z0-9-]{4,})`"),
 )
 
 
@@ -1284,7 +1403,7 @@ def _count_pattern_list(py_file: Path, var_name: str) -> int | None:
     except (OSError, UnicodeDecodeError, SyntaxError):
         return None
     for node in ast.walk(tree):
-        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+        if not isinstance(node, ast.Assign | ast.AnnAssign):
             continue
         target = node.target if isinstance(node, ast.AnnAssign) else node.targets[0]
         if getattr(target, "id", None) != var_name:
@@ -1295,7 +1414,7 @@ def _count_pattern_list(py_file: Path, var_name: str) -> int | None:
         # e.g. frozenset({...}) / set([...])
         if isinstance(value, ast.Call) and value.args:
             arg = value.args[0]
-            if isinstance(arg, (ast.List, ast.Set)):
+            if isinstance(arg, ast.List | ast.Set):
                 return len(arg.elts)
     return None
 
@@ -1317,10 +1436,16 @@ _DOC_FILES_TO_SCAN: list[str] = [
 # (doc phrase regex, source file, variable) — the number in the doc must
 # equal the measured length of that list.
 _PATTERN_COUNT_CLAIMS: list[tuple[re.Pattern[str], str, str]] = [
-    (re.compile(r'(\d+)\s+destructive\s+patterns?', re.IGNORECASE),
-     ".claude/hooks/guard.py", "BLOCK_PATTERNS"),
-    (re.compile(r'(\d+)\s+secret\s+patterns?', re.IGNORECASE),
-     ".claude/hooks/guard.py", "SECRET_PATTERNS"),
+    (
+        re.compile(r"(\d+)\s+destructive\s+patterns?", re.IGNORECASE),
+        ".claude/hooks/guard.py",
+        "BLOCK_PATTERNS",
+    ),
+    (
+        re.compile(r"(\d+)\s+secret\s+patterns?", re.IGNORECASE),
+        ".claude/hooks/guard.py",
+        "SECRET_PATTERNS",
+    ),
 ]
 
 
@@ -1382,8 +1507,16 @@ _HARNESS_DISABLING_FLAGS = ("--bare", "--safe-mode", "--dangerously-skip-permiss
 # one. These mark a line as a guarded/one-off use rather than the default
 # path: an opt-in branch, a warning about the mode, or prose about it.
 _LAUNCHER_OPTIN_MARKERS = (
-    "-eq", "-contains", "-match", "if ", "elseif", "write-warning",
-    "write-error", "write-host", "#", "notcontains",
+    "-eq",
+    "-contains",
+    "-match",
+    "if ",
+    "elseif",
+    "write-warning",
+    "write-error",
+    "write-host",
+    "#",
+    "notcontains",
 )
 
 
@@ -1421,7 +1554,7 @@ def check_launcher_defaults(root: Path = ROOT) -> list[str]:
                 continue
             lowered = line.lower()
             # Only care about lines that actually invoke the engine.
-            if not re.search(r'(?:^|[&|;\s])claude\b', lowered):
+            if not re.search(r"(?:^|[&|;\s])claude\b", lowered):
                 continue
             if any(m in lowered for m in _LAUNCHER_OPTIN_MARKERS):
                 continue
@@ -1531,8 +1664,12 @@ def check_skill_refs(root: Path = ROOT) -> list[str]:
     if not real:  # not a harness layout; nothing to assert
         return issues
 
-    skill_dirs = [".kilo/skill", ".claude/skills", ".copilot/skill",
-                  ".gemini/antigravity/skills"]
+    skill_dirs = [
+        ".kilo/skill",
+        ".claude/skills",
+        ".copilot/skill",
+        ".gemini/antigravity/skills",
+    ]
     for d in skill_dirs:
         for md in sorted((root / d).glob("*/SKILL.md")):
             try:
@@ -1579,7 +1716,9 @@ def main() -> int:
 
     # .gemini/antigravity/ engine — nested path + skills/ plural, no memory check
     print("\n--- .gemini/ ---")
-    gemini_issues = check_gemini(kilo, ROOT / ".gemini" / "antigravity", skip_set=skip_skills)
+    gemini_issues = check_gemini(
+        kilo, ROOT / ".gemini" / "antigravity", skip_set=skip_skills
+    )
     if gemini_issues:
         print("[DRIFT] Gemini engine (.gemini):")
         for i in gemini_issues:
