@@ -90,6 +90,38 @@ def test_coverage_ratchet_runs_when_budget_present(tmp_path, monkeypatch) -> Non
     assert captured["timeout"] == 900
 
 
+def test_boundary_audit_runs_in_strict_mode(tmp_path, monkeypatch) -> None:
+    """Warn-only mode never fails, so the gate must pass --strict.
+
+    checklist.py called boundary_audit.py without --strict, and that script
+    returns 0 unless --strict, so the "Boundary Audit" gate could not fail.
+    """
+    module = _load_checklist()
+    scripts = tmp_path / ".github" / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "boundary_audit.py").write_text("", encoding="utf-8")
+    captured: dict = {}
+
+    def fake_run_check(name, command, timeout=120, required=True):
+        captured.update(name=name, command=command)
+        return {"name": name, "passed": True, "skipped": False}
+
+    monkeypatch.setattr(module, "run_check", fake_run_check)
+    result = module.boundary_audit_check(tmp_path)
+
+    assert result is not None and result["passed"] is True
+    assert captured["name"] == "Boundary Audit"
+    assert captured["command"][1].endswith("boundary_audit.py")
+    assert "--strict" in captured["command"]
+
+
+def test_boundary_audit_skips_when_script_absent(tmp_path, capsys) -> None:
+    """A project that ships no auditor is not failed by it."""
+    module = _load_checklist()
+    assert module.boundary_audit_check(tmp_path) is None
+    assert "skipping Boundary Audit" in capsys.readouterr().out
+
+
 def test_missing_required_tool_fails() -> None:
     """A required tool missing from PATH must FAIL the check."""
     module = _load_checklist()

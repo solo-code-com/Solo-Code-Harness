@@ -1,10 +1,12 @@
 """Tests for tools/validate_schemas.py"""
+
 import tempfile
 from pathlib import Path
 
 from tools.validate_schemas import parse_frontmatter, validate_agent, validate_skill
 
 # ── parse_frontmatter ──────────────────────────────────────────────────────────
+
 
 def test_parse_valid_frontmatter():
     content = "---\nname: test\ndescription: a test\n---\n# Body"
@@ -54,16 +56,33 @@ def test_parse_frontmatter_skips_blank_lines():
 
 # ── validate_agent ─────────────────────────────────────────────────────────────
 
+
+def _agent_file(frontmatter: str) -> Path:
+    with tempfile.NamedTemporaryFile(
+        suffix=".md", mode="w", delete=False, encoding="utf-8"
+    ) as f:
+        f.write(f"---\n{frontmatter}\n---\n# Agent\n")
+        return Path(f.name)
+
+
 def test_validate_agent_valid():
-    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False, encoding="utf-8") as f:
-        f.write("---\nmodel: claude-3\nvariant: default\n---\n# Agent\n")
-        path = Path(f.name)
-    errors = validate_agent(path)
-    assert errors == []
+    path = _agent_file(
+        'description: "Tests things"\nmode: subagent\npermission:\n  edit: deny'
+    )
+    assert validate_agent(path) == []
+
+
+def test_validate_agent_accepts_permissions_plural():
+    path = _agent_file(
+        'description: "Tests things"\nmode: primary\npermissions:\n  - edit'
+    )
+    assert validate_agent(path) == []
 
 
 def test_validate_agent_missing_frontmatter():
-    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False, encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile(
+        suffix=".md", mode="w", delete=False, encoding="utf-8"
+    ) as f:
         f.write("# No frontmatter here\n")
         path = Path(f.name)
     errors = validate_agent(path)
@@ -71,18 +90,73 @@ def test_validate_agent_missing_frontmatter():
     assert "malformed" in errors[0].lower() or "missing" in errors[0].lower()
 
 
-def test_validate_agent_empty_frontmatter():
-    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False, encoding="utf-8") as f:
-        f.write("---\n---\n# minimal\n")
-        path = Path(f.name)
+def test_validate_agent_empty_frontmatter_is_invalid():
+    path = _agent_file("")
     errors = validate_agent(path)
-    assert errors == []
+    assert any("description" in e for e in errors)
+    assert any("mode" in e for e in errors)
+    assert any("permission" in e for e in errors)
+
+
+def test_validate_agent_missing_description_flagged():
+    # A missing description makes the agent unreachable for model-invocation.
+    path = _agent_file("mode: subagent\npermission:\n  edit: deny")
+    errors = validate_agent(path)
+    assert len(errors) == 1
+    assert "description" in errors[0]
+
+
+def test_validate_agent_missing_mode_flagged():
+    path = _agent_file('description: "Tests things"\npermission:\n  edit: deny')
+    errors = validate_agent(path)
+    assert len(errors) == 1
+    assert "mode" in errors[0]
+
+
+def test_validate_agent_missing_permission_block_flagged():
+    path = _agent_file('description: "Tests things"\nmode: subagent')
+    errors = validate_agent(path)
+    assert len(errors) == 1
+    assert "permission" in errors[0]
+
+
+def test_validate_agent_rejects_unknown_mode():
+    path = _agent_file(
+        'description: "Tests things"\nmode: orchestrator\npermission:\n  edit: deny'
+    )
+    errors = validate_agent(path)
+    assert len(errors) == 1
+    assert "orchestrator" in errors[0]
+
+
+def test_every_kilo_agent_declares_the_required_keys():
+    """SPEC.md §7.1 regression guard for the shipped roster.
+
+    Three agents (solo-code-engineer, test-engineer, web-performance-auditor)
+    shipped without a `description` and nothing caught it -- the generated
+    .claude/ copies got a derived one, so the gap was invisible in every mirror.
+    """
+    agents_dir = Path(__file__).resolve().parent.parent / ".kilo" / "agents"
+    failures = {f.name: validate_agent(f) for f in sorted(agents_dir.glob("*.md"))}
+    assert failures, "no agent files found -- the path moved?"
+    assert {n: e for n, e in failures.items() if e} == {}
+
+
+def test_validate_agent_rejects_an_empty_mode_value(tmp_path) -> None:
+    """`mode:` with no value is not a mode; the guard is `is not None`, not falsy."""
+    path = _agent_file('description: "Tests things"\nmode:\npermission:\n  edit: deny')
+    errors = validate_agent(path)
+    assert len(errors) == 1
+    assert "Unknown mode ''" in errors[0]
 
 
 # ── validate_skill ─────────────────────────────────────────────────────────────
 
+
 def test_validate_skill_valid():
-    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False, encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile(
+        suffix=".md", mode="w", delete=False, encoding="utf-8"
+    ) as f:
         f.write("---\nname: my-skill\ndescription: does stuff\nslash: /my-skill\n---\n")
         path = Path(f.name)
     errors = validate_skill(path)
@@ -90,7 +164,9 @@ def test_validate_skill_valid():
 
 
 def test_validate_skill_missing_name():
-    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False, encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile(
+        suffix=".md", mode="w", delete=False, encoding="utf-8"
+    ) as f:
         f.write("---\ndescription: no name\n---\n")
         path = Path(f.name)
     errors = validate_skill(path)
@@ -98,7 +174,9 @@ def test_validate_skill_missing_name():
 
 
 def test_validate_skill_missing_frontmatter():
-    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False, encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile(
+        suffix=".md", mode="w", delete=False, encoding="utf-8"
+    ) as f:
         f.write("# just body\n")
         path = Path(f.name)
     errors = validate_skill(path)

@@ -1,6 +1,6 @@
 ---
 name: solo-code-engineer
-description: Solo code engineer
+description: Solo-Code engineer — implements scoped changes and runs the verification gates before reporting
 tools: Read, Grep, Glob, Edit, Write, Bash, Task
 ---
 # Solo-Code Engineer

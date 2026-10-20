@@ -16,9 +16,26 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# Required frontmatter keys per file type
-AGENT_KEYS = {"model", "variant", "mode", "color", "steps", "hidden", "disabled", "permissions", "description", "system"}
+# Frontmatter keys each file type may use (reference list, not an allowlist gate)
+AGENT_KEYS = {
+    "model",
+    "variant",
+    "mode",
+    "color",
+    "steps",
+    "hidden",
+    "disabled",
+    "permissions",
+    "description",
+    "system",
+}
 SKILL_KEYS = {"name", "description", "slash"}
+
+# SPEC.md §7.1: every .kilo/agents/*.md must declare these.
+AGENT_REQUIRED_KEYS = {"description", "mode"}
+# SPEC.md §7.1 accepts either spelling for the permission block.
+AGENT_PERMISSION_KEYS = {"permission", "permissions"}
+AGENT_MODES = {"primary", "subagent", "all"}
 
 
 def parse_frontmatter(content: str) -> dict | None:
@@ -64,8 +81,30 @@ def validate_agent(file_path: Path) -> list[str]:
         errors.append(f"{file_path.name}: Missing or malformed frontmatter")
         return errors
 
-    # Structural check only: not every .kilo/agents/ file uses a top-level
-    # `description:` key (some rely on body prose instead) -- that's valid.
+    # SPEC.md §7.1 -- the contract is description + mode + at least one
+    # permission key. `description` is not cosmetic: it is the trigger text an
+    # engine matches to model-invoke the agent, so an agent without one is
+    # silently unreachable. Deriving it per engine (claude_engine's fallback)
+    # hid that for months, which is why this is now enforced on the source.
+    missing = sorted(AGENT_REQUIRED_KEYS - fm.keys())
+    if missing:
+        errors.append(
+            f"{file_path.name}: Missing required key(s): {', '.join(missing)}"
+        )
+
+    if not (AGENT_PERMISSION_KEYS & fm.keys()):
+        errors.append(
+            f"{file_path.name}: Missing permission block "
+            f"(expected 'permission:' or 'permissions:')"
+        )
+
+    mode = fm.get("mode")
+    if mode is not None and mode not in AGENT_MODES:
+        errors.append(
+            f"{file_path.name}: Unknown mode '{mode}' "
+            f"(expected one of: {', '.join(sorted(AGENT_MODES))})"
+        )
+
     return errors
 
 

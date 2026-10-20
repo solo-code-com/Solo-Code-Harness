@@ -1,6 +1,6 @@
 ---
 name: test-engineer
-description: Test engineer
+description: QA engineer — designs test suites, closes coverage gaps, and verifies changes with regression tests
 tools: Read, Grep
 ---
 # Test Engineer

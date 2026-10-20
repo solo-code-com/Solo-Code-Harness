@@ -84,6 +84,28 @@ def coverage_ratchet_check(project_path: Path) -> dict | None:
     )
 
 
+def boundary_audit_check(project_path: Path) -> dict | None:
+    """Run the boundary audit in strict mode.
+
+    Strict is mandatory: without it every harness-dir finding is downgraded to a
+    warning and the script returns 0, so the "Boundary Audit" gate could never
+    fail. Its limit, stated rather than implied: findings are extension-shaped --
+    a file whose extension is on the harness allowlist passes, and root-level
+    files stay warnings in either mode. A project source file copied into a
+    harness dir can therefore still slip through; this gate catches assets, not
+    content.
+    """
+    auditor = project_path / ".github" / "scripts" / "boundary_audit.py"
+    if not auditor.exists():
+        print_warning("boundary_audit.py not found, skipping Boundary Audit")
+        return None
+    return run_check(
+        "Boundary Audit",
+        [sys.executable, str(auditor), str(project_path), "--strict"],
+        timeout=60,
+    )
+
+
 def run_check(
     name: str, command: list[str], timeout: int = 120, required: bool = True
 ) -> dict:
@@ -227,17 +249,9 @@ def main():
     print_header("P2: TESTS")
 
     # Boundary Audit — ensure no project code leaked into harness dirs
-    boundary_auditor = project_path / ".github" / "scripts" / "boundary_audit.py"
-    if boundary_auditor.exists():
-        results.append(
-            run_check(
-                "Boundary Audit",
-                [sys.executable, str(boundary_auditor), str(project_path)],
-                timeout=60,
-            )
-        )
-    else:
-        print_warning("boundary_audit.py not found, skipping Boundary Audit")
+    boundary_result = boundary_audit_check(project_path)
+    if boundary_result is not None:
+        results.append(boundary_result)
 
     # Harness eval
     eval_script = project_path / ".github" / "scripts" / "eval_harness.py"

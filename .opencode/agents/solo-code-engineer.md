@@ -1,4 +1,5 @@
 ---
+description: "Solo-Code engineer — implements scoped changes and runs the verification gates before reporting"
 mode: primary
 color: "#F59E0B"
 steps: 30

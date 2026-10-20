@@ -8,9 +8,6 @@ permissions:
   - action: read
     resource: "*"
     effect: allow
-  - action: # Jev orchestrates only
-    resource: "*"
-    effect: enforced, not advisory. It must hand work to a worker
   - action: edit
     resource: "*"
     effect: deny

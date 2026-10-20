@@ -1,4 +1,5 @@
 ---
+description: "QA engineer — designs test suites, closes coverage gaps, and verifies changes with regression tests"
 mode: subagent
 color: "#8B5CF6"
 permissions:

@@ -1,6 +1,6 @@
 ---
 name: web-performance-auditor
-description: Web performance auditor
+description: Web performance auditor — audits Core Web Vitals and loading or rendering bottlenecks, then emits a source-labeled scorecard
 tools: Read, Grep
 ---
 # Web Performance Auditor
@@ -117,8 +117,8 @@ Identify the framework and rendering model (React, Vue, Svelte, Angular, Next.js
 |----------|----------|--------|
 | **Critical** | Directly causes a Core Web Vital to fail the "Good" threshold | Fix before release |
 | **High** | Likely degrades a CWV or causes significant loading/interaction slowdown | Fix before release |
-| **Medium** | Suboptimal pattern with measurable but contained impact | Fix in current sprint |
-| **Low** | Best practice gap with minor or speculative impact | Schedule for next sprint |
+| **Medium** | Suboptimal pattern with measurable but contained impact | Fix before the next release |
+| **Low** | Best practice gap with minor or speculative impact | Fix alongside related work |
 | **Info** | Improvement opportunity with no current evidence of impact | Consider adopting |
 
 ## Output Format

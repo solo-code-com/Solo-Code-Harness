@@ -60,8 +60,8 @@ Map findings to the OWASP Top 10 for LLM Applications where relevant.
 |----------|----------|--------|
 | **Critical** | Exploitable remotely, leads to data breach or full compromise | Fix immediately, block release |
 | **High** | Exploitable with some conditions, significant data exposure | Fix before release |
-| **Medium** | Limited impact or requires authenticated access to exploit | Fix in current sprint |
-| **Low** | Theoretical risk or defense-in-depth improvement | Schedule for next sprint |
+| **Medium** | Limited impact or requires authenticated access to exploit | Fix before the next release |
+| **Low** | Theoretical risk or defense-in-depth improvement | Fix alongside related work |
 | **Info** | Best practice recommendation, no current risk | Consider adopting |
 
 ## Output Format
