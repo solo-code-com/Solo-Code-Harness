@@ -9,7 +9,7 @@ check_hook), never a stub.
 Four properties are pinned, plus the per-entry expected outcome that the
 corpus section of tools/gate_probe.py documents:
   * the matrix is identical across two consecutive runs,
-  * the summary counts are exactly caught 5 / missed 1 / no-gate 3,
+  * the summary counts are exactly caught 6 / missed 1 / no-gate 2,
   * each of the three outcome kinds appears at least once,
   * adapters run for real: no gate row degrades to an error string.
 
@@ -39,7 +39,7 @@ EXPECTED = {
     "non-harness-extension": "caught",
     "gui-asset-wrong-path": "caught",
     "root-level-project-file": "missed",
-    "pip-dependency-in-tools": "no-gate",
+    "pip-dependency-in-tools": "caught",
     "fake-bypass-variable": "no-gate",
     "generator-newline-churn": "no-gate",
 }
@@ -51,9 +51,9 @@ def test_matrix_is_identical_across_two_consecutive_runs():
     assert first == second
 
 
-def test_summary_counts_are_caught_5_missed_1_no_gate_3():
+def test_summary_counts_are_caught_6_missed_1_no_gate_2():
     counts = gate_probe.summary_counts(gate_probe.run_probe())
-    assert counts == {"caught": 5, "missed": 1, "no-gate": 3}
+    assert counts == {"caught": 6, "missed": 1, "no-gate": 2}
 
 
 def test_each_outcome_kind_appears_at_least_once():
@@ -90,5 +90,5 @@ def test_json_mode_prints_rows_and_summary(tmp_path, capsys):
     code = gate_probe.main(["--json"], root=tmp_path)
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["summary"] == {"caught": 5, "missed": 1, "no-gate": 3}
+    assert payload["summary"] == {"caught": 6, "missed": 1, "no-gate": 2}
     assert len(payload["rows"]) == len(gate_probe.CORPUS)

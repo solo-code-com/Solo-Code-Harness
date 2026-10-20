@@ -6,7 +6,7 @@
 # Resolve Python: try python3, then python, then py (Windows launcher)
 PY := $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null || echo py)
 
-.PHONY: help generate generate-claude validate garden lint-budget prose lint-pin test test-integration eval check security-scan gitleaks
+.PHONY: help generate generate-claude validate garden lint-budget stdlib-only prose lint-pin test test-integration eval check security-scan gitleaks
 
 help:
 	@echo "Solo-Code Harness — Quality Gates"
@@ -18,6 +18,7 @@ help:
 	@echo "  make validate           Validate agent/skill frontmatter schemas (.kilo/)"
 	@echo "  make garden             Drift detection (.kilo/ <-> .claude/ generated, .copilot/ parity)"
 	@echo "  make lint-budget        Ratchet for S/BLE rules absent from .ruff.toml"
+	@echo "  make stdlib-only        Enforce SPEC section 4: tools/ and .github/scripts/ are stdlib-only"
 	@echo "  make prose              Prose budget gate (long sentences, semicolons, em-dashes)"
 	@echo "  make lint-pin           Run the pinned ruff (the version the commit hook uses)"
 	@echo "  make test               Run full test suite (auto-discovers tools/test_*.py)"
@@ -44,6 +45,9 @@ garden:
 lint-budget:
 	$(PY) tools/check_lint_budget.py
 
+stdlib-only:
+	$(PY) tools/check_stdlib_only.py
+
 prose:
 	$(PY) tools/prose_lint.py
 
@@ -63,6 +67,9 @@ check:
 	@echo ""
 	@echo "=== Lint Budget (S/BLE families absent from .ruff.toml) ==="
 	$(PY) tools/check_lint_budget.py || exit 1
+	@echo ""
+	@echo "=== Stdlib-Only Gate (SPEC section 4) ==="
+	$(PY) tools/check_stdlib_only.py || exit 1
 	@echo ""
 	@echo "=== Prose Budget ==="
 	$(PY) tools/prose_lint.py || exit 1

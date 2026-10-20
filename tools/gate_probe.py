@@ -120,7 +120,7 @@ CORPUS: list[dict] = [
     {
         "id": "pip-dependency-in-tools",
         "defect": "A third-party pip import inside the harness tools tree.",
-        "gate": None,
+        "gate": "stdlib_only",
         "fixture": {
             "tools/x.py": "import requests\n",
         },
@@ -190,10 +190,16 @@ def _hook_exit_claims(root: Path) -> bool | str:
     return False
 
 
+def _stdlib_only(root: Path) -> bool | str:
+    """stdlib_only: flags a third-party import in the tools/ or .github/scripts/ trees."""
+    return _run_script(ROOT / "tools" / "check_stdlib_only.py", root, [])
+
+
 ADAPTERS: dict[str, Callable[[Path], bool | str]] = {
     "boundary_audit": _boundary_audit,
     "security_scan": _security_scan,
     "hook_exit_claims": _hook_exit_claims,
+    "stdlib_only": _stdlib_only,
 }
 
 
