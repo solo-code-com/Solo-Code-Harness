@@ -35,6 +35,7 @@ def _write(path: Path, text: str) -> None:
 
 # ─── check_memory (content diff) ────────────────────────────────────────────
 
+
 def test_check_memory_detects_content_drift(tmp_path):
     src, dst = tmp_path / "src", tmp_path / "dst"
     _write(src / "memory" / "MEMORY.md", "# Memory\n- [decision] A\n")
@@ -51,6 +52,7 @@ def test_check_memory_clean_when_identical(tmp_path):
 
 
 # ─── check_instruction_content ──────────────────────────────────────────────
+
 
 def test_check_instruction_content_detects_drift(tmp_path):
     src, dst = tmp_path / "src", tmp_path / "dst"
@@ -74,6 +76,7 @@ def test_check_instruction_content_missing_dirs_is_silent(tmp_path):
 
 # ─── check_skill_content (frontmatter-agnostic) ─────────────────────────────
 
+
 def test_check_skill_content_ignores_frontmatter_differences(tmp_path):
     """Copilot legitimately uses a different frontmatter schema (quoted
     description + license field) -- that alone must NOT be flagged."""
@@ -85,8 +88,7 @@ def test_check_skill_content_ignores_frontmatter_differences(tmp_path):
     )
     _write(
         dst / "plan" / "SKILL.md",
-        '---\ndescription: "Plan mode."\nlicense: MIT\n---\n'
-        "# Plan\nBody text.\n",
+        '---\ndescription: "Plan mode."\nlicense: MIT\n---\n# Plan\nBody text.\n',
     )
     assert garden.check_skill_content(src, dst, ".copilot") == []
 
@@ -165,9 +167,7 @@ def test_check_skill_content_detects_missing_subdirectory_file(tmp_path):
     _write(dst / "claude-api" / "SKILL.md", "---\n---\nbody\n")
     (dst / "claude-api" / "shared").mkdir(parents=True, exist_ok=True)
     issues = garden.check_skill_content(src, dst, ".copilot")
-    assert any(
-        "shared/new-file.md" in i and "is missing" in i for i in issues
-    )
+    assert any("shared/new-file.md" in i and "is missing" in i for i in issues)
 
 
 def test_check_skill_content_detects_extra_stale_subdirectory_file(tmp_path):
@@ -178,9 +178,7 @@ def test_check_skill_content_detects_extra_stale_subdirectory_file(tmp_path):
     _write(dst / "claude-api" / "SKILL.md", "---\n---\nbody\n")
     _write(dst / "claude-api" / "shared" / "leftover.md", "stale\n")
     issues = garden.check_skill_content(src, dst, ".copilot")
-    assert any(
-        "shared/leftover.md" in i and "no counterpart" in i for i in issues
-    )
+    assert any("shared/leftover.md" in i and "no counterpart" in i for i in issues)
 
 
 def test_check_skill_content_ignores_matching_subdirectory_files(tmp_path):
@@ -194,6 +192,7 @@ def test_check_skill_content_ignores_matching_subdirectory_files(tmp_path):
 
 
 # ─── _split_frontmatter ──────────────────────────────────────────────────────
+
 
 def test_split_frontmatter_with_delimiters():
     text = "---\nkey: value\n---\nBody line.\n"
@@ -210,6 +209,7 @@ def test_split_frontmatter_without_delimiters():
 
 
 # ─── Live repo regression guard ─────────────────────────────────────────────
+
 
 def test_live_repo_has_zero_memory_content_drift():
     kilo = ROOT / ".kilo"
@@ -235,18 +235,26 @@ def test_check_memory_covers_decisions_archive():
 
 def test_live_repo_has_zero_skill_content_drift():
     kilo = ROOT / ".kilo"
-    assert garden.check_skill_content(kilo, ROOT / ".copilot" / "skill", ".copilot") == []
-    assert garden.check_skill_content(
-        kilo, ROOT / ".gemini" / "antigravity" / "skills", ".gemini/antigravity"
-    ) == []
+    assert (
+        garden.check_skill_content(kilo, ROOT / ".copilot" / "skill", ".copilot") == []
+    )
+    assert (
+        garden.check_skill_content(
+            kilo, ROOT / ".gemini" / "antigravity" / "skills", ".gemini/antigravity"
+        )
+        == []
+    )
 
 
 def test_live_repo_has_zero_instruction_content_drift():
     kilo = ROOT / ".kilo"
     assert garden.check_instruction_content(kilo, ROOT / ".copilot", ".copilot") == []
-    assert garden.check_instruction_content(
-        kilo, ROOT / ".gemini" / "antigravity", ".gemini/antigravity"
-    ) == []
+    assert (
+        garden.check_instruction_content(
+            kilo, ROOT / ".gemini" / "antigravity", ".gemini/antigravity"
+        )
+        == []
+    )
 
 
 def test_live_repo_claude_md_matches_template():
@@ -273,7 +281,9 @@ def test_claude_md_check_ignores_line_ending_differences():
     claude_path = ROOT / "CLAUDE.md"
     original = claude_path.read_bytes()
     try:
-        claude_path.write_bytes(original.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+        claude_path.write_bytes(
+            original.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        )
         assert garden.check_claude_md_regenerable() == []
     finally:
         claude_path.write_bytes(original)
@@ -291,7 +301,9 @@ def test_check_doc_counts_detects_wrong_count(tmp_path):
     (kilo / "instruction" / "instruction-a.md").write_text("body", encoding="utf-8")
 
     # Write a test file with a wrong count
-    (tmp_path / "AGENTS.md").write_text("Solo-Code Harness active: 2 skills, 1 agent.", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text(
+        "Solo-Code Harness active: 2 skills, 1 agent.", encoding="utf-8"
+    )
 
     issues = garden.check_doc_counts(root=tmp_path)
     assert len(issues) > 0
@@ -310,11 +322,12 @@ def test_check_doc_counts_clean_when_correct(tmp_path):
     (kilo / "instruction" / "instruction-a.md").write_text("body", encoding="utf-8")
 
     # Write a test file with correct count
-    (tmp_path / "AGENTS.md").write_text("Solo-Code Harness active: 1 skill, 1 agent.", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text(
+        "Solo-Code Harness active: 1 skill, 1 agent.", encoding="utf-8"
+    )
 
     issues = garden.check_doc_counts(root=tmp_path)
     assert issues == []
-
 
 
 def _make_engines(tmp_path, *, gemini_commands: int = 2):
@@ -326,8 +339,11 @@ def _make_engines(tmp_path, *, gemini_commands: int = 2):
     """
     kilo = tmp_path / ".kilo"
     (kilo / "skill" / "skill-a").mkdir(parents=True)
-    for sub, name in (("agents", "agent-a.md"), ("command", "command-a.md"),
-                      ("instruction", "instruction-a.md")):
+    for sub, name in (
+        ("agents", "agent-a.md"),
+        ("command", "command-a.md"),
+        ("instruction", "instruction-a.md"),
+    ):
         (kilo / sub).mkdir(parents=True, exist_ok=True)
         (kilo / sub / name).write_text("body", encoding="utf-8")
 
@@ -375,7 +391,9 @@ def test_check_doc_counts_unnamed_line_falls_back_to_kilo(tmp_path):
     """A line naming no engine is checked against .kilo/, the source of truth."""
     _make_engines(tmp_path, gemini_commands=2)
 
-    (tmp_path / "AGENTS.md").write_text("Harness active: 1 skill, 2 commands.", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text(
+        "Harness active: 1 skill, 2 commands.", encoding="utf-8"
+    )
 
     issues = garden.check_doc_counts(root=tmp_path)
     assert any("claimed 2 commands, but ground truth is 1" in i for i in issues), issues
@@ -482,14 +500,17 @@ def test_check_doc_flags_accepts_real_flag(tmp_path):
 
 def test_check_doc_flags_accepts_subcommand_flag(tmp_path):
     """argparse hides subcommand flags from the top-level --help."""
-    root = _flag_fixture(tmp_path, (
-        "import argparse\n"
-        "p = argparse.ArgumentParser()\n"
-        "sub = p.add_subparsers(dest='cmd')\n"
-        "s = sub.add_parser('sessions')\n"
-        "s.add_argument('--limit', type=int)\n"
-        "p.parse_args()\n"
-    ))
+    root = _flag_fixture(
+        tmp_path,
+        (
+            "import argparse\n"
+            "p = argparse.ArgumentParser()\n"
+            "sub = p.add_subparsers(dest='cmd')\n"
+            "s = sub.add_parser('sessions')\n"
+            "s.add_argument('--limit', type=int)\n"
+            "p.parse_args()\n"
+        ),
+    )
     (root / "AGENTS.md").write_text(
         "Run `python tools/cli.py sessions --limit 10`.", encoding="utf-8"
     )
@@ -498,11 +519,10 @@ def test_check_doc_flags_accepts_subcommand_flag(tmp_path):
 
 def test_check_doc_flags_accepts_hand_rolled_argv_flag(tmp_path):
     """Scripts parsing sys.argv by hand expose no --help; source is checked."""
-    root = _flag_fixture(tmp_path, (
-        "import sys\n"
-        "strict = '--strict' in sys.argv\n"
-        "print('strict:', strict)\n"
-    ))
+    root = _flag_fixture(
+        tmp_path,
+        ("import sys\nstrict = '--strict' in sys.argv\nprint('strict:', strict)\n"),
+    )
     (root / "AGENTS.md").write_text(
         "Run `python tools/cli.py --strict`.", encoding="utf-8"
     )
@@ -580,9 +600,7 @@ def _skillref_fixture(tmp_path, body: str):
     (root / ".kilo" / "agents").mkdir(parents=True)
     (root / ".kilo" / "agents" / "tdd-guide.md").write_text("x", encoding="utf-8")
     (root / ".kilo" / "command").mkdir(parents=True)
-    (root / ".kilo" / "skill" / "plan" / "SKILL.md").write_text(
-        body, encoding="utf-8"
-    )
+    (root / ".kilo" / "skill" / "plan" / "SKILL.md").write_text(body, encoding="utf-8")
     return root
 
 
@@ -776,9 +794,7 @@ def test_check_launcher_defaults_ignores_comments(tmp_path):
 
 def test_check_launcher_defaults_ignores_unrelated_script(tmp_path):
     """A script that never launches an engine is out of scope."""
-    root = _launcher_fixture(
-        tmp_path, "Write-Host '--bare'\n", name="notes.ps1"
-    )
+    root = _launcher_fixture(tmp_path, "Write-Host '--bare'\n", name="notes.ps1")
     assert garden.check_launcher_defaults(root=root) == []
 
 
@@ -794,7 +810,9 @@ def _write_key_config(tmp_path, approved, rejected):
     """Point HOME at a temp dir holding a synthetic ~/.claude.json."""
     cfg = tmp_path / ".claude.json"
     cfg.write_text(
-        json.dumps({"customApiKeyResponses": {"approved": approved, "rejected": rejected}}),
+        json.dumps(
+            {"customApiKeyResponses": {"approved": approved, "rejected": rejected}}
+        ),
         encoding="utf-8",
     )
     return cfg
@@ -887,8 +905,7 @@ def test_check_api_key_approval_prefers_shell_key_over_env_file(
 
 
 def _git(tmp_path: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(tmp_path), *args],
-                   capture_output=True, check=True)
+    subprocess.run(["git", "-C", str(tmp_path), *args], capture_output=True, check=True)
 
 
 def _init_repo(tmp_path: Path) -> None:
@@ -986,7 +1003,7 @@ def test_permission_block_absent_is_empty(tmp_path):
 
 def test_permission_block_stops_at_next_top_level_key(tmp_path):
     agent = tmp_path / "a.md"
-    _write(agent, "---\npermission:\n  edit: allow\ncolor: \"#fff\"\n---\nbody\n")
+    _write(agent, '---\npermission:\n  edit: allow\ncolor: "#fff"\n---\nbody\n')
 
     assert garden._permission_block(agent) == "permission:\n  edit: allow"
 
@@ -1025,13 +1042,17 @@ def test_check_agent_permissions_defers_missing_copy_to_check_agents(tmp_path):
 
 
 def test_check_agent_permissions_silent_when_dirs_absent(tmp_path):
-    assert garden.check_agent_permissions(tmp_path / "src", tmp_path / "dst", ".x") == []
+    assert (
+        garden.check_agent_permissions(tmp_path / "src", tmp_path / "dst", ".x") == []
+    )
 
 
 def test_check_claude_agent_tools_detects_stale_allowlist(tmp_path):
     src, dst = tmp_path / "src", tmp_path / "dst"
     _write(src / "agents" / "reviewer.md", _AGENT_ALLOW)
-    _write(dst / "agents" / "reviewer.md", "---\nname: reviewer\ntools: Read\n---\nBody.\n")
+    _write(
+        dst / "agents" / "reviewer.md", "---\nname: reviewer\ntools: Read\n---\nBody.\n"
+    )
 
     issues = garden.check_claude_agent_tools(src, dst)
 
@@ -1087,3 +1108,75 @@ def test_live_repo_has_zero_agent_permission_drift():
 def test_live_repo_claude_agent_tools_match_their_source():
     issues = garden.check_claude_agent_tools(ROOT / ".kilo", ROOT / ".claude")
     assert issues == [], f".claude agent tools drift: {issues}"
+
+
+# --- check_no_symlinks -------------------------------------------------------
+#
+# Every other check here compares file content, and content is what the OS
+# returns after following the path -- so a symlink inside a mirror makes a
+# parity check pass while pointing outside the repo. These tests pin the
+# structural check that reads the path itself instead of the bytes.
+
+
+def _symlink_fixture(tmp_path):
+    """Minimal repo: one scanned harness dir plus tools/, each with one file."""
+    root = tmp_path / "repo"
+    _write(root / ".kilo" / "agents" / "a.md", "body\n")
+    _write(root / "tools" / "real.py", "x = 1\n")
+    return root
+
+
+def test_check_no_symlinks_clean_tree_reports_nothing(tmp_path):
+    assert garden.check_no_symlinks(_symlink_fixture(tmp_path)) == []
+
+
+def test_check_no_symlinks_detects_symlink(tmp_path, monkeypatch):
+    """A symlink is reported with its path and what it points at.
+
+    Windows refuses symlink creation without developer mode (OSError). Rather
+    than skip -- the no-skips gate rejects that -- the same entry is made to
+    report itself as a symlink, so the issue path is exercised everywhere.
+    """
+    root = _symlink_fixture(tmp_path)
+    target = root / ".kilo" / "agents" / "a.md"
+    link = root / ".kilo" / "agents" / "linked.md"
+    try:
+        link.symlink_to(target)
+    except OSError:
+        _write(link, target.read_text(encoding="utf-8"))
+        real_is_symlink = Path.is_symlink
+        monkeypatch.setattr(
+            Path, "is_symlink", lambda self: self == link or real_is_symlink(self)
+        )
+
+    issues = garden.check_no_symlinks(root)
+
+    assert any(
+        i.startswith("Symlink in harness tree: .kilo/agents/linked.md ->")
+        for i in issues
+    ), issues
+
+
+def test_check_no_symlinks_detects_path_resolving_outside_root(tmp_path, monkeypatch):
+    """A Windows junction redirects without being a symlink, so resolution is
+    checked for every entry, not only for entries is_symlink() flags. That is
+    reproduced here by resolving one real file to a real path outside the
+    root, which stays deterministic on every platform."""
+    root = _symlink_fixture(tmp_path)
+    escapee = root / "tools" / "escapee.py"
+    _write(escapee, "x = 1\n")
+    outside = tmp_path / "outside" / "escapee.py"
+    _write(outside, "x = 1\n")
+
+    real_resolve = Path.resolve
+
+    def _fake_resolve(self, *args, **kwargs):
+        return outside if self == escapee else real_resolve(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", _fake_resolve)
+
+    issues = garden.check_no_symlinks(root)
+
+    assert any(
+        "Path resolves outside the repo: tools/escapee.py ->" in i for i in issues
+    ), issues

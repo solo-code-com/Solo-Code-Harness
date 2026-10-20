@@ -1691,11 +1691,115 @@ def check_skill_refs(root: Path = ROOT) -> list[str]:
     return issues
 
 
+# Harness directories whose contents the parity checks compare. A symlink
+# anywhere inside one of them makes every content comparison read through it
+# to the target -- so the link itself has to be checked, not only the bytes
+# that come back.
+_SYMLINK_SCAN_DIRS: tuple[str, ...] = (
+    ".kilo",
+    ".claude",
+    ".copilot",
+    ".gemini",
+    ".opencode",
+    ".agents",
+    ".contracts",
+    ".github",
+    ".vscode",
+    "tools",
+)
+
+# Build/cache directories no check in this file reads, so a link inside one
+# of them cannot make a mirror comparison pass.
+_SYMLINK_PRUNE_DIRS = {
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "venv",
+}
+
+
+def check_no_symlinks(root: Path = ROOT) -> list[str]:
+    """Report symlinks -- and entries resolving outside the repo -- in harness dirs.
+
+    Every other check in this file compares *content*, and content is what
+    the OS returns after following the path. A symlink placed inside .kilo/
+    or one of its mirrors therefore makes those comparisons pass by
+    construction, even when the mirror points outside the repository: the
+    parity check reads the same bytes on both sides because it is reading
+    the same file. Only the link itself can reveal that, so this check walks
+    the harness directories and reports two things -- an entry that IS a
+    symlink (with its target), and an entry whose resolution lands outside
+    `root`. The second covers Windows junctions, which redirect exactly like
+    a symlink but report is_symlink() as False.
+
+    Symlinked directories are reported and not descended into: their
+    contents belong to the target, which may not be in this repo at all.
+    """
+    issues: list[str] = []
+    resolved_root = root.resolve()
+
+    def _report(entry: Path) -> bool:
+        """Record one entry's issues; False means it leads outside the repo."""
+        rel = entry.relative_to(root).as_posix()
+        if entry.is_symlink():
+            try:
+                target = str(entry.readlink())
+            except OSError:
+                target = "unreadable target"
+            issues.append(f"Symlink in harness tree: {rel} -> {target}")
+        resolved = entry.resolve()
+        if not resolved.is_relative_to(resolved_root):
+            issues.append(
+                f"Path resolves outside the repo: {rel} -> {resolved.as_posix()}"
+            )
+            return False
+        return True
+
+    for name in _SYMLINK_SCAN_DIRS:
+        top = root / name
+        # is_symlink() first: exists()/is_dir() are False for a broken link,
+        # and a broken link is exactly what this check must still report.
+        if top.is_symlink():
+            _report(top)
+            continue
+        if not top.is_dir():
+            continue
+        for dirpath, dirnames, filenames in os.walk(top):
+            dirnames[:] = sorted(d for d in dirnames if d not in _SYMLINK_PRUNE_DIRS)
+            current = Path(dirpath)
+            # A directory that is a link, or that redirects outside, is
+            # reported and then pruned: its contents belong to the target.
+            inside: list[str] = []
+            for child in dirnames:
+                entry = current / child
+                if _report(entry) and not entry.is_symlink():
+                    inside.append(child)
+            dirnames[:] = inside
+            for child in sorted(filenames):
+                _report(current / child)
+    return issues
+
+
 def main() -> int:
     kilo = ROOT / ".kilo"
 
     all_issues: list[str] = []
     skip_skills = _load_skip_skills()
+
+    # Symlinks in the harness dirs -- every check below reads through them, so
+    # a link can make a mirror compare equal while pointing outside the repo.
+    print("--- Harness Tree ---")
+    symlink_issues = check_no_symlinks(ROOT)
+    if symlink_issues:
+        print("[DRIFT] Symlinks in harness directories:")
+        for i in symlink_issues:
+            print(f"  {i}")
+        all_issues.extend(symlink_issues)
+    else:
+        print("[OK] No symlinks in harness directories")
 
     # .copilot/ engine — direct copy, no suffix
     print("--- .copilot/ ---")
