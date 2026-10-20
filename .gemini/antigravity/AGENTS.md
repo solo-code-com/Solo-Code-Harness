@@ -285,6 +285,7 @@ Available for domain-specific work. See `.gemini/antigravity/agents/`:
 | `code-simplifier` | Simplify code for clarity without changing behavior |
 | `code-skeptic` | Adversarial review — stress-test assumptions |
 | `database-reviewer` | DB query/schema/migration review |
+| `jev` | Multi-worker orchestrator — routes work to the cheapest capable worker, verifies every result |
 | `planner` | Implementation planning for complex features |
 | `python-reviewer` | Python code review — PEP 8, type hints, Pythonic patterns |
 | `refactor-cleaner` | Dead code cleanup, logic simplification |

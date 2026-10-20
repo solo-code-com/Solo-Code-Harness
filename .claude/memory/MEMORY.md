@@ -54,6 +54,17 @@ High-signal context loaded at session start. Detailed history belongs in
   repo. Without `.git/`, ruff still scans `.pytest_temp*/` and the count overshoots
   the budget (measured 49 vs 45 on the pristine tree). Run `git init` before
   trusting the gate.
+- [gotcha] `jev.md` khai `edit: deny` nhung KHONG bind suot dau phien
+  (`opencode.json:12` noi `edit: ask`) - hai tang lech nhau. Phien chay agent
+  Jev phai sua file qua `tools/*_delegate.py`, khong qua edit truc tiep.
+- [gotcha] Kilo can `python tools/kilo_server_manager.py ensure` truoc moi
+  phien dung arm Kilo; thieu buoc do = 100% fail voi `kilo CLI exit code 1`
+  (do duoc: 325 loi, 14 ngay, server chet tu 16/10).
+- [gotcha] Script trong `tools/` in output ra console Windows cp1252 se crash
+  neu output co ky tu ngoai bang ma - dung `_make_streams_encoding_safe`
+  (`codex_delegate.py` tung thieu, crash o U+2192).
+- [gotcha] Khong chay 2 pytest song song: dung chung `.pytest_temp` - test do
+  gia (da gap 2 lan trong phien 2026-10-20).
 
 ## Decisions
 - [decision] CommandCode model ids are verified against
@@ -63,15 +74,6 @@ High-signal context loaded at session start. Detailed history belongs in
   `~/.config/kilo/kilo.jsonc` (Kilo uses the full upstream id
   `commandcode/deepseek/deepseek-v4-pro`). `context_length` comes from the response, not
   the file. (2026-09-28; catalog 80 model on 2026-10-16)
-- [decision] Guard hardening (2026-10-07): 33 -> 41 destructive patterns, 8 holes closed,
-  list in `decisions-archive.md`. (2026-10-16) re-measured: 5 of 7 already fixed; 3 of the 4
-  left closed (+3 Windows-root patterns -> 44, README synced; quoted spans holding a
-  separator read as data). The 4th (secrets in a Kilo command unscanned) stays open: fixing
-  it needs `hooks.json` or a JS secret list. Pipeline drills `bcfa6bd`+`c2e174f` closed the
-  wrapper gap and round 2's 2 regressions; 10 quoting gaps remain (archive). Pytest timeout
-  120 -> 300s.
-- [decision] dsh worker verified (2026-10-07, re-verified 2026-10-16 `DSH_ARM_OK`): detail and
-  prerequisites in `decisions-archive.md`.
 - [decision] Pipeline 4 vai trò (2026-10-16): Jev (agent trên **model JEV**
   `openrouter/jev-router`) điều phối; **Codex** ra đề bài + **verify** (`gpt-6.1-sol`,
   effort `medium`, đổi bằng `--model`/`--effort`); **DeepSeek V4.1 Flash** (OpenCode CLI,
@@ -98,16 +100,18 @@ High-signal context loaded at session start. Detailed history belongs in
   `.env`), `tools/opencode_delegate.py` **không** đụng store. Hôm nay chưa đo được lỗi vì FreeModel
   đang lấy từ env → không mirror, chỉ ghi nhận; nếu về sau delegate báo Unauthorized với freemodel
   thì đây là nguyên nhân đầu tiên cần loại trừ.
-- [decision] Hợp nhất một nguồn GitHub (2026-10-16, chủ dự án quyết): repo chính là
-  `solo-code-com/Solo-Code-Harness` — giữ 3 sao + 1 fork, vì sao/rating gắn với **repo** chứ không
-  gắn branch nên ghi đè `main` không làm mất. Mốc cũ `6f261bd` (208 commit) đã đẩy lên đó dưới nhánh
-  Do force-push bị guard chặn (agent không được lách), việc đồng bộ đã làm bằng **fast-forward**:
-  commit `ae754e7` có tree **y hệt** bộ mới (`b2aa4ae`) và parents = [mốc cũ, `main` của ta] ⇒ 208
-  commit cũ vào thẳng lịch sử chứ không bị mồ côi. Bản `reference\Solo-Code-Harness-main` đã xoá —
-  không file nào tham chiếu nó, object cũ vẫn ở `.git` local qua ref `oldharness/main`.
 - [decision] Review tổng thể 2026-10-17: hai repo đã hợp nhất bằng join `e254c9a` (local =
   g-harness = Solo-Code-Harness ✓) và tag `v4.3.1` có trên cả hai ✓. Gate chạy trong dự án đích lộ 2
   lỗi harness, đã vá: unsafe-pattern chỉ áp cho code + bỏ qua `vendor/`/`staticfiles/`/JSON
   (`1c93b47`), và coverage ratchet skip khi bản runtime không có `test_*.py`. Còn mở: 8 finding XSS
   thật trong code dự án đích (scanner chưa có cơ chế allowlist), 10 shell-quoting gaps của guard,
   Docker/WSL chưa xong (5 volume chưa backup).
+- [decision] Sua cac loi im lang (2026-10-20): 3 agent thieu `description` nen
+  SPEC 7.1 nay duoc enforce; `boundary_audit` bat `--strict` va sua bug bo qua
+  theo path tuyet doi (repo duoi thu muc ten build/dist/venv lam ca audit cam);
+  gate `test_hook_exit_claims.py` moi bat 2 claim sai that (`quality-gate.js`,
+  `hookify-engine.js`); xoa 3 claim bypass khong ton tai. Kilo: 327/350 loi chi
+  vi server chet -> them preflight exit 7 va co `--ensure-server`; bo `requests`
+  (dependency pip duy nhat trong `tools/`). Antigravity nay ghi
+  `.solocode/antigravity-usage.jsonl`; `failure_ledger.py` moi gop moi nguon van
+  hanh va co `--sweep` da du an.

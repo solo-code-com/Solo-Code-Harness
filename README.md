@@ -93,9 +93,9 @@ python tools/deploy.py
 
 | Directory | Purpose |
 |---|---|
-| `.claude/` | **Orchestrator** — Claude Code: agents (15), skills (53), commands (14, incl. `ship`), instruction (10), guard + lifecycle hooks + `settings.json`; rulebook `CLAUDE.md` at root. Generated from `.kilo/` via `tools/generate_harness.py --harness claude`. |
-| `.copilot/` | GitHub Copilot: agents (15), skills (53), commands (14), instruction (10), memory (4). Manually kept in parity with `.kilo/`; checked (not generated) by `tools/garden.py`. |
-| `.kilo/` | **Source of truth** — Kilo Code: agents (15), skills (53), commands (14, incl. `ship`), hooks, memory, instruction. Edit here first. |
+| `.claude/` | **Orchestrator** — Claude Code: agents (15), skills (53), commands (15, incl. `ship`), instruction (10), guard + lifecycle hooks + `settings.json`; rulebook `CLAUDE.md` at root. Generated from `.kilo/` via `tools/generate_harness.py --harness claude`. |
+| `.copilot/` | GitHub Copilot: agents (15), skills (53), commands (15), instruction (10), memory (4). Manually kept in parity with `.kilo/`; checked (not generated) by `tools/garden.py`. |
+| `.kilo/` | **Source of truth** — Kilo Code: agents (15), skills (53), commands (15, incl. `ship`), hooks, memory, instruction. Edit here first. |
 | `.gemini/` | Gemini/Antigravity: agents (15), skills (53), commands (12), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
 | `.codex/` | Codex CLI integration: README, session tracking, verified write guard (`tools/codex_guard.py`), and launcher `codex-env.ps1`. |
 | `.github/` | Shared scripts: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py`, `security-allowlist.txt` + `copilot-instructions.md`, `prompts/` |
@@ -240,7 +240,7 @@ python tools/generate_harness.py --harness claude
 | Rulebook | `CLAUDE.md` | Auto-loaded project memory (boundaries + rules) |
 | Subagents (15) | `.claude/agents/*.md` | Invoke via Task tool or by name |
 | Skills (53) | `.claude/skills/<name>/SKILL.md` | Auto-discovered capabilities |
-| Slash commands (14) | `.claude/commands/*.md` | `/verify`, `/plan`, `/decide`, `/ship`, `/debug`, `/commit`, … |
+| Slash commands (15) | `.claude/commands/*.md` | `/verify`, `/plan`, `/decide`, `/ship`, `/debug`, `/commit`, … |
 | Guard hook | `.claude/hooks/guard.py` + `.claude/settings.json` | `PreToolUse` — blocks destructive commands, secret leaks, protected-config edits |
 | Quality-gate hook | `.claude/hooks/quality_gate.py` | `PostToolUse` (Edit/Write) — advisory ruff/prettier/biome/gofmt format check |
 | Memory-gate hook | `.claude/hooks/memory_gate.py` | `PostToolUse` (Edit/Write) — caps `.claude/memory/*.md` size (WARN 4k / **hard-block 8k** chars) so memory never silently bloats every session's context; Python port of Kilo's `memory-manager.js` |
@@ -444,9 +444,9 @@ python tools/deploy.py
 
 | Thư mục | Mục đích |
 |---|---|
-| `.claude/` | **Điều phối** — Claude Code: agents (15), skills (53), commands (14, gồm `ship`), instruction (10), guard + lifecycle hooks + `settings.json`; rulebook `CLAUDE.md` ở root. Sinh từ `.kilo/` qua `tools/generate_harness.py --harness claude`. |
-| `.copilot/` | GitHub Copilot: agents (15), skills (53), commands (14), instruction (10), memory (4). Giữ song song thủ công với `.kilo/`; `tools/garden.py` chỉ kiểm tra, không tự sinh. |
-| `.kilo/` | **Nguồn gốc** — Kilo Code: agents (15), skills (53), commands (14, gồm `ship`), hooks, memory, instruction. Sửa ở đây trước tiên. |
+| `.claude/` | **Điều phối** — Claude Code: agents (15), skills (53), commands (15, gồm `ship`), instruction (10), guard + lifecycle hooks + `settings.json`; rulebook `CLAUDE.md` ở root. Sinh từ `.kilo/` qua `tools/generate_harness.py --harness claude`. |
+| `.copilot/` | GitHub Copilot: agents (15), skills (53), commands (15), instruction (10), memory (4). Giữ song song thủ công với `.kilo/`; `tools/garden.py` chỉ kiểm tra, không tự sinh. |
+| `.kilo/` | **Nguồn gốc** — Kilo Code: agents (15), skills (53), commands (15, gồm `ship`), hooks, memory, instruction. Sửa ở đây trước tiên. |
 | `.gemini/` | Gemini/Antigravity: agents (15), skills (53), commands (12), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
 | `.github/` | Script dùng chung: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py` + `copilot-instructions.md`, `prompts/` |
 | `tools/` | Generator (`generate_harness.py`, `claude_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` (runtime dep của Claude session hooks) |

@@ -1279,3 +1279,24 @@ Two things worth remembering. The `sudo` password the owner supplied was never n
 typed into a chat transcript should be rotated regardless. And the earlier "docker daemon not
 running" note in this archive was measured before all of this and is now simply obsolete: there is no
 daemon on the Windows side at all.
+
+## Moved from MEMORY.md (2026-10-20)
+
+- [decision] Guard hardening (2026-10-07): 33 -> 41 destructive patterns, 8 holes closed,
+  list in `decisions-archive.md`. (2026-10-16) re-measured: 5 of 7 already fixed; 3 of the 4
+  left closed (+3 Windows-root patterns -> 44, README synced; quoted spans holding a
+  separator read as data). The 4th (secrets in a Kilo command unscanned) stays open: fixing
+  it needs `hooks.json` or a JS secret list. Pipeline drills `bcfa6bd`+`c2e174f` closed the
+  wrapper gap and round 2's 2 regressions; 10 quoting gaps remain (archive). Pytest timeout
+  120 -> 300s.
+
+- [decision] dsh worker verified (2026-10-07, re-verified 2026-10-16 `DSH_ARM_OK`): detail and
+  prerequisites in `decisions-archive.md`.
+
+- [decision] Hợp nhất một nguồn GitHub (2026-10-16, chủ dự án quyết): repo chính là
+  `solo-code-com/Solo-Code-Harness` — giữ 3 sao + 1 fork, vì sao/rating gắn với **repo** chứ không
+  gắn branch nên ghi đè `main` không làm mất. Mốc cũ `6f261bd` (208 commit) đã đẩy lên đó dưới nhánh
+  Do force-push bị guard chặn (agent không được lách), việc đồng bộ đã làm bằng **fast-forward**:
+  commit `ae754e7` có tree **y hệt** bộ mới (`b2aa4ae`) và parents = [mốc cũ, `main` của ta] ⇒ 208
+  commit cũ vào thẳng lịch sử chứ không bị mồ côi. Bản `reference\Solo-Code-Harness-main` đã xoá —
+  không file nào tham chiếu nó, object cũ vẫn ở `.git` local qua ref `oldharness/main`.

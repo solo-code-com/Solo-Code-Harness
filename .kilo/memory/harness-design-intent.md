@@ -10,8 +10,8 @@ Solo-Code Harness is a multi-layer quality and safety system for AI coding agent
 AGENTS.md        → Behavior rules, anti-hallucination, prose quality, harness boundaries
 .harness.lock    → Boundary manifest — which files are harness vs project code
 .kilo/instruction/ → Language-specific rules (Python, TS, Git, DB)
-.kilo/skill/     → 51 domain skills (code-review, debugging, testing...)
-.kilo/agents/    → 14 specialized agents with handoff chains
+.kilo/skill/     → 53 domain skills (code-review, debugging, testing...)
+.kilo/agents/    → 15 specialized agents with handoff chains
 .kilo/hooks/     → 20 lifecycle hooks (bash validation, secret scan, learning...)
 .kilo/hookify/   → MD-config rules engine (user-customizable policies)
 .kilo/prompts/   → Structured workflow templates (code review, feature dev...)
@@ -34,7 +34,7 @@ kilo.jsonc       → Permission model (bash allow/deny, task allow/deny)
 | Continual learning | Agent forgets everything between sessions |
 | Ralph Loop | Agent stops work early, doesn't iterate |
 | 4-agent parallel review | Single-agent review misses bugs |
-| 14 specialized agents | Generalist agent makes mistakes in domain-specific work |
+| 15 specialized agents | Generalist agent makes mistakes in domain-specific work |
 | Deploy/scaffold (deploy.py) | Manual copy-paste errors when replicating harness to new projects |
 | Security allow-list | "Dangerous" calls (subprocess, os.environ) lack auditable justifications — scan false negatives |
 | No-skips policy (check_skips.py) | Test coverage silently degrades via unconditional skip/skipif markers |

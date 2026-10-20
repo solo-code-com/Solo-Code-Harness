@@ -117,7 +117,7 @@ A-2. **No invented function signatures, parameter names, or return types.** Neve
 A-3. **Compiling does not mean correct.** Confirm the code does what its name promises, not just what it returns. Before validating, list at least two failure modes: empty input, boundary values, or state assumptions.
 A-4. **No restated-code comments.** Comments must explain WHY, not paraphrase WHAT the code does. A comment repeating the code is noise. Never write self-referential comments like "used by X flow" or "added for issue Y" — those belong in commit messages.
 A-5. **Acknowledge uncertainty explicitly.** If you do not know something, say "I do not know" or "I need to verify X". Do not invent a plausible-sounding answer. When generating code with hidden trade-offs (new dependency, async pattern, data structure choice), name the trade-off in the response.
-A-6. **Loop detection (DeerFlow threshold).** If the same tool is called 3+ times consecutively with the same parameters, change strategy immediately. At 5+ consecutive identical tool calls — stop, report the loop to the user, and wait for instruction. The `context-monitor.js` hook in `.kilo/hooks/post-tool-use/` enforces this automatically.
+A-6. **Loop detection (DeerFlow threshold).** If the same tool is called 3+ times consecutively with the same parameters, change strategy immediately. At 5+ consecutive identical tool calls — stop, report the loop to the user, and wait for instruction. The `context-monitor.js` hook warns when a window of tool calls looks loop-like; it exits 0, so the 3+/5+ threshold above is still on you to apply.
 
 ### Prose Quality (MANDATORY)
 
