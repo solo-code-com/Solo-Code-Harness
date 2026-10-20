@@ -36,6 +36,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import shutil
 import subprocess  # noqa: S404 — fixed argv; the browser/task cannot inject
@@ -87,6 +88,24 @@ def _load_control():
     import session_control
 
     return session_control
+
+
+def _make_streams_encoding_safe() -> None:
+    """Never crash on worker output the console encoding cannot represent.
+
+    A Codex answer can carry characters cp1252 cannot encode -- an arrow (U+2192)
+    raised UnicodeEncodeError at the plain print of the output. Both print paths
+    reach the console raw: the plain one, and `--json`, which dumps with
+    `ensure_ascii=False`. Switch both streams to UTF-8 with replacement, so an
+    unrepresentable character becomes a substitute glyph instead of discarding
+    the run.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        with contextlib.suppress(ValueError, OSError):
+            reconfigure(encoding="utf-8", errors="replace")
 
 
 def default_confine_roots() -> list[str]:
@@ -270,6 +289,7 @@ def log_usage(model: str | None, sandbox: str, elapsed: float, code: int) -> Non
 
 
 def main(argv: list[str] | None = None) -> int:
+    _make_streams_encoding_safe()
     parser = argparse.ArgumentParser(description="Codex (ChatGPT) worker delegate")
     parser.add_argument("task", help="self-contained task brief")
     parser.add_argument(

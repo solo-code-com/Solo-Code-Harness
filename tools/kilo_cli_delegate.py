@@ -38,6 +38,9 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -118,6 +121,33 @@ def _error_result(error: str) -> dict[str, Any]:
         "cost": None,
         "error": error,
     }
+
+
+def _server_healthy(url: str) -> bool:
+    """True when the Kilo server answers its `/doc` endpoint.
+
+    A dead server is the most common failure of this wrapper (measured
+    2026-10-16: 325 of 327 logged calls over 14 days), and the CLI reports it
+    only as an opaque nonzero exit. Probing first turns that into a named
+    precondition. Never raises: an unreachable server is just an unhealthy one.
+    """
+    probe_url = f"{url.rstrip('/')}/doc"
+    try:
+        with urllib.request.urlopen(probe_url, timeout=2) as response:  # noqa: S310 - http only
+            return response.status < 400
+    except urllib.error.HTTPError:
+        # HTTPError subclasses URLError: the server answered, with an error.
+        return False
+    except (urllib.error.URLError, OSError, TimeoutError):
+        return False
+
+
+def _server_port(server: str) -> int | None:
+    """The port a --server URL names, or None when it names none."""
+    try:
+        return urllib.parse.urlparse(server).port
+    except ValueError:
+        return None
 
 
 def _make_streams_encoding_safe() -> None:
@@ -426,8 +456,38 @@ def main(argv: list[str] | None = None) -> int:
         default=120,
         help="Timeout in seconds (default: 120)",
     )
+    parser.add_argument(
+        "--ensure-server",
+        action="store_true",
+        help="Start the Kilo server first (kilo_server_manager.py ensure) if it is down",
+    )
 
     args = parser.parse_args(argv)
+
+    # ── Server precondition ──
+    # Checked before anything is spawned: a dead server is cheaper to report than
+    # to discover as `exit code 1` after the CLI has already been started.
+    if not _server_healthy(args.server):
+        if args.ensure_server:
+            _stderr("Kilo server is down - starting it")
+            ensure_cmd = [
+                sys.executable,
+                str(TOOLS_DIR / "kilo_server_manager.py"),
+                "ensure",
+            ]
+            # The manager defaults to the port the default server names, so only a
+            # custom --server needs it: otherwise the manager starts 14096 and the
+            # probe below still fails with exit code 7.
+            port = _server_port(args.server)
+            if port is not None and port != _server_port(DEFAULT_SERVER):
+                ensure_cmd += ["--port", str(port)]
+            subprocess.run(ensure_cmd, check=False)  # noqa: S603 - fixed argv, no shell
+        if not _server_healthy(args.server):
+            _stderr(
+                f"Kilo server is not running at {args.server} - "
+                "run: python tools/kilo_server_manager.py ensure"
+            )
+            return 7
 
     # A `.env` override wins over the built-in default (see tools/env_file.py): a provider
     # outage becomes one line in `.env` instead of a code edit.

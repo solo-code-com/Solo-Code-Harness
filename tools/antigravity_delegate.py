@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from tools.shared_state import SharedState  # noqa: E402
 DEFAULT_MODEL = "gemini-3.8-flash-medium"
 DEFAULT_TIMEOUT_SECONDS = 600
 DIRECTORY_LOCK_ENGINE = "gemini"
+USAGE_LOG = ROOT / ".solocode" / "antigravity-usage.jsonl"
 
 GUARDRAIL = """STRICT OPERATING CONSTRAINTS (must follow, no exceptions):
 1. Work only inside the allowed directory named below. Do not read, create,
@@ -372,6 +374,42 @@ def run_agy_cli(
     return parsed, process.returncode
 
 
+def log_usage(
+    model: str,
+    prompt_len: int,
+    elapsed: float,
+    result: dict[str, Any],
+) -> None:
+    """Append one row to .solocode/antigravity-usage.jsonl for auditing.
+
+    The row repeats the sibling workers' ``*-usage.jsonl`` shape. agy names its
+    resume handle a conversation id, so it fills the sibling's ``session_id``.
+    """
+    error = result.get("error")
+    if error is None and result.get("denied_actions"):
+        names = ", ".join(
+            str(entry.get("action") or entry.get("display_name") or "unknown")
+            for entry in result["denied_actions"]
+        )
+        error = f"worker was denied permission for: {names}"
+    entry: dict[str, Any] = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "model": model,
+        "prompt_chars": prompt_len,
+        "elapsed_s": round(elapsed, 2),
+        "session_id": result.get("conversation_id"),
+        "usage": result.get("usage"),
+        "cost": result.get("cost"),
+        "error": error,
+    }
+    try:
+        USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with USAGE_LOG.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass  # usage logging must never break a run
+
+
 def main(argv: list[str] | None = None) -> int:
     _make_streams_encoding_safe()
     parser = argparse.ArgumentParser(
@@ -487,6 +525,7 @@ def main(argv: list[str] | None = None) -> int:
             conversation=args.conversation,
             continue_latest=args.continue_latest,
         )
+        log_usage(args.model, len(prompt), time.monotonic() - started, result)
         if result.get("conversation_id"):
             _stderr(
                 f"conversation={result['conversation_id']} (resume with --conversation)"

@@ -25,15 +25,9 @@ import json
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
-
-try:
-    import requests
-except ImportError:
-    sys.exit(
-        "kilo_server_manager requires the 'requests' library.\n"
-        "Install it: pip install requests"
-    )
 
 ROOT = Path(__file__).resolve().parent.parent
 SOLOCODE = ROOT / ".solocode"
@@ -56,9 +50,9 @@ def _stderr(*args: object) -> None:
 
 def _expand_glob(pattern: str) -> Path | None:
     """Return the first match for a glob pattern, or *None*."""
-    matches = sorted(Path(pattern).expanduser().parent.glob(
-        Path(pattern).expanduser().name
-    ))
+    matches = sorted(
+        Path(pattern).expanduser().parent.glob(Path(pattern).expanduser().name)
+    )
     return matches[0] if matches else None
 
 
@@ -87,8 +81,7 @@ def find_kilo_binary() -> Path | None:
     if extensions_dir.exists():
         # Find all kilocode.kilo-code-* directories, sort by version descending
         matches = sorted(
-            extensions_dir.glob("kilocode.kilo-code-*/bin/kilo.exe"),
-            reverse=True
+            extensions_dir.glob("kilocode.kilo-code-*/bin/kilo.exe"), reverse=True
         )
         if matches:
             return matches[0]
@@ -148,15 +141,24 @@ def health_check(port: int = DEFAULT_PORT, timeout: int = 10) -> bool:
     Returns *True* once the endpoint responds, *False* on timeout.
     """
     url = f"http://127.0.0.1:{port}/doc"
+    if not url.startswith("http://127.0.0.1:"):
+        _stderr(f"refusing to open non-loopback URL: {url}")
+        return False
     deadline = time.monotonic() + timeout
 
     idx = 0
     while time.monotonic() < deadline:
         try:
-            resp = requests.get(url, timeout=2)
-            if resp.status_code < 400:
-                return True
-        except requests.RequestException:
+            # urlopen raises HTTPError for 4xx/5xx, so an error status is
+            # "answered but unhealthy", not a transport failure.
+            with urllib.request.urlopen(  # noqa: S310 — loopback scheme checked above
+                url, timeout=2
+            ) as resp:
+                if resp.status < 400:
+                    return True
+        except urllib.error.HTTPError:
+            pass
+        except (urllib.error.URLError, OSError, TimeoutError):
             pass
 
         delay = _BACKOFF_INTERVALS[min(idx, len(_BACKOFF_INTERVALS) - 1)]
@@ -367,7 +369,6 @@ def _print_log_tail(n: int = 20) -> None:
         _stderr(f"  [log] {line.rstrip()}")
 
 
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -394,9 +395,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("stop", help=_HELP_STOP, description=_HELP_STOP)
 
     sp_status = sub.add_parser("status", help=_HELP_STATUS, description=_HELP_STATUS)
-    sp_status.add_argument("--json", action="store_true", help="Machine-readable JSON output")
+    sp_status.add_argument(
+        "--json", action="store_true", help="Machine-readable JSON output"
+    )
 
-    sp_restart = sub.add_parser("restart", help=_HELP_RESTART, description=_HELP_RESTART)
+    sp_restart = sub.add_parser(
+        "restart", help=_HELP_RESTART, description=_HELP_RESTART
+    )
     sp_restart.add_argument(
         "--port", type=int, default=DEFAULT_PORT, help=f"Port (default: {DEFAULT_PORT})"
     )

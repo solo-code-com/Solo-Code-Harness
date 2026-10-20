@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -242,3 +243,114 @@ def test_run_kilo_cli_reports_a_nonzero_exit_without_output(monkeypatch, tmp_pat
         _FakePopen(returncode=3, stderr="boom"),
     )
     assert result["error"] == "kilo CLI exit code 3"
+
+
+# ── server precondition ───────────────────────────────────────────────
+
+
+def _reach_the_runner(monkeypatch):
+    """Let main() run without .env, without a real kilo binary, without a log file."""
+    monkeypatch.setattr(kilo_cli_delegate, "_load_project_env", lambda: None)
+    monkeypatch.setattr(kilo_cli_delegate, "find_kilo_binary", lambda: "kilo")
+    monkeypatch.setattr(kilo_cli_delegate, "log_usage", lambda *_a, **_k: None)
+
+
+def test_main_reports_a_dead_server_instead_of_an_exit_code(monkeypatch, capsys):
+    _reach_the_runner(monkeypatch)
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: False)
+
+    code = kilo_cli_delegate.main(
+        ["hello", "--no-guardrail", "--server", "http://127.0.0.1:9"]
+    )
+
+    assert code == 7
+    err = capsys.readouterr().err
+    assert "http://127.0.0.1:9" in err
+    assert "python tools/kilo_server_manager.py ensure" in err
+
+
+def test_main_ensure_server_starts_it_then_reaches_the_runner(monkeypatch, capsys):
+    _reach_the_runner(monkeypatch)
+    probes = iter([False, True])
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: next(probes))
+
+    commands: list[list[str]] = []
+
+    def fake_run(cmd, **_kwargs):
+        commands.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(kilo_cli_delegate.subprocess, "run", fake_run)
+
+    ran: list[dict] = []
+
+    def fake_runner(**kwargs):
+        ran.append(kwargs)
+        return {
+            "text": "PONG",
+            "events": [],
+            "session_id": "ses_kilo",
+            "tokens": None,
+            "cost": None,
+            "error": None,
+        }
+
+    monkeypatch.setattr(kilo_cli_delegate, "run_kilo_cli", fake_runner)
+
+    code = kilo_cli_delegate.main(["hello", "--no-guardrail", "--ensure-server"])
+
+    assert code == 0
+    assert len(commands) == 1
+    assert commands[0][0] == sys.executable
+    assert commands[0][1].endswith("kilo_server_manager.py")
+    assert commands[0][2] == "ensure"
+    assert "--port" not in commands[0]
+    assert len(ran) == 1
+    assert "PONG" in capsys.readouterr().out
+
+
+def test_server_healthy_is_false_for_a_closed_port_without_raising():
+    start = time.monotonic()
+
+    assert kilo_cli_delegate._server_healthy("http://127.0.0.1:9") is False
+    assert time.monotonic() - start < 10
+
+
+def test_ensure_server_passes_a_custom_port_to_the_manager(monkeypatch, capsys):
+    _reach_the_runner(monkeypatch)
+    probes = iter([False, True])
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: next(probes))
+
+    commands: list[list[str]] = []
+
+    def fake_run(cmd, **_kwargs):
+        commands.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(kilo_cli_delegate.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **_kwargs: {
+            "text": "PONG",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": None,
+        },
+    )
+
+    code = kilo_cli_delegate.main(
+        [
+            "hello",
+            "--no-guardrail",
+            "--ensure-server",
+            "--server",
+            "http://127.0.0.1:14137",
+        ]
+    )
+
+    assert code == 0
+    assert len(commands) == 1
+    assert commands[0][-2:] == ["--port", "14137"]

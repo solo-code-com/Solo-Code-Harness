@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -24,6 +26,9 @@ from tools import antigravity_delegate, shared_state  # noqa: E402
 def _registry_into_tmp(tmp_path, monkeypatch):
     """No unit test may write session records into the repo's .solocode/."""
     monkeypatch.setattr(session_registry, "SESSION_DIR", tmp_path)
+    monkeypatch.setattr(
+        antigravity_delegate, "USAGE_LOG", tmp_path / "antigravity-usage.jsonl"
+    )
 
 
 def _as_popen(completed_cls, pid: int = 8180):
@@ -609,3 +614,83 @@ def test_main_reports_quota_exhaustion_as_exit_six(monkeypatch, tmp_path):
     )
 
     assert _run_main(monkeypatch, ws, result) == 6
+
+
+# The key set and order every sibling worker writes to .solocode/*-usage.jsonl.
+SIBLING_USAGE_KEYS = [
+    "ts",
+    "model",
+    "prompt_chars",
+    "elapsed_s",
+    "session_id",
+    "usage",
+    "cost",
+    "error",
+]
+
+
+def _usage_rows() -> list[dict]:
+    path = antigravity_delegate.USAGE_LOG
+    if not path.is_file():
+        return []
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def test_successful_run_appends_one_row_matching_sibling_shape(monkeypatch, tmp_path):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    parsed = antigravity_delegate.parse_ndjson_events(
+        '{"event":"init","conversation_id":"conv_1"}\n'
+        '{"event":"result","result":{"status":"SUCCESS","response":"done",'
+        '"usage":{"total_tokens":7,"input":5}}}'
+    )
+    parsed["cost"] = 0.25
+
+    assert _run_main(monkeypatch, ws, (parsed, 0)) == 0
+
+    rows = _usage_rows()
+    assert len(rows) == 1
+    row = rows[0]
+    assert list(row) == SIBLING_USAGE_KEYS
+    assert row["model"] == antigravity_delegate.DEFAULT_MODEL
+    assert row["prompt_chars"] > 0
+    assert row["session_id"] == "conv_1"
+    assert row["usage"] == {"total_tokens": 7, "input": 5}
+    assert row["cost"] == 0.25
+    assert row["error"] is None
+    assert datetime.fromisoformat(row["ts"]).tzinfo is not None
+
+
+def test_failed_run_appends_a_row_carrying_the_error(monkeypatch, tmp_path):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+
+    assert _run_main(monkeypatch, ws, ({"text": "", "error": "boom"}, 2)) == 2
+
+    rows = _usage_rows()
+    assert len(rows) == 1
+    assert rows[0]["error"] == "boom"
+    assert rows[0]["usage"] is None
+
+
+def test_denied_run_appends_a_row_carrying_the_denial(monkeypatch, tmp_path):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    result = ({"text": "", "error": None, "denied_actions": [{"action": "command"}]}, 0)
+
+    assert _run_main(monkeypatch, ws, result) == 5
+
+    rows = _usage_rows()
+    assert len(rows) == 1
+    assert "denied permission for: command" in rows[0]["error"]
+
+
+def test_unwritable_usage_log_does_not_raise_or_change_exit_code(monkeypatch, tmp_path):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    blocked = tmp_path / "usage-log-is-a-directory"
+    blocked.mkdir()
+    monkeypatch.setattr(antigravity_delegate, "USAGE_LOG", blocked)
+
+    assert _run_main(monkeypatch, ws, ({"text": "done", "error": None}, 0)) == 0
+    assert _run_main(monkeypatch, ws, ({"text": "", "error": "boom"}, 2)) == 2

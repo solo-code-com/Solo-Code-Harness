@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import subprocess
 import sys
@@ -377,3 +378,56 @@ def test_main_full_run_with_mocked_plan(monkeypatch, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["output"] == "the answer"
     assert payload["changes"]["status"] == " M x"
+
+
+# ── output encoding (cp1252 console) ────────────────────────────────────────
+
+
+def _cp1252_console():
+    """A text stream that encodes strictly as cp1252, like the Windows console.
+
+    `errors` defaults to `strict`, so writing U+2192 raises the UnicodeEncodeError
+    the live run hit; `.reconfigure()` exists on it, as it does on the real
+    console stream.
+    """
+    raw = io.BytesIO()
+    return io.TextIOWrapper(raw, encoding="cp1252"), raw
+
+
+def _drive_main_to_print(monkeypatch, stream, argv, output):
+    """Run main() with every step up to the print mocked."""
+    mod = _load()
+    monkeypatch.setattr(mod.sys, "platform", "win32")
+    monkeypatch.setattr(mod, "_find_powershell", lambda: "ps")
+    monkeypatch.setattr(mod, "run_plan", lambda _argv, _out, _t, **_kw: (0, output))
+    monkeypatch.setattr(
+        mod, "change_summary", lambda root=None: {"status": "", "diffstat": ""}
+    )
+    monkeypatch.setattr(mod, "log_usage", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod.sys, "stdout", stream)
+    return mod.main(argv)
+
+
+def test_main_plain_print_survives_a_cp1252_console(monkeypatch):
+    """U+2192 in the answer crashed the plain print with UnicodeEncodeError.
+
+    Driving the real print path is the strongest check available here: asserting
+    only that a safe-stream helper exists would pass on a file that never calls it.
+    """
+    stream, raw = _cp1252_console()
+    code = _drive_main_to_print(monkeypatch, stream, ["do x"], "answer \u2192 done")
+    assert code == 0
+    stream.flush()
+    assert "answer \u2192 done" in raw.getvalue().decode("utf-8")
+
+
+def test_main_json_print_survives_a_cp1252_console(monkeypatch):
+    """--json dumps with ensure_ascii=False, so the arrow reaches the console raw."""
+    stream, raw = _cp1252_console()
+    code = _drive_main_to_print(
+        monkeypatch, stream, ["do x", "--json"], "answer \u2192 done"
+    )
+    assert code == 0
+    stream.flush()
+    payload = json.loads(raw.getvalue().decode("utf-8"))
+    assert payload["output"] == "answer \u2192 done"

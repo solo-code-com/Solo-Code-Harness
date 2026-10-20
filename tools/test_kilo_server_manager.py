@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+import http.server
 import importlib.util
 import json
 import shutil
+import socket
 import sys
+import threading
 import types
 from pathlib import Path
 from types import SimpleNamespace
@@ -138,9 +141,39 @@ def test_is_running(mod, monkeypatch):
 # ── health check ─────────────────────────────────────────────────────────────
 
 
+class _FakeResponse:
+    """Minimal stand-in for the object returned by ``urlopen``."""
+
+    def __init__(self, status=200):
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+
+def _serve_status(status: int) -> http.server.ThreadingHTTPServer:
+    """Start a loopback HTTP server answering *status*; caller must shut down."""
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 — mirrors the stdlib handler API
+            self.send_response(status)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *_args):
+            pass  # keep pytest output clean
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
 def test_health_check_ok(mod, monkeypatch):
     monkeypatch.setattr(
-        mod.requests, "get", lambda *a, **k: SimpleNamespace(status_code=200)
+        mod.urllib.request, "urlopen", lambda *a, **k: _FakeResponse(200)
     )
     assert mod.health_check(port=1, timeout=5) is True
 
@@ -151,10 +184,10 @@ def test_health_check_recovers_after_refusal(mod, monkeypatch):
     def flaky(*_a, **_k):
         calls["n"] += 1
         if calls["n"] == 1:
-            raise mod.requests.RequestException("refused")
-        return SimpleNamespace(status_code=200)
+            raise mod.urllib.error.URLError("refused")
+        return _FakeResponse(200)
 
-    monkeypatch.setattr(mod.requests, "get", flaky)
+    monkeypatch.setattr(mod.urllib.request, "urlopen", flaky)
     monkeypatch.setattr(mod.time, "sleep", lambda _s: None)
     assert mod.health_check(port=1, timeout=5) is True
 
@@ -162,6 +195,32 @@ def test_health_check_recovers_after_refusal(mod, monkeypatch):
 def test_health_check_times_out(mod, monkeypatch):
     monkeypatch.setattr(mod.time, "sleep", lambda _s: None)
     assert mod.health_check(port=1, timeout=0) is False
+
+
+def test_health_check_unreachable_port_returns_false(mod):
+    # Bind then immediately release a loopback port, so nothing listens there.
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    assert mod.health_check(port=port, timeout=0.2) is False
+
+
+def test_health_check_server_error_returns_false(mod):
+    server = _serve_status(500)
+    try:
+        assert mod.health_check(port=server.server_address[1], timeout=0.3) is False
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_health_check_success_returns_true(mod):
+    server = _serve_status(200)
+    try:
+        assert mod.health_check(port=server.server_address[1], timeout=2) is True
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 # ── start / stop / status / ensure ───────────────────────────────────────────
