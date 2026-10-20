@@ -11,7 +11,7 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-10-20T08:11:24Z"
+generated_at = "2026-10-20T09:52:26Z"
 
 # --- ENGINE STATUS (v4.3.1) ---
 # .opencode/  -> first-class primary agent engine, now targeting OpenCode v2
@@ -114,6 +114,7 @@ paths = [
     "tools/env_file.py",
     "tools/failure_ledger.py",
     "tools/garden.py",
+    "tools/gate_probe.py",
     "tools/generate_harness.py",
     "tools/gui/index.html",
     "tools/gui_server.py",
@@ -166,6 +167,7 @@ paths = [
     "tools/test_eval_harness.py",
     "tools/test_failure_ledger.py",
     "tools/test_garden.py",
+    "tools/test_gate_probe.py",
     "tools/test_generate_harness.py",
     "tools/test_generator_idempotency.py",
     "tools/test_guard.py",
