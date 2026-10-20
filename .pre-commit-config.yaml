@@ -70,3 +70,11 @@ repos:
         pass_filenames: false
         # ESLint is optional — gracefully skip if not installed
         always_run: false
+
+      - id: review-advisory
+        name: Review receipt advisory measurement
+        entry: python tools/review_receipt.py verify --advisory
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: false

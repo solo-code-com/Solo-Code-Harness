@@ -42,10 +42,17 @@ Exit codes
    or mismatched receipt, unwritable receipt directory. A broken environment
    must never read as a pass.
 
+`verify --advisory` measures instead of gates: the same decision, but it always
+exits 0 and appends one row to `.solocode/review-advisory.jsonl`, so the firing
+rate of a future blocking hook is a measured number, not a guess. `stats`
+summarizes that log.
+
 Usage:
     python tools/review_receipt.py record --reviewer codex --model gpt-6.1-sol
     python tools/review_receipt.py verify
     python tools/review_receipt.py verify --json
+    python tools/review_receipt.py verify --advisory
+    python tools/review_receipt.py stats
 """
 
 from __future__ import annotations
@@ -67,6 +74,9 @@ GIT = "git"
 # Flags that keep every diff read pure: no configured driver, no filters, no
 # colour codes standing in for content.
 _READ_ONLY_DIFF_FLAGS = ["--no-ext-diff", "--no-textconv"]
+
+# One JSON row per advisory run; lives beside the shared state, never committed.
+ADVISORY_LOG = Path(".solocode") / "review-advisory.jsonl"
 
 
 class ReceiptError(RuntimeError):
@@ -325,6 +335,115 @@ def verify(root: Path = ROOT, git: str = GIT) -> dict[str, object]:
     return result
 
 
+def _utc_now() -> str:
+    """Current UTC timestamp as ISO-8601, written to every advisory row."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _append_advisory_row(root: Path, row: dict[str, object]) -> None:
+    """Append one advisory row. A missing or unwritable log must never raise."""
+    path = root / ADVISORY_LOG
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row) + "\n")
+    except OSError:
+        pass
+
+
+def advisory_verify(root: Path = ROOT, git: str = GIT, verbose: bool = False) -> int:
+    """Measure instead of gate: the same decision as verify, never non-zero.
+
+    Mirrors `verify` exactly - same policy, change set, hash and receipt check -
+    but records one row to ADVISORY_LOG and always returns 0. An operational
+    failure (missing git, unreadable policy or receipt) becomes the row's
+    `error` field rather than an exit code, so the measurement never blocks a
+    commit.
+    """
+    row: dict[str, object] = {
+        "ts": _utc_now(),
+        "required": False,
+        "had_receipt": False,
+        "changed_files": 0,
+        "changed_lines": 0,
+        "tree_hash": "",
+        "error": None,
+    }
+    try:
+        result = verify(root, git)
+        required = bool(result["required"])
+        row["required"] = required
+        row["changed_files"] = result["changed_files"]
+        row["changed_lines"] = result["changed_lines"]
+        row["tree_hash"] = str(result["tree_hash"])
+        had_receipt = required and result.get("receipt") is not None
+        row["had_receipt"] = had_receipt
+
+        if required and not had_receipt:
+            print(
+                f"[review-advisory] review required: {result['changed_files']} "
+                f"file(s) / {result['changed_lines']} line(s), no receipt for "
+                f"{result['tree_hash']} - run: python tools/review_receipt.py "
+                "record --reviewer NAME --model MODEL",
+                file=sys.stderr,
+            )
+        elif verbose:
+            print(result["reason"])
+    except ReceiptError as exc:
+        row["error"] = str(exc)
+
+    _append_advisory_row(root, row)
+    return 0
+
+
+def stats(root: Path = ROOT) -> dict[str, object]:
+    """Summarize ADVISORY_LOG: totals, the firing ratio and the latest firing.
+
+    The ratio is required-without-receipt runs over total runs - the share of
+    commits a blocking gate would have refused. A missing log reports zeros.
+    """
+    path = root / ADVISORY_LOG
+    rows: list[dict[str, object]] = []
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    parsed = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(parsed, dict):
+                    rows.append(parsed)
+    except (OSError, UnicodeDecodeError):
+        pass
+
+    total = len(rows)
+    required = sum(1 for row in rows if row.get("required") is True)
+    required_without_receipt = sum(
+        1
+        for row in rows
+        if row.get("required") is True and row.get("had_receipt") is not True
+    )
+    ratio = (required_without_receipt / total) if total else 0.0
+
+    most_recent = "never"
+    for row in rows:
+        if row.get("required") is True and row.get("had_receipt") is not True:
+            ts = row.get("ts")
+            if isinstance(ts, str) and (most_recent == "never" or ts > most_recent):
+                most_recent = ts
+
+    return {
+        "total": total,
+        "required": required,
+        "required_without_receipt": required_without_receipt,
+        "ratio": ratio,
+        "most_recent": most_recent,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="review_receipt.py",
@@ -352,6 +471,18 @@ def build_parser() -> argparse.ArgumentParser:
         "verify", help="decide whether a receipt is required and present"
     )
     check.add_argument("--json", action="store_true", help="print the decision as JSON")
+    check.add_argument(
+        "--advisory",
+        action="store_true",
+        help="measure without blocking: always exit 0 and log one row",
+    )
+    check.add_argument(
+        "--verbose",
+        action="store_true",
+        help="with --advisory, also print when review is not required or present",
+    )
+
+    sub.add_parser("stats", help="summarize the advisory measurement log")
     return parser
 
 
@@ -364,6 +495,16 @@ def main(argv: list[str] | None = None, root: Path = ROOT, git: str = GIT) -> in
             path, receipt = record_receipt(args.reviewer, args.model, root, git)
             print(json.dumps(receipt, indent=2) if args.json else path)
             return 0
+        if args.command == "stats":
+            report = stats(root)
+            print(f"total runs: {report['total']}")
+            print(f"required: {report['required']}")
+            print(f"required without receipt: {report['required_without_receipt']}")
+            print(f"ratio: {report['ratio']}")
+            print(f"most recent required-without-receipt: {report['most_recent']}")
+            return 0
+        if args.advisory:
+            return advisory_verify(root, git, args.verbose)
         result = verify(root, git)
     except ReceiptError as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)

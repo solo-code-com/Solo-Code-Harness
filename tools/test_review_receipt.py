@@ -312,5 +312,104 @@ def test_receipt_json_has_exactly_the_documented_fields(tmp_path: Path) -> None:
     assert datetime.fromisoformat(stored["recorded_at"].replace("Z", "+00:00"))
 
 
+def _advisory_rows(tool, root: Path) -> list[dict]:
+    """Read the advisory log written under `root` into a list of row dicts."""
+    path = root / tool.ADVISORY_LOG
+    if not path.is_file():
+        return []
+    rows: list[dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            rows.append(json.loads(line))
+    return rows
+
+
+def test_advisory_required_without_receipt_exits_0(tmp_path: Path, capsys) -> None:
+    """Advisory never blocks: required + missing still exits 0 and logs one row."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+
+    assert tool.main(["verify", "--advisory"], root=root) == 0
+
+    rows = _advisory_rows(tool, root)
+    assert len(rows) == 1
+    assert rows[0]["required"] is True
+    assert rows[0]["had_receipt"] is False
+    assert rows[0]["error"] is None
+    assert "review required" in capsys.readouterr().err
+
+
+def test_advisory_under_threshold_exits_0(tmp_path: Path, capsys) -> None:
+    """Under threshold: exits 0, logs required false, and stays silent."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _write(root, "base.txt", "one\ntwo\n")
+
+    assert tool.main(["verify", "--advisory"], root=root) == 0
+
+    rows = _advisory_rows(tool, root)
+    assert len(rows) == 1
+    assert rows[0]["required"] is False
+    assert capsys.readouterr().err == ""
+
+
+def test_advisory_git_unavailable_exits_0(tmp_path: Path, capsys) -> None:
+    """A broken git environment is an error row, not a non-zero exit."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+
+    assert tool.main(["verify", "--advisory"], root=root, git=MISSING_GIT) == 0
+
+    rows = _advisory_rows(tool, root)
+    assert len(rows) == 1
+    assert rows[0]["error"] is not None
+    assert "git is not available" in rows[0]["error"]
+    assert capsys.readouterr().err == ""
+
+
+def test_advisory_second_run_appends(tmp_path: Path) -> None:
+    """Each run appends a row; the log is never replaced."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+
+    assert tool.main(["verify", "--advisory"], root=root) == 0
+    assert tool.main(["verify", "--advisory"], root=root) == 0
+
+    assert len(_advisory_rows(tool, root)) == 2
+
+
+def test_advisory_stats_counts_rows_and_ratio(tmp_path: Path, capsys) -> None:
+    """stats reads the log: two rows, one required, ratio one half."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+    assert tool.main(["verify", "--advisory"], root=root) == 0
+
+    _write(root, "base.txt", "one\n")
+    assert tool.main(["verify", "--advisory"], root=root) == 0
+
+    assert tool.main(["stats"], root=root) == 0
+    out = capsys.readouterr().out
+    assert "total runs: 2" in out
+    assert "required: 1" in out
+    assert "required without receipt: 1" in out
+    assert "ratio: 0.5" in out
+
+
+def test_advisory_stats_missing_log_prints_zeros(tmp_path: Path, capsys) -> None:
+    """No log yet: stats prints zeros and exits 0."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+
+    assert tool.main(["stats"], root=root) == 0
+    out = capsys.readouterr().out
+    assert "total runs: 0" in out
+    assert "ratio: 0.0" in out
+    assert "most recent required-without-receipt: never" in out
+
+
 if __name__ == "__main__":
     sys.exit("Run with: python -m pytest tools/test_review_receipt.py -q")
