@@ -128,7 +128,7 @@ CORPUS: list[dict] = [
     {
         "id": "fake-bypass-variable",
         "defect": "A documented bypass variable that no code actually reads.",
-        "gate": None,
+        "gate": "bypass_claims",
         "fixture": {
             "docs/notes.md": "To skip the gate, set FOO_BYPASS=1 in the environment.\n",
         },
@@ -200,12 +200,18 @@ def _text_hygiene(root: Path) -> bool | str:
     return _run_script(ROOT / "tools" / "check_text_hygiene.py", root, [])
 
 
+def _bypass_claims(root: Path) -> bool | str:
+    """bypass_claims: flags a documented escape-hatch variable nothing reads."""
+    return _run_script(ROOT / "tools" / "check_bypass_claims.py", root, [])
+
+
 ADAPTERS: dict[str, Callable[[Path], bool | str]] = {
     "boundary_audit": _boundary_audit,
     "security_scan": _security_scan,
     "hook_exit_claims": _hook_exit_claims,
     "stdlib_only": _stdlib_only,
     "text_hygiene": _text_hygiene,
+    "bypass_claims": _bypass_claims,
 }
 
 
