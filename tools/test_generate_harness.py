@@ -295,6 +295,22 @@ def test_collect_disabled_skills_ignores_false_and_absent(tmp_path):
     assert opencode_engine.collect_disabled_skills(tmp_path / ".kilo") == {}
 
 
+def test_permission_block_comment_is_not_a_rule():
+    """A hash comment inside the permission block must not become a permission."""
+    frontmatter = (
+        "mode: primary\n"
+        "permission:\n"
+        "  read: allow\n"
+        "  # orchestrates only: enforced, not advisory\n"
+        "  edit: deny\n"
+    )
+
+    entries = opencode_engine._parse_permission_block(frontmatter)[1]
+
+    assert [key for key, _ in entries] == ["read", "edit"]
+    assert ("edit", [("*", "deny")]) in entries
+
+
 def test_generated_opencode_json_gates_disabled_skills(tmp_path):
     kilo = tmp_path / ".kilo"
     _write(kilo / "skill" / "guard" / "SKILL.md", _DISABLED_SKILL_MD)
