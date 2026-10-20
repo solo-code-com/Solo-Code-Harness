@@ -193,6 +193,12 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | Security | `make security-scan` | Hardcoded secrets |
 | Boundary | `python .github/scripts/boundary_audit.py .` | No project files leaked into harness dirs |
 | No-Skips | `python .github/scripts/check_skips.py tools/` | Unauthorized test skips (skip/skipif without reason) |
+| Stdlib-only | `make stdlib-only` | `tools/` and `.github/scripts/` import nothing outside the standard library (SPEC section 4) |
+| Text hygiene | `make text-hygiene` | Tracked sources end with a newline, carry no trailing space, and contain no CRLF |
+| Bypass claims | `make bypass-claims` | A documented `*_BYPASS` / `*_OVERRIDE` name must be read by code, not only by prose |
+| Prose budget | `make prose` | Long sentences, semicolons and em dashes may not grow past their recorded baseline |
+| Ruff pin | `make lint-pin` | Runs the ruff version the commit hook pins, so make check and a commit cannot disagree |
+| Gate probe | `python tools/gate_probe.py` | REPORT, never blocks: which gate catches which known defect, with caught, missed and no-gate outcomes |
 
 ## Slash Commands (Kilo + Claude Code)
 
@@ -528,6 +534,12 @@ cần đổi harness.
 | Security | `make security-scan` | Secret hardcode |
 | Boundary | `python .github/scripts/boundary_audit.py .` | Không có file dự án lẫn vào thư mục harness |
 | No-Skips | `python .github/scripts/check_skips.py tools/` | Skip/skipif không lý do |
+| Stdlib-only | `make stdlib-only` | `tools/` và `.github/scripts/` không import gì ngoài standard library (SPEC mục 4) |
+| Text hygiene | `make text-hygiene` | File nguồn kết thúc bằng newline, không có khoảng trắng cuối dòng, không có CRLF |
+| Bypass claims | `make bypass-claims` | Tên `*_BYPASS` / `*_OVERRIDE` được ghi trong tài liệu phải được code đọc, không chỉ trong văn xuôi |
+| Prose budget | `make prose` | Câu dài, dấu chấm phẩy và em dash không được tăng quá baseline đã ghi |
+| Ruff pin | `make lint-pin` | Chạy đúng bản ruff mà commit hook pin, để make check và commit không nói khác nhau |
+| Gate probe | `python tools/gate_probe.py` | BÁO CÁO, không chặn: gate nào bắt được defect nào, với kết quả caught, missed, no-gate |
 
 ## Slash Commands (Kilo + Claude Code)
 
