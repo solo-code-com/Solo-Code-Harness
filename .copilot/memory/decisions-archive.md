@@ -1300,3 +1300,15 @@ daemon on the Windows side at all.
   commit `ae754e7` có tree **y hệt** bộ mới (`b2aa4ae`) và parents = [mốc cũ, `main` của ta] ⇒ 208
   commit cũ vào thẳng lịch sử chứ không bị mồ côi. Bản `reference\Solo-Code-Harness-main` đã xoá —
   không file nào tham chiếu nó, object cũ vẫn ở `.git` local qua ref `oldharness/main`.
+
+- [decision] Nhận diện "harness cũ" ở target (2026-10-16): theo **nội dung** cho `SPEC.md` (marker
+  harness ghi ở dòng đầu) và theo **đúng tên** cho `docs/`; **không bao giờ** theo sự tồn tại hay
+  tên đơn thuần — `SPEC.md` và `docs/` là project-owned (deploy không được xoá). Chỉ liệt kê 22/27
+  tên tài liệu v4.1.0; bỏ `README.md`, `evaluation-report.md`, `capability-seams.md`,
+  `code-review-checklist.md`, `defensive-patterns.md` vì dự án cũng có thể sở hữu tên đó. Note chỉ
+  **báo tên**, không xoá gì.
+- [decision] Bất đối xứng store credential (2026-10-16, chủ dự án quyết "để nguyên"):
+  `opencode-env.ps1` đăng xuất credential `freemodel` đã lưu mỗi lần chạy (key lưu sẵn che key
+  `.env`), `tools/opencode_delegate.py` **không** đụng store. Hôm nay chưa đo được lỗi vì FreeModel
+  đang lấy từ env → không mirror, chỉ ghi nhận; nếu về sau delegate báo Unauthorized với freemodel
+  thì đây là nguyên nhân đầu tiên cần loại trừ.

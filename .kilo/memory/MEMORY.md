@@ -65,6 +65,18 @@ High-signal context loaded at session start. Detailed history belongs in
   (`codex_delegate.py` tung thieu, crash o U+2192).
 - [gotcha] Khong chay 2 pytest song song: dung chung `.pytest_temp` - test do
   gia (da gap 2 lan trong phien 2026-10-20).
+- [gotcha] Kilo arm cần `python tools/kilo_server_manager.py ensure` trước mỗi
+  phiên dùng nó. Thiếu bước đó = 100% fail với `kilo CLI exit code 1` (đo: 325
+  lỗi trong 14 ngày, server chết từ 16/10). Wrapper nay preflight + exit 7.
+- [gotcha] Script in output ra console Windows cp1252 sẽ crash nếu output chứa
+  ký tự ngoài bảng mã (U+2192). Dùng `_make_streams_encoding_safe`; `python -c`
+  trong PowerShell cũng dính lỗi này.
+- [gotcha] Ba bẫy tooling: (a) không chạy 2 pytest song song — chung
+  `.pytest_temp`, test đỏ giả; (b) pre-commit pin ruff 0.9.1 (`make lint-pin`),
+  ruff trên PATH mới hơn bỏ sót UP038; (c) hook ruff exclude `.kilo/` và cả 3
+  mirror skill — sửa script trong skill thì format cả 4 bản.
+- [gotcha] Cap `memory_gate` đo bằng KÝ TỰ (`len`), không phải byte. `$s.Length`
+  của PowerShell trên file UTF-8 không BOM đếm sai (8182 vs 7671) — đo bằng python.
 
 ## Decisions
 - [decision] CommandCode model ids are verified against
@@ -89,17 +101,6 @@ High-signal context loaded at session start. Detailed history belongs in
   `.opencode/opencode.json`, nên thêm provider có template `/v1` là test đỏ ngay. Ghi chú: launcher
   xuất **mọi** key `.env` bằng vòng lặp chung nên nó và `env_file.py` đã ngang nhau — audit chỉ grep
   `$env:NAME =` sẽ báo thiếu biến oan.
-- [decision] Nhận diện "harness cũ" ở target (2026-10-16): theo **nội dung** cho `SPEC.md` (marker
-  harness ghi ở dòng đầu) và theo **đúng tên** cho `docs/`; **không bao giờ** theo sự tồn tại hay
-  tên đơn thuần — `SPEC.md` và `docs/` là project-owned (deploy không được xoá). Chỉ liệt kê 22/27
-  tên tài liệu v4.1.0; bỏ `README.md`, `evaluation-report.md`, `capability-seams.md`,
-  `code-review-checklist.md`, `defensive-patterns.md` vì dự án cũng có thể sở hữu tên đó. Note chỉ
-  **báo tên**, không xoá gì.
-- [decision] Bất đối xứng store credential (2026-10-16, chủ dự án quyết "để nguyên"):
-  `opencode-env.ps1` đăng xuất credential `freemodel` đã lưu mỗi lần chạy (key lưu sẵn che key
-  `.env`), `tools/opencode_delegate.py` **không** đụng store. Hôm nay chưa đo được lỗi vì FreeModel
-  đang lấy từ env → không mirror, chỉ ghi nhận; nếu về sau delegate báo Unauthorized với freemodel
-  thì đây là nguyên nhân đầu tiên cần loại trừ.
 - [decision] Review tổng thể 2026-10-17: hai repo đã hợp nhất bằng join `e254c9a` (local =
   g-harness = Solo-Code-Harness ✓) và tag `v4.3.1` có trên cả hai ✓. Gate chạy trong dự án đích lộ 2
   lỗi harness, đã vá: unsafe-pattern chỉ áp cho code + bỏ qua `vendor/`/`staticfiles/`/JSON
