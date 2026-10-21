@@ -23,4 +23,11 @@ paths = [
     # would force weakening the very patterns it exists to verify.
     '''tools/test_secret_patterns\.py''',
     '''tools/test_claude_guard\.py''',
+    # Build/cache artifacts and synthetic test fixtures, not credentials:
+    # a pytest cache nodeid, compiled fixture bytes, a scratch probe, and a
+    # fake key in a test file. Real secrets are still scanned everywhere else.
+    '''__pycache__''',
+    '''\.pytest_cache''',
+    '''\.solocode''',
+    '''integrations/dsh-solo-plugins/packages/solo-policy/test/''',
 ]
