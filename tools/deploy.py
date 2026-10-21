@@ -39,6 +39,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# `python tools/deploy.py` puts tools/ on sys.path, not the repo root, so
+# add the root the same way the other tool scripts do before a sibling import.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.harness_fingerprint import content_fingerprint  # noqa: E402
+
+# Public name kept: callers and tests already use this one.
+harness_content_fingerprint = content_fingerprint
+
 # Files to copy (relative to ROOT)
 # NOTE (v3.7.0 deploy-optimization): a *deployed target project* only needs
 # enough to RUN the AI-CLI harness (agent/skill/command/hook definitions +
@@ -461,6 +471,9 @@ HARNESS_LOCK_TEMPLATE = """# Solo-Code Harness Manifest
 version = "{version}"
 source = "solo-code-io/solo-code-cli"
 generated_at = "{timestamp}"
+mode = "{mode}"
+content_fingerprint = "{content_fingerprint}"
+# sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 {engine_status}
 [boundaries]
@@ -914,6 +927,23 @@ def _generate_harness_lock(
         if root_mode
         else _shared_harness_paths(dirs if dirs is not None else DIRS_ALL)
     )
+    fingerprint_root = ROOT if root_mode else target
+    if not root_mode:
+        # A target is not the harness: it receives only what this deploy
+        # actually shipped. Declaring a path the engine did not produce (e.g.
+        # .github/agents/*.agent.md for a non-copilot engine) would make the
+        # fingerprint demand a file that was never copied and abort the deploy
+        # after the copy had already happened.
+        shipped = [p for p in shared if (target / p).is_file()]
+        absent = len(shared) - len(shipped)
+        if absent:
+            print(
+                f"  [WARN] {absent} declared harness path(s) were not shipped "
+                "to this target; excluded from .harness.lock"
+            )
+        shared = shipped
+    mode = "root" if root_mode else "target"
+    content_fingerprint = harness_content_fingerprint(shared, fingerprint_root)
     shared_block = "\n".join(f'    "{p}",' for p in shared)
     note = ROOT_SHARED_NOTE if root_mode else TARGET_SHARED_NOTE
     # `.agents` is a junction the IDE creates locally, so a target never receives
@@ -929,8 +959,10 @@ def _generate_harness_lock(
     content = HARNESS_LOCK_TEMPLATE.format(
         version=version,
         timestamp=timestamp,
+        mode=mode,
         engine_status=HARNESS_ENGINE_STATUS.format(version=version),
         shared_note=note,
+        content_fingerprint=content_fingerprint,
         local_only_dirs=local_only,
         bridge_marker=bridge_marker,
         shared_files=shared_block,

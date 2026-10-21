@@ -31,12 +31,22 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools.harness_fingerprint import (  # noqa: E402
+    lock_shared_paths,
+    lock_value,
+    optional_fingerprint,
+)
+
 RECENT_FAILURE_LIMIT = 10
 
 SESSION_LOG_COLUMNS = (
@@ -719,6 +729,17 @@ def sweep(
             skipped += 1
             continue
         version = _lock_version(lock)
+        try:
+            lock_text = lock.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            lock_text = ""
+        recorded = lock_value(lock_text, "harness", "content_fingerprint")
+        declared = lock_shared_paths(lock_text)
+        fingerprint_matches: bool | None = None
+        if recorded and declared is not None:
+            fingerprint_matches = (
+                optional_fingerprint(declared, lock.parent) == recorded
+            )
         projects.append(
             {
                 "project": str(lock.parent),
@@ -729,6 +750,8 @@ def sweep(
                     if version and reference_version
                     else None
                 ),
+                "content_fingerprint": recorded,
+                "fingerprint_matches": fingerprint_matches,
             }
         )
     return projects, skipped
@@ -752,7 +775,13 @@ def print_sweep(
             verdict = "DIFFERS"
         else:
             verdict = "unknown"
-        print(f"  {version:<10} {verdict:<8} {entry['project']}")
+        if entry["fingerprint_matches"] is True:
+            fingerprint = "fp match"
+        elif entry["fingerprint_matches"] is False:
+            fingerprint = "fp DIFFERS"
+        else:
+            fingerprint = "fp unknown"
+        print(f"  {version:<10} {verdict:<8} {fingerprint:<10} {entry['project']}")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -101,12 +101,6 @@ High-signal context loaded at session start. Detailed history belongs in
   `.opencode/opencode.json`, nên thêm provider có template `/v1` là test đỏ ngay. Ghi chú: launcher
   xuất **mọi** key `.env` bằng vòng lặp chung nên nó và `env_file.py` đã ngang nhau — audit chỉ grep
   `$env:NAME =` sẽ báo thiếu biến oan.
-- [decision] Review tổng thể 2026-10-17: hai repo đã hợp nhất bằng join `e254c9a` (local =
-  g-harness = Solo-Code-Harness ✓) và tag `v4.3.1` có trên cả hai ✓. Gate chạy trong dự án đích lộ 2
-  lỗi harness, đã vá: unsafe-pattern chỉ áp cho code + bỏ qua `vendor/`/`staticfiles/`/JSON
-  (`1c93b47`), và coverage ratchet skip khi bản runtime không có `test_*.py`. Còn mở: 8 finding XSS
-  thật trong code dự án đích (scanner chưa có cơ chế allowlist), 10 shell-quoting gaps của guard,
-  Docker/WSL chưa xong (5 volume chưa backup).
 - [decision] Sua cac loi im lang (2026-10-20): 3 agent thieu `description` nen
   SPEC 7.1 nay duoc enforce; `boundary_audit` bat `--strict` va sua bug bo qua
   theo path tuyet doi (repo duoi thu muc ten build/dist/venv lam ca audit cam);
@@ -116,3 +110,4 @@ High-signal context loaded at session start. Detailed history belongs in
   (dependency pip duy nhat trong `tools/`). Antigravity nay ghi
   `.solocode/antigravity-usage.jsonl`; `failure_ledger.py` moi gop moi nguon van
   hanh va co `--sweep` da du an.
+- Harness content fingerprint (2026-10-21): .harness.lock records `content_fingerprint` — sha256 over the sorted (path, content) pairs of [shared_files], BOM stripped and CRLF->LF — plus a `[harness] mode`: `root` is enforced (a harness edit without `python tools/deploy.py --root-lock` fails garden), `target` is advisory (garden prints a WARN and does not fail, because customising harness files there is legitimate), and a lock with no `mode` is treated as root. A target lock declares only the files deploy actually shipped. `failure_ledger --sweep` reports per-project fingerprint match.

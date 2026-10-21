@@ -11,7 +11,10 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-10-21T04:44:45Z"
+generated_at = "2026-10-21T09:52:42Z"
+mode = "root"
+content_fingerprint = "sha256:8f6a0ad0f0b26fea62d2ff27d8bbd3d61a65ac1b20688fea51fc5fb52df8c69a"
+# sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
 # .opencode/  -> first-class primary agent engine, now targeting OpenCode v2
@@ -122,6 +125,7 @@ paths = [
     "tools/gui/index.html",
     "tools/gui_server.py",
     "tools/harness_config.py",
+    "tools/harness_fingerprint.py",
     "tools/jev_decide.py",
     "tools/kilo_cli_delegate.py",
     "tools/kilo_server_manager.py",

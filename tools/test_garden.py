@@ -1180,3 +1180,122 @@ def test_check_no_symlinks_detects_path_resolving_outside_root(tmp_path, monkeyp
     assert any(
         "Path resolves outside the repo: tools/escapee.py ->" in i for i in issues
     ), issues
+
+
+# ─── check_harness_fingerprint (.harness.lock content digest) ───────────────
+
+
+def _fingerprint_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    _write(repo / "tools" / "a.py", "a = 1\n")
+    _write(repo / "tools" / "b.py", "b = 2\n")
+    return repo
+
+
+def _write_fingerprint_lock(
+    repo: Path, paths: list[str], *, mode: str | None = "root"
+) -> None:
+    from tools import deploy
+
+    digest = deploy.harness_content_fingerprint(paths, repo)
+    listed = "".join(f'    "{path}",\n' for path in paths)
+    mode_line = f'mode = "{mode}"\n' if mode is not None else ""
+    _write(
+        repo / ".harness.lock",
+        "[harness]\n"
+        "version = 4.3.1\n"
+        f"{mode_line}"
+        f"content_fingerprint = {digest}\n"
+        "\n"
+        "[shared_files]\n"
+        "paths = [\n"
+        f"{listed}"
+        "]\n",
+    )
+
+
+def test_check_harness_fingerprint_clean_tree_is_silent(tmp_path):
+    repo = _fingerprint_repo(tmp_path)
+    _write_fingerprint_lock(repo, ["tools/a.py", "tools/b.py"])
+
+    assert garden.check_harness_fingerprint(repo) == []
+
+
+def test_check_harness_fingerprint_detects_an_edited_file(tmp_path):
+    repo = _fingerprint_repo(tmp_path)
+    _write_fingerprint_lock(repo, ["tools/a.py", "tools/b.py"])
+
+    _write(repo / "tools" / "b.py", "b = 3\n")
+
+    issues = garden.check_harness_fingerprint(repo)
+    assert len(issues) == 1, issues
+    assert "run python tools/deploy.py --root-lock" in issues[0]
+
+
+def test_check_harness_fingerprint_reports_a_missing_field(tmp_path):
+    repo = _fingerprint_repo(tmp_path)
+    _write(repo / ".harness.lock", '[harness]\nversion = "4.3.1"\n')
+
+    issues = garden.check_harness_fingerprint(repo)
+
+    assert any("content_fingerprint" in i for i in issues), issues
+
+
+def test_check_harness_fingerprint_reports_an_ambiguous_lock(tmp_path):
+    """Two [shared_files] sections must be reported, never silently resolved."""
+    repo = _fingerprint_repo(tmp_path)
+    _write(
+        repo / ".harness.lock",
+        "[harness]\n"
+        'content_fingerprint = "sha256:deadbeef"\n'
+        "\n"
+        "[shared_files]\n"
+        'paths = ["tools/a.py"]\n'
+        "\n"
+        "[shared_files]\n"
+        'paths = ["tools/b.py"]\n',
+    )
+
+    issues = garden.check_harness_fingerprint(repo)
+
+    assert any("shared_files" in issue for issue in issues), issues
+
+
+def test_check_harness_fingerprint_mode_decides_whether_drift_fails(tmp_path, capsys):
+    """Target mode warns, root mode fails, and no mode fails closed."""
+    repo = _fingerprint_repo(tmp_path)
+    paths = ["tools/a.py", "tools/b.py"]
+    _write_fingerprint_lock(repo, paths, mode="target")
+    _write(repo / "tools" / "b.py", "b = 3\n")
+
+    assert garden.check_harness_fingerprint(repo) == []
+    out = capsys.readouterr().out
+    assert "WARN" in out
+    assert "advisory" in out
+
+    lock = repo / ".harness.lock"
+    _write(
+        lock,
+        lock.read_text(encoding="utf-8").replace('mode = "target"', 'mode = "root"'),
+    )
+    root_issues = garden.check_harness_fingerprint(repo)
+    assert len(root_issues) == 1, root_issues
+    assert "content changed" in root_issues[0]
+
+    _write(lock, lock.read_text(encoding="utf-8").replace('mode = "root"\n', ""))
+    no_mode_issues = garden.check_harness_fingerprint(repo)
+    assert any("mode" in issue for issue in no_mode_issues), no_mode_issues
+    assert any("content changed" in issue for issue in no_mode_issues), no_mode_issues
+
+
+def test_check_harness_fingerprint_reports_only_the_missing_path(tmp_path):
+    """One missing declared file is one issue, not a bogus digest mismatch too."""
+    repo = _fingerprint_repo(tmp_path)
+    _write_fingerprint_lock(repo, ["tools/a.py", "tools/b.py"], mode="root")
+    (repo / "tools" / "b.py").unlink()
+
+    issues = garden.check_harness_fingerprint(repo)
+
+    assert len(issues) == 1, issues
+    assert "tools/b.py" in issues[0]
+    assert "content changed" not in issues[0]

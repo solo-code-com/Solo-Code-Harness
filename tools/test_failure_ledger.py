@@ -678,3 +678,64 @@ def test_unpairable_run_ids_count_as_legacy_without_raising():
     assert entry["unpaired_finishes"] == 0
     assert entry["legacy"] == 5
     assert entry["most_recent_start"] is None
+
+
+def _write_fingerprint_lock(project, paths):
+    """A minimal lock carrying the real digest of the declared files."""
+    from tools.deploy import harness_content_fingerprint
+
+    digest = harness_content_fingerprint(paths, project)
+    listed = "".join(f'    "{path}",\n' for path in paths)
+    (project / ".harness.lock").write_text(
+        '[harness]\nversion = "4.3.1"\n'
+        f'content_fingerprint = "{digest}"\n'
+        "\n[shared_files]\n"
+        "paths = [\n"
+        f"{listed}"
+        "]\n",
+        encoding="utf-8",
+    )
+
+
+def _fingerprint_project(tmp_path):
+    project = tmp_path / "project"
+    (project / "tools").mkdir(parents=True)
+    (project / "tools" / "a.py").write_bytes(b"a = 1\n")
+    (project / "tools" / "b.py").write_bytes(b"b = 2\n")
+    _write_fingerprint_lock(project, ["tools/a.py", "tools/b.py"])
+    return project
+
+
+def test_sweep_reports_a_matching_fingerprint(tmp_path):
+    project = _fingerprint_project(tmp_path)
+
+    entries, _ = sweep(tmp_path, "4.3.1")
+    entry = next(e for e in entries if e["project"] == str(project))
+
+    assert entry["content_fingerprint"].startswith("sha256:")
+    assert entry["fingerprint_matches"] is True
+
+
+def test_sweep_reports_a_changed_fingerprint(tmp_path, capsys):
+    project = _fingerprint_project(tmp_path)
+
+    (project / "tools" / "b.py").write_bytes(b"b = 3\n")
+    entries, _ = sweep(tmp_path, "4.3.1")
+    entry = next(e for e in entries if e["project"] == str(project))
+
+    assert entry["fingerprint_matches"] is False
+    assert main(["--sweep", str(tmp_path)]) == 0
+    assert "fp DIFFERS" in capsys.readouterr().out
+
+
+def test_sweep_reports_unknown_fingerprint_when_absent(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".harness.lock").write_text(
+        '[harness]\nversion = "4.3.1"\n', encoding="utf-8"
+    )
+
+    entries, _ = sweep(tmp_path, "4.3.1")
+
+    assert entries[0]["content_fingerprint"] is None
+    assert entries[0]["fingerprint_matches"] is None

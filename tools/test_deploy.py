@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from tools import deploy  # noqa: E402
+from tools.harness_fingerprint import lock_value  # noqa: E402
 
 
 def _write(path: Path, text: str = "{}") -> None:
@@ -252,17 +253,39 @@ def _parse_lock_paths(lock_text: str) -> set[str]:
 
 
 def test_lock_shared_files_match_deployed_files(tmp_path):
-    """Declared harness paths must equal what deploy actually ships there."""
+    """Declared harness paths must equal what deploy actually ships there.
+
+    A target lock declares only the files the deploy shipped into that target.
+    """
+    # .github/agents/*.agent.md are generated at deploy time from .copilot/agents/,
+    # so they exist only AFTER a deploy generates them and cannot be copied from
+    # ROOT here; test_lock_never_claims_a_project_file still covers their
+    # declaration.
+    copied = [
+        p
+        for p in deploy._shared_harness_paths(deploy.DIRS_ALL)
+        if (deploy.ROOT / p).is_file()
+    ]
+    for rel in copied:
+        dst = tmp_path / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes((deploy.ROOT / rel).read_bytes())
     deploy._generate_harness_lock(tmp_path, dry_run=False, dirs=deploy.DIRS_ALL)
-    declared = _parse_lock_paths(
-        (tmp_path / ".harness.lock").read_text(encoding="utf-8")
-    )
-    expected = set(deploy._shared_harness_paths(deploy.DIRS_ALL))
+    lock_text = (tmp_path / ".harness.lock").read_text(encoding="utf-8")
+    declared = _parse_lock_paths(lock_text)
+    expected = set(copied)
     assert declared == expected, (
         f"lock drifted from reality: missing={expected - declared}, "
         f"phantom={declared - expected}"
     )
     assert declared, "no shared harness paths declared at all"
+    for rel in sorted(declared):
+        assert (tmp_path / rel).is_file(), (
+            f"declared path is not a file in the target: {rel}"
+        )
+    assert lock_value(lock_text, "harness", "content_fingerprint") == (
+        deploy.harness_content_fingerprint(sorted(declared), tmp_path)
+    ), "recorded content_fingerprint does not match the files in the target"
 
 
 def test_lock_declares_shared_dirs_separately_from_owned_dirs(tmp_path):
@@ -922,3 +945,188 @@ def test_deploy_stays_quiet_when_root_docs_were_absent(tmp_path: Path, capsys) -
 
     out = capsys.readouterr().out
     assert "replaced root files" not in out
+
+
+# ─── harness content fingerprint ────────────────────────────────────────────
+
+
+def test_harness_content_fingerprint_ignores_crlf_and_bom(tmp_path):
+    """The same logical content must hash alike whether LF or CRLF plus a BOM."""
+    lf = tmp_path / "lf"
+    crlf = tmp_path / "crlf"
+    (lf / "tools").mkdir(parents=True)
+    (crlf / "tools").mkdir(parents=True)
+    (lf / "tools" / "a.py").write_bytes(b"line one\nline two\n")
+    (crlf / "tools" / "a.py").write_bytes(b"\xef\xbb\xbfline one\r\nline two\r\n")
+
+    assert deploy.harness_content_fingerprint(
+        ["tools/a.py"], lf
+    ) == deploy.harness_content_fingerprint(["tools/a.py"], crlf)
+
+
+def test_harness_content_fingerprint_changes_with_one_byte(tmp_path):
+    """A single changed byte must change the digest."""
+    (tmp_path / "tools").mkdir(parents=True)
+    target = tmp_path / "tools" / "a.py"
+    target.write_bytes(b"x = 1\n")
+    before = deploy.harness_content_fingerprint(["tools/a.py"], tmp_path)
+
+    target.write_bytes(b"x = 2\n")
+    after = deploy.harness_content_fingerprint(["tools/a.py"], tmp_path)
+
+    assert before != after
+
+
+def test_harness_content_fingerprint_rejects_a_missing_path(tmp_path):
+    """A declared path that does not exist must raise, never be skipped."""
+    try:
+        deploy.harness_content_fingerprint(["tools/missing.py"], tmp_path)
+    except RuntimeError as exc:
+        assert "tools/missing.py" in str(exc)
+    else:
+        raise AssertionError("a missing declared path must raise RuntimeError")
+
+
+def test_root_lock_records_a_content_fingerprint(tmp_path):
+    """Every generated lock carries the digest of the files it declares."""
+    deploy._generate_harness_lock(tmp_path, root_mode=True)
+
+    text = (tmp_path / ".harness.lock").read_text(encoding="utf-8")
+    assert 'content_fingerprint = "sha256:' in text
+
+
+# ─── shared .harness.lock parser ────────────────────────────────────────────
+
+
+def test_lock_shared_paths_keeps_a_comma_inside_a_quoted_path():
+    """A comma inside a quoted path is literal, not a separator."""
+    from tools.harness_fingerprint import lock_shared_paths
+
+    text = '[shared_files]\npaths = [\n    "tools/a,b.py",\n]\n'
+
+    assert lock_shared_paths(text) == ["tools/a,b.py"]
+
+
+def test_lock_shared_paths_keeps_a_bracket_inside_a_quoted_path():
+    """The list ends at the matching bracket, not the first one inside quotes."""
+    from tools.harness_fingerprint import lock_shared_paths
+
+    text = '[shared_files]\npaths = [\n    "tools/a]b.py",\n    "tools/c.py",\n]\n'
+
+    assert lock_shared_paths(text) == ["tools/a]b.py", "tools/c.py"]
+
+
+def test_lock_shared_paths_ignores_a_commented_out_block():
+    """A commented-out ``paths = [`` ahead of the real one must not win."""
+    from tools.harness_fingerprint import lock_shared_paths
+
+    text = (
+        "[shared_files]\n"
+        "# paths = [\n"
+        '#     "old.py",\n'
+        "# ]\n"
+        "paths = [\n"
+        '    "real.py",\n'
+        "]\n"
+    )
+
+    assert lock_shared_paths(text) == ["real.py"]
+
+
+def test_lock_shared_paths_accepts_the_generator_trailing_comma():
+    """deploy writes a trailing comma; the parser must accept its own writer."""
+    from tools.harness_fingerprint import lock_shared_paths
+
+    text = '[shared_files]\npaths = [\n    "tools/a.py",\n    "tools/b.py",\n]\n'
+
+    assert lock_shared_paths(text) == ["tools/a.py", "tools/b.py"]
+
+
+def test_lock_shared_paths_reports_a_duplicated_section_as_ambiguous():
+    """Two [shared_files] sections cannot both be authoritative."""
+    from tools.harness_fingerprint import lock_shared_paths
+
+    text = '[shared_files]\npaths = ["a.py"]\n[shared_files]\npaths = ["b.py"]\n'
+
+    assert lock_shared_paths(text) is None
+
+
+def test_the_three_tools_share_one_fingerprint_implementation():
+    """The digest and the lock parser exist once, not once per tool."""
+    from tools import failure_ledger, garden, harness_fingerprint
+
+    assert deploy.harness_content_fingerprint is harness_fingerprint.content_fingerprint
+    assert garden.content_fingerprint is harness_fingerprint.content_fingerprint
+    assert (
+        failure_ledger.optional_fingerprint is harness_fingerprint.optional_fingerprint
+    )
+    assert failure_ledger.lock_value is harness_fingerprint.lock_value
+    assert failure_ledger.lock_shared_paths is harness_fingerprint.lock_shared_paths
+
+
+# ─── a target declares exactly what it shipped ──────────────────────────────
+
+
+def test_non_copilot_target_deploy_declares_only_shipped_files(tmp_path, capsys):
+    """A kilo deploy must not declare files only the copilot engine generates.
+
+    ``_shared_harness_paths`` declares .github/agents/*.agent.md whenever
+    .github is deployed, but those files are produced only for copilot/all.
+    The fingerprint enforces existence, so an unfiltered declaration aborted a
+    kilo deploy after the copy had already happened, leaving a half-deployed
+    target with no lock.
+    """
+    from tools.harness_fingerprint import lock_shared_paths, lock_value
+
+    target = tmp_path / "target"
+    target.mkdir()
+
+    assert deploy.deploy(str(target), engine="kilo", assume_yes=True) == 0
+    capsys.readouterr()
+
+    lock_path = target / ".harness.lock"
+    assert lock_path.is_file(), "a successful deploy must write .harness.lock"
+    text = lock_path.read_text(encoding="utf-8")
+
+    declared = lock_shared_paths(text)
+    assert declared is not None, "deploy wrote a lock its own reader rejects"
+    assert declared, "a kilo deploy ships shared files, so none must be declared"
+    assert lock_value(text, "harness", "mode") == "target"
+    for path in declared:
+        assert (target / path).is_file(), f"declared path was not shipped: {path}"
+    assert not any(p.startswith(".github/agents/") for p in declared), (
+        "kilo deploy declared copilot-generated agent files"
+    )
+    assert declared == sorted(declared)
+    assert lock_value(text, "harness", "content_fingerprint") == (
+        deploy.harness_content_fingerprint(declared, target)
+    )
+
+
+def test_empty_shared_set_round_trips_and_hashes_the_empty_input(tmp_path):
+    """A lock with an empty shared set must parse as [] and verify as empty."""
+    from tools.harness_fingerprint import lock_shared_paths, lock_value
+
+    deploy._generate_harness_lock(tmp_path, dry_run=False, dirs=[])
+    text = (tmp_path / ".harness.lock").read_text(encoding="utf-8")
+
+    assert lock_shared_paths(text) == []
+    assert lock_value(text, "harness", "content_fingerprint") == (
+        deploy.harness_content_fingerprint([], tmp_path)
+    )
+
+
+def test_root_lock_generation_raises_when_a_declared_path_is_missing(
+    tmp_path, monkeypatch
+):
+    """Root mode stays strict: a declared-but-absent path must raise."""
+    monkeypatch.setattr(
+        deploy, "_root_shared_paths", lambda root=None: ["tools/missing.py"]
+    )
+    try:
+        deploy._generate_harness_lock(tmp_path, root_mode=True)
+    except RuntimeError as exc:
+        assert "tools/missing.py" in str(exc)
+    else:
+        raise AssertionError("root mode must raise on a missing declared path")
+    assert not (tmp_path / ".harness.lock").exists()

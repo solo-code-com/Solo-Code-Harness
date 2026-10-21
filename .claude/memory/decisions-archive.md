@@ -1312,3 +1312,10 @@ daemon on the Windows side at all.
   `.env`), `tools/opencode_delegate.py` **không** đụng store. Hôm nay chưa đo được lỗi vì FreeModel
   đang lấy từ env → không mirror, chỉ ghi nhận; nếu về sau delegate báo Unauthorized với freemodel
   thì đây là nguyên nhân đầu tiên cần loại trừ.
+
+- [decision] Review tổng thể 2026-10-17: hai repo đã hợp nhất bằng join `e254c9a` (local =
+  g-harness = Solo-Code-Harness ✓) và tag `v4.3.1` có trên cả hai ✓. Gate chạy trong dự án đích lộ 2
+  lỗi harness, đã vá: unsafe-pattern chỉ áp cho code + bỏ qua `vendor/`/`staticfiles/`/JSON
+  (`1c93b47`), và coverage ratchet skip khi bản runtime không có `test_*.py`. Còn mở: 8 finding XSS
+  thật trong code dự án đích (scanner chưa có cơ chế allowlist), 10 shell-quoting gaps của guard,
+  Docker/WSL chưa xong (5 volume chưa backup).

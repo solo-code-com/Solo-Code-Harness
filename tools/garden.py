@@ -27,6 +27,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+from tools.harness_fingerprint import (  # noqa: E402
+    content_fingerprint,
+    lock_shared_paths,
+    lock_value,
+)
+
 SKIP_FILE = ROOT / "tools" / "opencode-skip-skills.txt"
 
 _SCAN_SKIP_DIRS = {
@@ -844,6 +851,91 @@ def run_engine_checks(
             issues.extend(result)
         else:
             print(f"[OK] {name}")
+    return issues
+
+
+def check_harness_fingerprint(root: Path) -> list[str]:
+    """Compare .harness.lock's content_fingerprint with the declared files.
+
+    The lock names which files are harness; this proves they are the bytes the
+    recorded version shipped. The lock's ``[harness] mode`` decides what a
+    mismatch means: a deployed target customises harness files legitimately, so
+    there it is a WARN and returns [] (garden stays green); on the source side
+    it fails the gate, because the root lock is regenerated on every commit. A
+    lock with no ``mode`` is treated as root and fails closed, with an issue
+    telling the operator to regenerate it.
+    """
+    lock_path = root / ".harness.lock"
+    try:
+        text = lock_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return [
+            "lock_stale: .harness.lock is missing - "
+            "run python tools/deploy.py --root-lock"
+        ]
+
+    recorded = lock_value(text, "harness", "content_fingerprint")
+    if not recorded:
+        return [
+            "lock_stale: .harness.lock has no content_fingerprint - "
+            "run python tools/deploy.py --root-lock"
+        ]
+
+    paths = lock_shared_paths(text)
+    if paths is None:
+        return [
+            "lock_stale: .harness.lock has no readable [shared_files] paths - "
+            "run python tools/deploy.py --root-lock"
+        ]
+
+    mode = lock_value(text, "harness", "mode")
+    target_mode = mode == "target"
+    issues: list[str] = []
+    if mode is None:
+        issues.append(
+            "lock_stale: .harness.lock has no [harness] mode (treated as root, "
+            "fail closed) - run python tools/deploy.py --root-lock"
+        )
+
+    missing = {p for p in paths if not (root / p).is_file()}
+    if missing:
+        for path in sorted(missing):
+            issues.append(
+                f"lock_stale: .harness.lock declares {path} but it does not exist; "
+                "run python tools/deploy.py --root-lock"
+            )
+        # Comparing the digest over the remaining subset would report a bogus
+        # "content changed" on top of every missing path.
+        if target_mode:
+            print(
+                "WARN: harness content differs from the recorded fingerprint "
+                "(customised target); advisory only"
+            )
+            return []
+        return issues
+
+    try:
+        current = content_fingerprint(paths, root)
+    except OSError as exc:
+        issues.append(
+            f"lock_stale: cannot read a declared harness file ({exc}); "
+            "run python tools/deploy.py --root-lock"
+        )
+        return issues
+
+    if current != recorded:
+        if target_mode:
+            print(
+                "WARN: harness content differs from the recorded fingerprint "
+                "(customised target); advisory only"
+            )
+            return []
+        issues.append(
+            f"lock_stale: harness content changed since .harness.lock was "
+            f"generated (recorded {recorded} != current {current}) for "
+            f"{len(paths)} declared file(s); "
+            "run python tools/deploy.py --root-lock"
+        )
     return issues
 
 
@@ -1863,6 +1955,17 @@ def main() -> int:
         all_issues.extend(manifest_issues)
     else:
         print("[OK] Manifest sync (agent.yaml)")
+
+    # Harness content fingerprint (lock vs the bytes it declares)
+    print("\n--- Harness Lock ---")
+    fingerprint_issues = check_harness_fingerprint(ROOT)
+    if fingerprint_issues:
+        print("[DRIFT] Harness content fingerprint:")
+        for i in fingerprint_issues:
+            print(f"  {i}")
+        all_issues.extend(fingerprint_issues)
+    else:
+        print("[OK] Harness content fingerprint")
 
     # Document counts checks
     print("\n--- Document Counts ---")
