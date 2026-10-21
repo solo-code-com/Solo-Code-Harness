@@ -110,4 +110,11 @@ High-signal context loaded at session start. Detailed history belongs in
   (dependency pip duy nhat trong `tools/`). Antigravity nay ghi
   `.solocode/antigravity-usage.jsonl`; `failure_ledger.py` moi gop moi nguon van
   hanh va co `--sweep` da du an.
-- Harness content fingerprint (2026-10-21): .harness.lock records `content_fingerprint` — sha256 over the sorted (path, content) pairs of [shared_files], BOM stripped and CRLF->LF — plus a `[harness] mode`: `root` is enforced (a harness edit without `python tools/deploy.py --root-lock` fails garden), `target` is advisory (garden prints a WARN and does not fail, because customising harness files there is legitimate), and a lock with no `mode` is treated as root. A target lock declares only the files deploy actually shipped. `failure_ledger --sweep` reports per-project fingerprint match.
+- Harness content fingerprint (2026-10-21): .harness.lock records `content_fingerprint`,
+  a sha256 over the sorted (path, content) pairs of [shared_files], BOM stripped and
+  CRLF->LF. A `[harness] mode` is recorded too. `root` is enforced: a harness edit
+  without `python tools/deploy.py --root-lock` fails garden. `target` is advisory, so
+  garden prints a WARN and does not fail, because customising harness files there is
+  legitimate. A lock with no `mode` is treated as root. A target lock declares only the
+  files deploy actually shipped. `failure_ledger --sweep` reports per-project fingerprint
+  match.
