@@ -63,3 +63,7 @@ learn-harness-engineering-main/
 
 # Antigravity IDE custom root junction (mirrors .gemini/antigravity/skills locally)
 /.agents/skills/
+
+# Local reference document kept on disk, not part of the harness or the project.
+# Promote it with `git add -f` after removing this rule if it should be tracked.
+agents_md_complete_sdlc_guide_for_ai_agents.md
