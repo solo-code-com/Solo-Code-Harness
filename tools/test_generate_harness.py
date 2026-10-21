@@ -393,3 +393,32 @@ def test_generate_instruction_skills_prunes_removed_source(tmp_path):
         opencode_engine.generate_instruction_skills(kilo, tmp_path / ".opencode") == 0
     )
     assert not (tmp_path / ".opencode" / "skills" / "a").exists()
+
+
+def test_harness_claude_run_also_syncs_the_copilot_memory_mirror(tmp_path, monkeypatch):
+    """`--harness claude` must still run the engine-neutral memory mirror sync.
+
+    The mirror syncs used to sit behind `if args.harness != "all": return rc`, so
+    the documented command regenerated .claude/ and left .copilot/memory/ drifted:
+    garden reported drift its own remediation command could not clear.
+    """
+    _write(tmp_path / ".kilo" / "memory" / "MEMORY.md", "SOURCE\n")
+    _write(tmp_path / MEMORY_MIRROR / "MEMORY.md", "DRIFTED\n")
+
+    calls = []
+
+    class _StubEngine:
+        @staticmethod
+        def generate_all(kilo_root, claude_dir, root, skip_names=None):
+            calls.append((kilo_root, claude_dir, root))
+            return 0
+
+    monkeypatch.setattr(generate_harness, "ROOT_DIR", tmp_path)
+    monkeypatch.setattr(generate_harness, "_load_claude_engine", lambda: _StubEngine)
+    monkeypatch.setattr(sys, "argv", ["generate_harness.py", "--harness", "claude"])
+
+    assert generate_harness.main() == 0
+    assert calls, "claude engine was not generated"
+    assert (tmp_path / MEMORY_MIRROR / "MEMORY.md").read_text(
+        encoding="utf-8"
+    ) == "SOURCE\n"

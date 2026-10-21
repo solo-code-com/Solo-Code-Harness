@@ -88,8 +88,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--harness",
         choices=["all", "claude", "opencode"],
         default="all",
-        help="Which engine to generate. 'all' emits claude + opencode + the "
-        ".copilot/.gemini instruction and skill body mirrors.",
+        help="Which engine to generate. 'all' emits claude + opencode. The "
+        ".copilot/.gemini instruction, memory and skill-body mirrors are synced "
+        "on every run, for any --harness value.",
     )
     parser.add_argument(
         "--include-all",
@@ -240,8 +241,6 @@ def main() -> int:
             kilo_root, ROOT_DIR / ".opencode", ROOT_DIR, skip_names=skip_names
         )
         rc = rc or oc_rc
-    if args.harness != "all":
-        return rc
 
     print("\n--- Instruction mirrors (.copilot, .gemini) ---")
     sync_instruction_mirrors(kilo_root, ROOT_DIR)

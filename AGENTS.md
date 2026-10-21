@@ -209,10 +209,11 @@ soon-to-be-compacted summary.** Do this proactively, not just when reminded:
    architecture choice, engine/tool adoption, a fix that changes established
    behavior, a policy change — append a one-entry bullet to `.kilo/memory/MEMORY.md`
    `## Decisions` immediately, don't wait until end of session.
-2. Regenerate/sync after: `python tools/generate_harness.py --harness claude`
-   (updates `.claude/memory/`), then manually copy to `.copilot/memory/`
-   (no auto-generator exists for Copilot; `.gemini/` has no comparable
-   memory mirror — see `tools/garden.py`'s `check_gemini()`).
+2. Regenerate/sync after: one run of `python tools/generate_harness.py` (any
+   `--harness` value) updates `.claude/memory/` via the engine generator and
+   `.copilot/memory/` via `sync_memory_mirrors` — there is nothing to copy by
+   hand. `.gemini/` has no comparable memory mirror (see `tools/garden.py`'s
+   `check_gemini()`).
 3. Claude Code has a `PreCompact` hook (`.claude/hooks/pre_compact.py`) that
    fires right before compaction: it logs an objective checkpoint (git
    branch/sha, trigger type, timestamp) to `.solocode/shared-state.db` and

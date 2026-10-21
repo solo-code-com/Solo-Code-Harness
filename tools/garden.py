@@ -4,7 +4,7 @@ Garden — Drift Detection
 =========================
 Checks for stale artifacts, missing generated files, and dead links
 between .kilo/ (source of truth) ↔ .claude/ (generated) and
-.kilo/ ↔ .copilot/ (manually-maintained parity) directories.
+.kilo/ ↔ .copilot/ (synced by tools/generate_harness.py) directories.
 
 .opencode/ was removed in v4.0.0, then reintroduced in v4.2.0 as a
 first-class primary engine — see .harness.lock and .kilo/memory/MEMORY.md
