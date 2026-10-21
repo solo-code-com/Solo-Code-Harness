@@ -8,7 +8,7 @@ corrupt receipt or a policy escaping the repository is an operational failure
 (exit 2) rather than a silent pass.
 
 Each test builds its own throwaway git repository, so the gate is measured
-against real `git diff HEAD` output instead of a stubbed change set.
+against real `git diff --cached` output instead of a stubbed change set.
 
 Usage:
     python -m pytest tools/test_review_receipt.py -q
@@ -43,6 +43,13 @@ AND_POLICY = {
     "min_changed_lines": 30,
     "receipt_dir": ".solocode/reviews",
 }
+
+SHIPPED_POLICY = {
+    "min_changed_files": 5,
+    "min_changed_lines": 120,
+    "receipt_dir": ".solocode/reviews",
+}
+
 
 RECEIPT_FIELDS = {
     "schema",
@@ -93,11 +100,13 @@ def _repo(tmp_path: Path, policy: dict | None = None) -> Path:
 
 
 def _write(root: Path, name: str, text: str) -> None:
+    """Write `name` and stage it: the gate hashes the index, so edits must be added."""
     (root / name).write_text(text, encoding="utf-8")
+    _git(root, "add", name)
 
 
 def _over_threshold(root: Path) -> None:
-    """Touch both files with 3 added lines each: 2 files, 6 changed lines."""
+    """Stage both files with 3 added lines each: 2 files, 6 changed lines."""
     _write(root, "base.txt", "one\ntwo\nthree\nfour\n")
     _write(root, "extra.txt", "alpha\nbeta\ngamma\ndelta\n")
 
@@ -409,6 +418,143 @@ def test_advisory_stats_missing_log_prints_zeros(tmp_path: Path, capsys) -> None
     assert "total runs: 0" in out
     assert "ratio: 0.0" in out
     assert "most recent required-without-receipt: never" in out
+
+
+def test_unstaged_edit_does_not_move_hash_or_counts(tmp_path: Path) -> None:
+    """Only the index is hashed: an unstaged edit leaves hash and counts alone."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _write(root, "base.txt", "one\ntwo\n")  # staged: 1 file, 1 line
+    staged = tool.compute_change_set(root)
+
+    # Unstaged edit on top of the staged tree: invisible to git diff --cached.
+    (root / "base.txt").write_text("one\ntwo\nthree\nunstaged\n", encoding="utf-8")
+    after = tool.compute_change_set(root)
+
+    assert after["tree_hash"] == staged["tree_hash"]
+    assert after["changed_files"] == staged["changed_files"] == 1
+    assert after["changed_lines"] == staged["changed_lines"] == 1
+
+
+def test_staging_same_content_twice_yields_same_hash(tmp_path: Path) -> None:
+    """Staging is idempotent: re-adding identical bytes keeps the hash."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _write(root, "base.txt", "one\ntwo\n")
+    first = tool.compute_change_set(root)
+
+    _git(root, "add", "base.txt")
+    second = tool.compute_change_set(root)
+
+    assert first["tree_hash"] == second["tree_hash"]
+
+
+def test_staging_moves_hash_but_unstaged_edit_does_not(tmp_path: Path) -> None:
+    """Index semantics in both directions: staging moves the hash, an unstaged
+    edit on top of the staged tree does not."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _write(root, "base.txt", "one\ntwo\n")  # staged: 1 file, 1 line
+    staged = tool.compute_change_set(root)["tree_hash"]
+
+    # Unstaged edit: invisible to `git diff --cached`, so the hash stays put.
+    (root / "base.txt").write_text("one\ntwo\nthree\n", encoding="utf-8")
+    unstaged = tool.compute_change_set(root)["tree_hash"]
+    assert unstaged == staged
+
+    # Stage that edit: the index changes, so the hash moves.
+    _git(root, "add", "base.txt")
+    restaged = tool.compute_change_set(root)["tree_hash"]
+    assert restaged != staged
+
+
+def test_stage_after_receipt_moves_hash_and_verify_exits_1(
+    tmp_path: Path, capsys
+) -> None:
+    """A receipt survives an unstaged edit but not the staged edit that follows.
+
+    The intermediate assertion - hash unchanged while the edit is still
+    unstaged - is what pins index semantics: hashing `git diff HEAD` would move
+    the hash on that unstaged edit alone, so the later exit-1 would pass for the
+    wrong reason.
+    """
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+    _, receipt = tool.record_receipt("codex", "gpt-6.1-sol", root)
+    staged_hash = receipt["tree_hash"]
+
+    # Edit again, still unstaged: the index is untouched, so the receipt fits.
+    (root / "base.txt").write_text("one\ntwo\nthree\nfour\nfive\n", encoding="utf-8")
+    assert tool.compute_change_set(root)["tree_hash"] == staged_hash
+
+    # Stage that edit: the hash moves and the old receipt no longer matches.
+    _git(root, "add", "base.txt")
+    assert tool.compute_change_set(root)["tree_hash"] != staged_hash
+    assert tool.main(["verify"], root=root) == 1
+    assert "no receipt" in capsys.readouterr().out
+
+
+def test_five_files_ten_lines_not_required(tmp_path: Path, capsys) -> None:
+    """AND at the shipped numbers, line side: 5 files but 10 lines stays exempt."""
+    tool = _load_tool()
+    root = _repo(tmp_path, SHIPPED_POLICY)
+    for i in range(1, 6):
+        _write(root, f"f{i}.txt", "line 1\nline 2\n")
+
+    change = tool.verify(root)
+    assert change["changed_files"] == 5
+    assert change["changed_lines"] == 10
+    assert not change["required"]
+    assert tool.main(["verify"], root=root) == 0
+    assert "review not required" in capsys.readouterr().out
+
+
+def test_three_files_two_hundred_lines_not_required(tmp_path: Path, capsys) -> None:
+    """AND at the shipped numbers, file side: 3 files with 200 lines stays exempt."""
+    tool = _load_tool()
+    root = _repo(tmp_path, SHIPPED_POLICY)
+    _write(root, "a.txt", "".join(f"line {i}\n" for i in range(1, 101)))
+    _write(root, "b.txt", "".join(f"line {i}\n" for i in range(1, 61)))
+    _write(root, "c.txt", "".join(f"line {i}\n" for i in range(1, 41)))
+
+    change = tool.verify(root)
+    assert change["changed_files"] == 3
+    assert change["changed_lines"] == 200
+    assert not change["required"]
+    assert tool.main(["verify"], root=root) == 0
+    assert "review not required" in capsys.readouterr().out
+
+
+def test_five_files_one_hundred_twenty_lines_required(tmp_path: Path, capsys) -> None:
+    """AND at the shipped numbers, both sides: 5 files and 120 lines refuses."""
+    tool = _load_tool()
+    root = _repo(tmp_path, SHIPPED_POLICY)
+    for i in range(1, 6):
+        _write(root, f"f{i}.txt", "".join(f"line {j}\n" for j in range(1, 25)))
+
+    change = tool.verify(root)
+    assert change["changed_files"] == 5
+    assert change["changed_lines"] == 120
+    assert change["required"]
+    assert tool.main(["verify"], root=root) == 1
+    assert "no receipt" in capsys.readouterr().out
+
+
+def test_record_then_add_file_past_threshold_exits_1(tmp_path: Path, capsys) -> None:
+    """A receipt for a staged tree survives until one more staged file lands."""
+    tool = _load_tool()
+    root = _repo(tmp_path, SHIPPED_POLICY)
+    for i in range(1, 6):
+        _write(root, f"f{i}.txt", "".join(f"line {j}\n" for j in range(1, 25)))
+
+    path, receipt = tool.record_receipt("codex", "gpt-6.1-sol", root)
+    assert path.is_file()
+    assert tool.main(["verify"], root=root) == 0
+
+    _write(root, "f6.txt", "line 1\n")
+    assert tool.main(["verify"], root=root) == 1
+    assert "no receipt" in capsys.readouterr().out
 
 
 if __name__ == "__main__":

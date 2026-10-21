@@ -78,3 +78,10 @@ repos:
         pass_filenames: false
         always_run: true
         verbose: false
+      # Unlike the advisory hook above, this one blocks: the remedy is to run record after /review.
+      - id: review-receipt
+        name: Review receipt gate
+        entry: python tools/review_receipt.py verify
+        language: system
+        pass_filenames: false
+        always_run: true

@@ -1,6 +1,6 @@
 {
-  "_comment": "Review is required only when BOTH thresholds are met (AND). A 1-file / 1-line default would demand a receipt for every typo, so the numbers sit where self-review stops being enough: 2 files AND 30 changed lines. Below that, a single-file fixup or a doc-count correction is checkable by its author; at or above it, the diff is wide enough that a second reader finds things the author cannot. Both numbers are claims about review value, not about effort - keep them honest instead of lowering them to make a gate green. See tools/review_receipt.py.",
-  "min_changed_files": 2,
-  "min_changed_lines": 30,
+  "_comment": "The numbers come from the advisory log at the time of writing and are a starting point, not a law. At the previous 2 files and 30 lines, 11 of 18 recorded runs would have been blocked, which is 61 percent and too often to mean anything; at 5 and 120 the same data gives 5 of 18, about 28 percent, which matches a change wide enough that the author cannot check it alone. See tools/review_receipt.py.",
+  "min_changed_files": 5,
+  "min_changed_lines": 120,
   "receipt_dir": ".solocode/reviews"
 }

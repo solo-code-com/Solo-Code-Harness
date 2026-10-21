@@ -13,9 +13,10 @@ declarative — nothing verifies that those agents actually ran.
 
 ## Procedure
 
-1. **Get the diff.** Execute `git diff HEAD --stat`, then `git diff HEAD`. Read
-   the entire patch before judging any part of it. The change set is everything
-   against HEAD, so staged and unstaged tracked changes both count.
+1. **Stage, then get the diff.** Run `git add` on the change first, then
+   `git diff --cached --stat` and `git diff --cached`. Read the entire patch
+   before judging any part of it. The receipt hashes only the index, so anything
+   left unstaged is invisible to the gate and will not be in the receipt.
 
 2. **Run the repo gates** and keep the raw output:
    - `python .github/scripts/security_scan.py .`
@@ -45,6 +46,8 @@ declarative — nothing verifies that those agents actually ran.
    It writes one file per tree hash under the policy's `receipt_dir`,
    `.solocode/reviews` by default, and prints the path.
 
+**Stage, then record, then commit.** Only the index is hashed, so run `git add` on the change first, then the `record` command above, then commit. If the staged tree changes after recording, the hash moves and the gate refuses the commit.
+
 ## What blocks and what does not
 
 This command blocks nothing by itself — it is a procedure, not a gate, and a
@@ -54,6 +57,7 @@ both policy thresholds and no receipt exists for that tree, and 2 when the
 environment itself is broken (git unavailable, not a repo, unreadable policy).
 Run `verify` before the change lands, not after.
 
-Thresholds live in `tools/config/review-policy.json` — 2 files and 30 changed
-lines by default, so a one-file fixup stays exempt. A receipt written for a
-tree you have since edited does not count: edit the diff, and the hash moves.
+Thresholds live in `tools/config/review-policy.json` — 5 files and 120 changed
+lines by default, and a review is required only when BOTH are met, so a
+one-file fixup stays exempt. A receipt written for a tree you have since
+edited does not count: edit the diff, and the hash moves.

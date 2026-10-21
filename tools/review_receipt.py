@@ -20,9 +20,10 @@ receipt_dir share receipts.
 
 Change set
 ----------
-Three reads against HEAD, so staged and unstaged tracked changes both count:
-`git diff HEAD --name-only` (file list), `git diff HEAD --numstat` (added plus
-removed lines) and `git diff HEAD --binary` (content). Paths are sorted, then
+Three reads against the index, so only staged changes count - in a pre-commit
+hook, pre-commit stashes unstaged changes, so the hook sees only the staged tree:
+`git diff --cached --name-only` (file list), `git diff --cached --numstat` (added plus
+removed lines) and `git diff --cached --binary` (content). Paths are sorted, then
 sha256 covers the newline-joined path list followed by the raw patch. The same
 tree hashes identically; any content change moves the hash, which is why a
 receipt for a stale tree cannot satisfy a later check.
@@ -31,8 +32,10 @@ receipt for a stale tree cannot satisfy a later check.
 same "Binary files ... differ" line, so two different binary contents hash
 identically and a receipt would survive a binary edit. `--no-ext-diff` and
 `--no-textconv` keep measurement a pure read, so a configured diff driver
-cannot run during a gate. Untracked files are invisible to `git diff HEAD`, so
-an unadded new file does not move the hash.
+cannot run during a gate. Untracked files are invisible to `git diff --cached`, so
+an unadded new file does not move the hash, and neither does an unstaged
+edit. Stage the change, then record, because only the index is hashed.
+What the index hash does not distinguish: intent-to-add files and unstaged-only files are invisible, and renames, mode changes and submodules appear as patch content.
 
 Exit codes
 ----------
@@ -115,13 +118,13 @@ def _git_output(args: list[str], root: Path, git: str = GIT) -> str:
 def compute_change_set(root: Path = ROOT, git: str = GIT) -> dict[str, object]:
     """Measure the current change set: files, line count and tree hash."""
     names = _git_output(
-        ["diff", "HEAD", "--name-only", *_READ_ONLY_DIFF_FLAGS], root, git
+        ["diff", "--cached", "--name-only", *_READ_ONLY_DIFF_FLAGS], root, git
     )
     files = sorted({line.strip() for line in names.splitlines() if line.strip()})
 
     changed_lines = 0
     numstat = _git_output(
-        ["diff", "HEAD", "--numstat", *_READ_ONLY_DIFF_FLAGS], root, git
+        ["diff", "--cached", "--numstat", *_READ_ONLY_DIFF_FLAGS], root, git
     )
     for row in numstat.splitlines():
         added, _, rest = row.partition("\t")
@@ -131,7 +134,9 @@ def compute_change_set(root: Path = ROOT, git: str = GIT) -> dict[str, object]:
         changed_lines += int(removed) if removed.isdigit() else 0
 
     diff = _git_output(
-        ["diff", "HEAD", "--binary", "--no-color", *_READ_ONLY_DIFF_FLAGS], root, git
+        ["diff", "--cached", "--binary", "--no-color", *_READ_ONLY_DIFF_FLAGS],
+        root,
+        git,
     )
     digest = hashlib.sha256()
     digest.update("\n".join(files).encode("utf-8"))
