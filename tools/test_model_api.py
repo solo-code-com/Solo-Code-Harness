@@ -15,6 +15,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = Path(__file__).resolve().parent
 for _entry in (str(ROOT), str(TOOLS)):
@@ -61,3 +63,61 @@ def test_main_finishes_when_the_start_row_cannot_be_written(
     assert "answer text" in capsys.readouterr().out
     assert len(calls) == 1
     assert blocked.is_dir()
+
+
+LEAK_MARKER = "LEAKED_FAKE_VALUE"
+REFUSED_REQUESTS = (
+    ".env",
+    ".ENV",
+    ".Env",
+    "sub/.ENV",
+    ".solocode/x",
+    ".SOLOCODE/x",
+    ".git/config",
+    ".GIT/config",
+    "a.key",
+    "a.KEY",
+)
+
+
+@pytest.fixture
+def temp_root(monkeypatch, tmp_path):
+    """A throwaway repository whose credential paths hold a visible fake secret."""
+    for rel in REFUSED_REQUESTS:
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(LEAK_MARKER, encoding="utf-8")
+    monkeypatch.setattr(model_api, "ROOT", tmp_path)
+    return tmp_path
+
+
+@pytest.mark.parametrize("requested", REFUSED_REQUESTS)
+def test_read_file_refuses_credential_paths_in_any_case(temp_root, requested):
+    """NTFS is case-insensitive, so a case variant must not reach the file either."""
+    result = model_api.run_tool(
+        "read_file",
+        {"path": requested},
+        allow_dirs=[temp_root],
+        allow_programs=set(),
+        sandbox="",
+    )
+
+    assert result.startswith("refused:")
+    assert LEAK_MARKER not in result
+
+
+def test_read_file_still_reads_a_normal_file(temp_root):
+    """The refusal must not turn into a blanket deny."""
+    normal = temp_root / "src" / "app.py"
+    normal.parent.mkdir(parents=True)
+    normal.write_text("print('ok')\n", encoding="utf-8")
+
+    result = model_api.run_tool(
+        "read_file",
+        {"path": "src/app.py"},
+        allow_dirs=[temp_root],
+        allow_programs=set(),
+        sandbox="",
+    )
+
+    assert "print('ok')" in result

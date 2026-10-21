@@ -498,3 +498,8 @@ def test_unwritable_usage_log_does_not_break_the_run(monkeypatch, tmp_path):
     )
 
     assert mod.main(["do x", "--json"]) == 0
+
+
+def test_usage_rows_returns_empty_for_a_missing_file(tmp_path):
+    """A crashed wrapper leaves no usage file; the helper must not raise."""
+    assert _usage_rows(tmp_path / "absent-usage.jsonl") == []

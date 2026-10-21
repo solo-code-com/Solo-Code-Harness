@@ -236,11 +236,17 @@ def run_tool(
     """Execute one tool call inside its fence. Returns the text fed back to the model."""
     if name == "read_file":
         raw = str(args.get("path", ""))
-        if any(marker in raw for marker in REFUSED_READ):
+        normalised = raw.replace("\\", "/").casefold()
+        if any(marker in normalised for marker in REFUSED_READ):
             return f"refused: {raw} is not readable by a worker"
         path = (ROOT / raw).resolve()
         if ROOT not in path.parents and path != ROOT:
             return f"refused: {raw} is outside the repository"
+        # The filesystem may be case-insensitive (NTFS), so a name can only become sensitive
+        # after resolution: test the repo-relative form too, casefolded for every platform.
+        relative = path.relative_to(ROOT).as_posix().casefold()
+        if any(marker in relative for marker in REFUSED_READ):
+            return f"refused: {raw} is not readable by a worker"
         if not path.is_file():
             return f"error: {raw} does not exist"
         text = path.read_text(encoding="utf-8", errors="replace")
