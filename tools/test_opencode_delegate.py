@@ -15,6 +15,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,7 @@ for _entry in (str(ROOT), str(TOOLS)):
     if _entry not in sys.path:
         sys.path.insert(0, _entry)
 
+import failure_ledger  # noqa: E402
 import opencode_engine  # noqa: E402
 import session_control  # noqa: E402
 import session_registry  # noqa: E402
@@ -300,3 +302,133 @@ def test_a_launch_failure_records_no_session(monkeypatch, tmp_path):
     )
     assert result["error"] == "no such binary"
     assert session_registry.list_sessions(session_dir=tmp_path) == []
+
+
+def _usage_rows(path: Path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def test_one_invocation_writes_a_start_then_finish_row(monkeypatch, tmp_path):
+    log = tmp_path / "opencode-usage.jsonl"
+    monkeypatch.setattr(opencode_delegate, "USAGE_LOG", log)
+    monkeypatch.setattr(opencode_delegate, "find_opencode_binary", lambda: "opencode")
+    monkeypatch.setattr(opencode_delegate, "_load_project_env", lambda: None)
+    monkeypatch.setattr(
+        opencode_delegate,
+        "resolve_model",
+        lambda **kw: "commandcode/deepseek-v4.1-flash",
+    )
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **kw: {
+            "text": "PONG",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": None,
+        },
+    )
+
+    assert opencode_delegate.main(["x", "--no-guardrail"]) == 0
+
+    rows = _usage_rows(log)
+    assert len(rows) == 2
+    start, finish = rows
+    assert start["phase"] == "start"
+    assert finish["phase"] == "finish"
+    assert start["run_id"] == finish["run_id"]
+    assert start["elapsed_s"] == 0
+
+
+def test_start_row_exists_before_the_worker_is_spawned(monkeypatch, tmp_path):
+    """The start row is on disk by the time the worker subprocess is spawned."""
+    log = tmp_path / "opencode-usage.jsonl"
+    monkeypatch.setattr(opencode_delegate, "USAGE_LOG", log)
+    monkeypatch.setattr(opencode_delegate, "find_opencode_binary", lambda: "opencode")
+    monkeypatch.setattr(opencode_delegate, "_load_project_env", lambda: None)
+    monkeypatch.setattr(
+        opencode_delegate,
+        "resolve_model",
+        lambda **kw: "commandcode/deepseek-v4.1-flash",
+    )
+
+    seen_at_spawn = {}
+
+    def fake_popen(cmd, **kwargs):
+        seen_at_spawn["rows"] = _usage_rows(log)
+        return _FakeProc(stdout='{"type":"text","part":{"text":"PONG"}}')
+
+    monkeypatch.setattr(opencode_delegate.subprocess, "Popen", fake_popen)
+
+    assert opencode_delegate.main(["x", "--no-guardrail"]) == 0
+
+    assert seen_at_spawn["rows"]
+    start = seen_at_spawn["rows"][-1]
+    assert start["phase"] == "start"
+    finish = _usage_rows(log)[-1]
+    assert finish["phase"] == "finish"
+    assert finish["run_id"] == start["run_id"]
+
+
+def test_unwritable_usage_log_does_not_break_the_run(monkeypatch, tmp_path):
+    """A start write that raises OSError must not crash the wrapper."""
+    blocked = tmp_path / "usage-log-is-a-directory"
+    blocked.mkdir()
+    monkeypatch.setattr(opencode_delegate, "USAGE_LOG", blocked)
+    monkeypatch.setattr(opencode_delegate, "find_opencode_binary", lambda: "opencode")
+    monkeypatch.setattr(opencode_delegate, "_load_project_env", lambda: None)
+    monkeypatch.setattr(
+        opencode_delegate,
+        "resolve_model",
+        lambda **kw: "commandcode/deepseek-v4.1-flash",
+    )
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **kw: {
+            "text": "PONG",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": None,
+        },
+    )
+
+    assert opencode_delegate.main(["x", "--no-guardrail"]) == 0
+
+
+def test_crash_after_start_leaves_one_unpaired_start(monkeypatch, tmp_path):
+    """A runner that dies after log_start leaves a start row with no finish."""
+    log = tmp_path / "opencode-usage.jsonl"
+    monkeypatch.setattr(opencode_delegate, "USAGE_LOG", log)
+    monkeypatch.setattr(opencode_delegate, "find_opencode_binary", lambda: "opencode")
+    monkeypatch.setattr(opencode_delegate, "_load_project_env", lambda: None)
+    monkeypatch.setattr(
+        opencode_delegate,
+        "resolve_model",
+        lambda **kw: "commandcode/deepseek-v4.1-flash",
+    )
+
+    def fake_run(**kwargs):
+        raise RuntimeError("worker died mid-run")
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    with pytest.raises(RuntimeError, match="worker died mid-run"):
+        opencode_delegate.main(["--no-guardrail", "do the thing"])
+
+    rows = _usage_rows(log)
+    assert len(rows) == 1
+    assert rows[0]["phase"] == "start"
+    assert isinstance(rows[0]["run_id"], str) and rows[0]["run_id"]
+
+    summary = failure_ledger._unpaired_summary(rows)
+    assert summary["unpaired_starts"] == 1
+    assert summary["unpaired_finishes"] == 0

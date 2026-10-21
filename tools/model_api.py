@@ -35,6 +35,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -109,6 +110,28 @@ TOOL_SCHEMAS: dict[str, dict] = {
 }
 
 REFUSED_READ = (".env", ".solocode/", ".git/", ".pem", ".key", "id_rsa", "credentials")
+
+
+def log_start(model: str, prompt_len: int, run_id: str) -> None:
+    """Append a phase:start row so a lost run is distinguishable from a never-run one."""
+    try:
+        USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with USAGE_LOG.open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "model": model,
+                        "prompt_chars": prompt_len,
+                        "phase": "start",
+                        "run_id": run_id,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    except OSError:
+        pass
 
 
 def log_usage(record: dict) -> None:
@@ -391,6 +414,8 @@ def main(argv: list[str] | None = None) -> int:
         messages.append({"role": "system", "content": GUARDRAIL})
     messages.append({"role": "user", "content": prompt})
 
+    run_id = uuid.uuid4().hex
+    log_start(args.model, len(prompt), run_id)
     started = time.monotonic()
     transcript: list[dict] = list(messages)
     usage_total = {"prompt_tokens": 0, "completion_tokens": 0}
@@ -465,6 +490,8 @@ def main(argv: list[str] | None = None) -> int:
             "completion_tokens": usage_total["completion_tokens"],
             "ok": ok,
             "error": error or None,
+            "phase": "finish",
+            "run_id": run_id,
         }
     )
     if args.transcript:

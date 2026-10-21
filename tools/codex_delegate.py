@@ -272,7 +272,36 @@ def run_plan(
     return (0 if text.strip() else 2), text
 
 
-def log_usage(model: str | None, sandbox: str, elapsed: float, code: int) -> None:
+def log_start(model: str | None, sandbox: str, run_id: str) -> None:
+    """Append a phase:start row so a lost run is distinguishable from a never-run one.
+
+    The start row pairs with the finish row log_usage writes: they share run_id, so a
+    wrapper that dies mid-run leaves a start without a finish, which the ledger reads
+    as a lost run rather than silence.
+    """
+    try:
+        USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "model": model or DEFAULT_MODEL,
+            "sandbox": sandbox,
+            "elapsed_s": 0,
+            "phase": "start",
+            "run_id": run_id,
+        }
+        with USAGE_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass  # usage logging must never break a run
+
+
+def log_usage(
+    model: str | None,
+    sandbox: str,
+    elapsed: float,
+    code: int,
+    run_id: str,
+) -> None:
     try:
         USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
         entry = {
@@ -281,6 +310,8 @@ def log_usage(model: str | None, sandbox: str, elapsed: float, code: int) -> Non
             "sandbox": sandbox,
             "elapsed_s": round(elapsed, 2),
             "exit": code,
+            "phase": "finish",
+            "run_id": run_id,
         }
         with USAGE_LOG.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry) + "\n")
@@ -418,12 +449,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    run_id = uuid.uuid4().hex
+    log_start(args.model, str(plan["sandbox"]), run_id)
     start = time.monotonic()
     code, output = run_plan(  # type: ignore[arg-type]
         list(plan["argv"]), out_file, args.timeout, model=args.model
     )
     elapsed = time.monotonic() - start
-    log_usage(args.model, str(plan["sandbox"]), elapsed, code)
+    log_usage(args.model, str(plan["sandbox"]), elapsed, code, run_id)
     summary = change_summary()
 
     if args.json:

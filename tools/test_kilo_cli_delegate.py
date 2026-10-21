@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import time
@@ -253,6 +254,7 @@ def _reach_the_runner(monkeypatch):
     monkeypatch.setattr(kilo_cli_delegate, "_load_project_env", lambda: None)
     monkeypatch.setattr(kilo_cli_delegate, "find_kilo_binary", lambda: "kilo")
     monkeypatch.setattr(kilo_cli_delegate, "log_usage", lambda *_a, **_k: None)
+    monkeypatch.setattr(kilo_cli_delegate, "log_start", lambda *_a, **_k: None)
 
 
 def test_main_reports_a_dead_server_instead_of_an_exit_code(monkeypatch, capsys):
@@ -354,3 +356,91 @@ def test_ensure_server_passes_a_custom_port_to_the_manager(monkeypatch, capsys):
     assert code == 0
     assert len(commands) == 1
     assert commands[0][-2:] == ["--port", "14137"]
+
+
+def _usage_rows(path: Path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def test_one_invocation_writes_a_start_then_finish_row(monkeypatch, tmp_path):
+    log = tmp_path / "kilo-usage.jsonl"
+    monkeypatch.setattr(kilo_cli_delegate, "USAGE_LOG", log)
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
+    monkeypatch.setattr(kilo_cli_delegate, "_load_project_env", lambda: None)
+    monkeypatch.setattr(kilo_cli_delegate, "find_kilo_binary", lambda: "kilo")
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **kw: {
+            "text": "PONG",
+            "events": [],
+            "session_id": "ses_kilo",
+            "tokens": None,
+            "cost": None,
+            "error": None,
+        },
+    )
+
+    assert kilo_cli_delegate.main(["x", "--no-guardrail"]) == 0
+
+    rows = _usage_rows(log)
+    assert len(rows) == 2
+    start, finish = rows
+    assert start["phase"] == "start"
+    assert finish["phase"] == "finish"
+    assert start["run_id"] == finish["run_id"]
+    assert start["elapsed_s"] == 0
+
+
+def test_start_row_exists_before_the_worker_is_spawned(monkeypatch, tmp_path):
+    """The start row is on disk by the time the worker subprocess is spawned."""
+    log = tmp_path / "kilo-usage.jsonl"
+    monkeypatch.setattr(kilo_cli_delegate, "USAGE_LOG", log)
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
+    monkeypatch.setattr(kilo_cli_delegate, "_load_project_env", lambda: None)
+    monkeypatch.setattr(kilo_cli_delegate, "find_kilo_binary", lambda: "kilo")
+
+    seen_at_spawn = {}
+
+    def fake_popen(cmd, **kwargs):
+        seen_at_spawn["rows"] = _usage_rows(log)
+        return _FakePopen(stdout='{"type":"text","part":{"text":"PONG"}}')
+
+    monkeypatch.setattr(kilo_cli_delegate.subprocess, "Popen", fake_popen)
+
+    assert kilo_cli_delegate.main(["x", "--no-guardrail"]) == 0
+
+    assert seen_at_spawn["rows"]
+    start = seen_at_spawn["rows"][-1]
+    assert start["phase"] == "start"
+    finish = _usage_rows(log)[-1]
+    assert finish["phase"] == "finish"
+    assert finish["run_id"] == start["run_id"]
+
+
+def test_unwritable_usage_log_does_not_break_the_run(monkeypatch, tmp_path):
+    """A start write that raises OSError must not crash the wrapper."""
+    blocked = tmp_path / "usage-log-is-a-directory"
+    blocked.mkdir()
+    monkeypatch.setattr(kilo_cli_delegate, "USAGE_LOG", blocked)
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
+    monkeypatch.setattr(kilo_cli_delegate, "_load_project_env", lambda: None)
+    monkeypatch.setattr(kilo_cli_delegate, "find_kilo_binary", lambda: "kilo")
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **kw: {
+            "text": "PONG",
+            "events": [],
+            "session_id": "ses_kilo",
+            "tokens": None,
+            "cost": None,
+            "error": None,
+        },
+    )
+
+    assert kilo_cli_delegate.main(["x", "--no-guardrail"]) == 0

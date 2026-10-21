@@ -626,6 +626,8 @@ SIBLING_USAGE_KEYS = [
     "usage",
     "cost",
     "error",
+    "phase",
+    "run_id",
 ]
 
 
@@ -652,16 +654,19 @@ def test_successful_run_appends_one_row_matching_sibling_shape(monkeypatch, tmp_
     assert _run_main(monkeypatch, ws, (parsed, 0)) == 0
 
     rows = _usage_rows()
-    assert len(rows) == 1
-    row = rows[0]
-    assert list(row) == SIBLING_USAGE_KEYS
-    assert row["model"] == antigravity_delegate.DEFAULT_MODEL
-    assert row["prompt_chars"] > 0
-    assert row["session_id"] == "conv_1"
-    assert row["usage"] == {"total_tokens": 7, "input": 5}
-    assert row["cost"] == 0.25
-    assert row["error"] is None
-    assert datetime.fromisoformat(row["ts"]).tzinfo is not None
+    assert len(rows) == 2
+    start, finish = rows
+    assert list(finish) == SIBLING_USAGE_KEYS
+    assert start["phase"] == "start"
+    assert finish["phase"] == "finish"
+    assert start["run_id"] == finish["run_id"]
+    assert finish["model"] == antigravity_delegate.DEFAULT_MODEL
+    assert finish["prompt_chars"] > 0
+    assert finish["session_id"] == "conv_1"
+    assert finish["usage"] == {"total_tokens": 7, "input": 5}
+    assert finish["cost"] == 0.25
+    assert finish["error"] is None
+    assert datetime.fromisoformat(finish["ts"]).tzinfo is not None
 
 
 def test_failed_run_appends_a_row_carrying_the_error(monkeypatch, tmp_path):
@@ -670,9 +675,9 @@ def test_failed_run_appends_a_row_carrying_the_error(monkeypatch, tmp_path):
     assert _run_main(monkeypatch, ws, ({"text": "", "error": "boom"}, 2)) == 2
 
     rows = _usage_rows()
-    assert len(rows) == 1
-    assert rows[0]["error"] == "boom"
-    assert rows[0]["usage"] is None
+    assert len(rows) == 2
+    assert rows[1]["error"] == "boom"
+    assert rows[1]["usage"] is None
 
 
 def test_denied_run_appends_a_row_carrying_the_denial(monkeypatch, tmp_path):
@@ -682,8 +687,8 @@ def test_denied_run_appends_a_row_carrying_the_denial(monkeypatch, tmp_path):
     assert _run_main(monkeypatch, ws, result) == 5
 
     rows = _usage_rows()
-    assert len(rows) == 1
-    assert "denied permission for: command" in rows[0]["error"]
+    assert len(rows) == 2
+    assert "denied permission for: command" in rows[1]["error"]
 
 
 def test_unwritable_usage_log_does_not_raise_or_change_exit_code(monkeypatch, tmp_path):
@@ -694,3 +699,30 @@ def test_unwritable_usage_log_does_not_raise_or_change_exit_code(monkeypatch, tm
 
     assert _run_main(monkeypatch, ws, ({"text": "done", "error": None}, 0)) == 0
     assert _run_main(monkeypatch, ws, ({"text": "", "error": "boom"}, 2)) == 2
+
+
+def test_start_row_exists_before_the_worker_is_spawned(monkeypatch, tmp_path):
+    """The start row is on disk by the time the worker subprocess is spawned."""
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+
+    seen_at_spawn = {}
+
+    class Completed:
+        returncode = 0
+        stdout = '{"event":"result","result":{"status":"SUCCESS","response":"done"}}'
+        stderr = ""
+
+    def fake_popen(command, **kwargs):
+        seen_at_spawn["rows"] = _usage_rows()
+        return _as_popen(Completed)()
+
+    monkeypatch.setattr(antigravity_delegate.subprocess, "Popen", fake_popen)
+
+    assert antigravity_delegate.main(_wrapper_argv(ws)) == 0
+
+    assert seen_at_spawn["rows"]
+    start = seen_at_spawn["rows"][-1]
+    assert start["phase"] == "start"
+    finish = _usage_rows()[-1]
+    assert finish["phase"] == "finish"
+    assert finish["run_id"] == start["run_id"]

@@ -11,7 +11,7 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-10-20T14:44:16Z"
+generated_at = "2026-10-21T04:44:45Z"
 
 # --- ENGINE STATUS (v4.3.1) ---
 # .opencode/  -> first-class primary agent engine, now targeting OpenCode v2
@@ -184,6 +184,7 @@ paths = [
     "tools/test_kilo_executor_mode.py",
     "tools/test_kilo_server_manager.py",
     "tools/test_kilo_usage_report.py",
+    "tools/test_model_api.py",
     "tools/test_model_roles.py",
     "tools/test_opencode_delegate.py",
     "tools/test_prose_lint.py",

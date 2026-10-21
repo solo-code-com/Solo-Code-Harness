@@ -3,7 +3,12 @@
 import json
 import sqlite3
 
-from tools.failure_ledger import collect, main, sweep
+from tools.failure_ledger import (
+    _unpaired_summary,
+    collect,
+    main,
+    sweep,
+)
 
 SHARED_STATE_SCHEMA = """
 CREATE TABLE session_log (
@@ -337,3 +342,339 @@ def test_sweep_skips_worktree_duplicates(tmp_path, capsys):
     assert main(["--sweep", str(tmp_path)]) == 0
     out = capsys.readouterr().out
     assert "skipped 1 duplicate worktree install(s)" in out
+
+
+def _write_usage(root, worker, rows):
+    """Write one worker usage file with the given JSON rows."""
+    solocode = root / ".solocode"
+    solocode.mkdir(parents=True, exist_ok=True)
+    (solocode / f"{worker}-usage.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_unpaired_start_with_right_run_id(tmp_path):
+    """Two starts and one finish: the unpaired start reports its run_id."""
+    root = tmp_path / "repo"
+    _write_usage(
+        root,
+        "opencode",
+        [
+            {
+                "ts": "2026-10-21T02:00:00+00:00",
+                "model": "model/a",
+                "phase": "start",
+                "run_id": "run-1",
+            },
+            {
+                "ts": "2026-10-21T02:01:00+00:00",
+                "model": "model/a",
+                "phase": "finish",
+                "run_id": "run-1",
+            },
+            {
+                "ts": "2026-10-21T02:02:00+00:00",
+                "model": "model/b",
+                "phase": "start",
+                "run_id": "run-2",
+            },
+        ],
+    )
+
+    entry = collect(root)["unpaired"]["opencode"]
+    assert entry["unpaired_starts"] == 1
+    assert entry["unpaired_finishes"] == 0
+    assert entry["legacy"] == 0
+    assert entry["most_recent_start"]["run_id"] == "run-2"
+    assert entry["most_recent_start"]["model"] == "model/b"
+    assert entry["most_recent_start"]["timestamp"] == "2026-10-21T02:02:00+00:00"
+
+
+def test_finish_without_start_reported(tmp_path):
+    """A finish row with no matching start counts as an unpaired finish."""
+    root = tmp_path / "repo"
+    _write_usage(
+        root,
+        "opencode",
+        [
+            {
+                "ts": "2026-10-21T02:00:00+00:00",
+                "model": "model/a",
+                "phase": "finish",
+                "run_id": "orphan",
+            }
+        ],
+    )
+
+    entry = collect(root)["unpaired"]["opencode"]
+    assert entry["unpaired_starts"] == 0
+    assert entry["unpaired_finishes"] == 1
+    assert entry["most_recent_start"] is None
+    assert entry["legacy"] == 0
+
+
+def test_legacy_rows_never_unpaired(tmp_path):
+    """Rows with no phase key count as legacy and are never unpaired."""
+    root = tmp_path / "repo"
+    _write_usage(
+        root,
+        "opencode",
+        [
+            {"ts": "2026-10-20T01:00:00+00:00", "model": "old", "error": "x"},
+            {"ts": "2026-10-20T02:00:00+00:00", "model": "old", "error": None},
+            {
+                "ts": "2026-10-21T02:00:00+00:00",
+                "model": "model/a",
+                "phase": "start",
+                "run_id": "run-1",
+            },
+            {
+                "ts": "2026-10-21T02:01:00+00:00",
+                "model": "model/a",
+                "phase": "finish",
+                "run_id": "run-1",
+            },
+        ],
+    )
+
+    entry = collect(root)["unpaired"]["opencode"]
+    assert entry["legacy"] == 2
+    assert entry["unpaired_starts"] == 0
+    assert entry["unpaired_finishes"] == 0
+    assert entry["most_recent_start"] is None
+
+
+def test_clean_pairing_lists_file_with_zero_unpaired(tmp_path):
+    """A clean pairing reports zero unpaired but still lists the file."""
+    root = tmp_path / "repo"
+    _write_usage(
+        root,
+        "opencode",
+        [
+            {
+                "ts": "2026-10-21T02:00:00+00:00",
+                "model": "model/a",
+                "phase": "start",
+                "run_id": "run-1",
+            },
+            {
+                "ts": "2026-10-21T02:01:00+00:00",
+                "model": "model/a",
+                "phase": "finish",
+                "run_id": "run-1",
+            },
+            {
+                "ts": "2026-10-21T02:02:00+00:00",
+                "model": "model/b",
+                "phase": "start",
+                "run_id": "run-2",
+            },
+            {
+                "ts": "2026-10-21T02:03:00+00:00",
+                "model": "model/b",
+                "phase": "finish",
+                "run_id": "run-2",
+            },
+        ],
+    )
+
+    report = collect(root)
+    assert "opencode" in report["unpaired"]
+    entry = report["unpaired"]["opencode"]
+    assert entry["unpaired_starts"] == 0
+    assert entry["unpaired_finishes"] == 0
+    assert entry["legacy"] == 0
+    assert entry["most_recent_start"] is None
+
+
+def test_json_unpaired_matches_report(tmp_path, capsys):
+    """The JSON output carries the same unpaired numbers as the human report."""
+    root = tmp_path / "repo"
+    _write_usage(
+        root,
+        "opencode",
+        [
+            {
+                "ts": "2026-10-21T02:00:00+00:00",
+                "model": "model/a",
+                "phase": "start",
+                "run_id": "run-1",
+            },
+            {
+                "ts": "2026-10-21T02:01:00+00:00",
+                "model": "model/a",
+                "phase": "finish",
+                "run_id": "run-1",
+            },
+            {
+                "ts": "2026-10-21T02:02:00+00:00",
+                "model": "model/b",
+                "phase": "start",
+                "run_id": "run-2",
+            },
+            {"ts": "2026-10-20T01:00:00+00:00", "model": "old", "error": "x"},
+        ],
+    )
+
+    assert main([str(root), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    entry = payload["unpaired"]["opencode"]
+    assert entry["unpaired_starts"] == 1
+    assert entry["unpaired_finishes"] == 0
+    assert entry["legacy"] == 1
+    assert entry["most_recent_start"]["run_id"] == "run-2"
+
+    assert main([str(root)]) == 0
+    out = capsys.readouterr().out
+    assert "Unpaired: 1 usage file(s)" in out
+    assert "run-2" in out
+    assert "legacy" in out
+
+
+def test_crash_after_spawn_leaves_one_unpaired_start(tmp_path):
+    """A start row with no finish is the ledger's marker of a lost run."""
+    root = tmp_path / "repo"
+    _write_usage(
+        root,
+        "opencode",
+        [
+            {
+                "ts": "2026-10-21T02:00:00+00:00",
+                "model": "model/a",
+                "phase": "start",
+                "run_id": "run-1",
+            },
+        ],
+    )
+
+    entry = collect(root)["unpaired"]["opencode"]
+    assert entry["unpaired_starts"] == 1
+    assert entry["unpaired_finishes"] == 0
+    assert entry["legacy"] == 0
+    assert entry["most_recent_start"]["run_id"] == "run-1"
+
+
+def test_two_starts_one_finish_same_run_id_leaves_one_unpaired(tmp_path):
+    """A reused run_id with two starts and one finish hides exactly one lost run."""
+    root = tmp_path / "repo"
+    _write_usage(
+        root,
+        "opencode",
+        [
+            {
+                "ts": "2026-10-21T02:00:00+00:00",
+                "model": "model/a",
+                "phase": "start",
+                "run_id": "run-1",
+            },
+            {
+                "ts": "2026-10-21T02:01:00+00:00",
+                "model": "model/a",
+                "phase": "start",
+                "run_id": "run-1",
+            },
+            {
+                "ts": "2026-10-21T02:02:00+00:00",
+                "model": "model/a",
+                "phase": "finish",
+                "run_id": "run-1",
+            },
+        ],
+    )
+
+    entry = collect(root)["unpaired"]["opencode"]
+    assert entry["unpaired_starts"] == 1
+    assert entry["unpaired_finishes"] == 0
+    assert entry["legacy"] == 0
+
+
+def test_start_rows_do_not_change_outcome_counts(tmp_path):
+    """A start row adds no worker total, error, cost or unmetered row."""
+    root = tmp_path / "repo"
+    finish = {
+        "ts": "2026-10-21T03:00:00+00:00",
+        "model": "model/a",
+        "phase": "finish",
+        "run_id": "run-1",
+        "usage": {"total_tokens": 10},
+        "cost": 0.002,
+        "error": "boom",
+    }
+    start = {
+        "ts": "2026-10-21T02:59:00+00:00",
+        "model": "model/a",
+        "phase": "start",
+        "run_id": "run-1",
+    }
+
+    _write_usage(root, "opencode", [finish])
+    base = collect(root)
+
+    _write_usage(root, "opencode", [start, finish])
+    with_start = collect(root)
+
+    assert base["workers"]["opencode"]["total"] == 1
+    assert base["workers"]["opencode"]["errors"] == 1
+    assert base["cost"]["metered_rows"] == 1
+    assert base["cost"]["unmetered_rows"] == 0
+    assert base["failures"]["total"] == 1
+
+    assert with_start["workers"] == base["workers"]
+    assert with_start["cost"] == base["cost"]
+    assert with_start["failures"]["total"] == base["failures"]["total"]
+
+
+def test_unpairable_run_ids_count_as_legacy_without_raising():
+    """An empty or non-string run_id is legacy; only a non-empty str can pair."""
+    rows = [
+        {
+            "ts": "2026-10-21T04:00:00+00:00",
+            "model": "model/ok",
+            "phase": "start",
+            "run_id": "ok",
+        },
+        {
+            "ts": "2026-10-21T04:01:00+00:00",
+            "model": "model/ok",
+            "phase": "finish",
+            "run_id": "ok",
+        },
+        {
+            "ts": "2026-10-21T04:02:00+00:00",
+            "model": "model/empty",
+            "phase": "start",
+            "run_id": "",
+        },
+        {
+            "ts": "2026-10-21T04:03:00+00:00",
+            "model": "model/list",
+            "phase": "start",
+            "run_id": ["a"],
+        },
+        {
+            "ts": "2026-10-21T04:04:00+00:00",
+            "model": "model/int",
+            "phase": "start",
+            "run_id": 7,
+        },
+        {
+            "ts": "2026-10-21T04:05:00+00:00",
+            "model": "model/none",
+            "phase": "start",
+            "run_id": None,
+        },
+        {
+            "ts": "2026-10-21T04:06:00+00:00",
+            "model": "model/upper",
+            "phase": "START",
+            "run_id": "ok",
+        },
+    ]
+
+    entry = _unpaired_summary(rows)
+
+    assert entry["unpaired_starts"] == 0
+    assert entry["unpaired_finishes"] == 0
+    assert entry["legacy"] == 5
+    assert entry["most_recent_start"] is None

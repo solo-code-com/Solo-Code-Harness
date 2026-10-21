@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -374,11 +375,35 @@ def run_agy_cli(
     return parsed, process.returncode
 
 
+def log_start(model: str, prompt_len: int, run_id: str) -> None:
+    """Append a phase:start row so a lost run is distinguishable from a never-run one.
+
+    The start row pairs with the finish row log_usage writes: they share run_id, so a
+    wrapper that dies mid-run leaves a start without a finish, which the ledger reads
+    as a lost run rather than silence.
+    """
+    entry: dict[str, Any] = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "model": model,
+        "prompt_chars": prompt_len,
+        "elapsed_s": 0,
+        "phase": "start",
+        "run_id": run_id,
+    }
+    try:
+        USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with USAGE_LOG.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass  # usage logging must never break a run
+
+
 def log_usage(
     model: str,
     prompt_len: int,
     elapsed: float,
     result: dict[str, Any],
+    run_id: str,
 ) -> None:
     """Append one row to .solocode/antigravity-usage.jsonl for auditing.
 
@@ -401,6 +426,8 @@ def log_usage(
         "usage": result.get("usage"),
         "cost": result.get("cost"),
         "error": error,
+        "phase": "finish",
+        "run_id": run_id,
     }
     try:
         USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -515,6 +542,8 @@ def main(argv: list[str] | None = None) -> int:
                 _stderr(f"write scope is already locked: {allowed_relative}")
                 return 3
 
+        run_id = uuid.uuid4().hex
+        log_start(args.model, len(prompt), run_id)
         result, exit_code = run_agy_cli(
             prompt=prompt,
             model=args.model,
@@ -525,7 +554,7 @@ def main(argv: list[str] | None = None) -> int:
             conversation=args.conversation,
             continue_latest=args.continue_latest,
         )
-        log_usage(args.model, len(prompt), time.monotonic() - started, result)
+        log_usage(args.model, len(prompt), time.monotonic() - started, result, run_id)
         if result.get("conversation_id"):
             _stderr(
                 f"conversation={result['conversation_id']} (resume with --conversation)"

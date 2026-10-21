@@ -38,6 +38,7 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -367,25 +368,55 @@ def run_opencode_cli(
     return parse_json_events(stdout)
 
 
+def log_start(model: str, prompt_len: int, run_id: str) -> None:
+    """Append a phase:start row so a lost run is distinguishable from a never-run one.
+
+    The start row pairs with the finish row log_usage writes: they share run_id, so a
+    wrapper that dies mid-run leaves a start without a finish, which the ledger reads
+    as a lost run rather than silence.
+    """
+    try:
+        USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        entry: dict[str, Any] = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "model": model,
+            "prompt_chars": prompt_len,
+            "elapsed_s": 0,
+            "phase": "start",
+            "run_id": run_id,
+        }
+        with USAGE_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass  # usage logging must never break a run
+
+
 def log_usage(
     model: str,
     prompt_len: int,
     elapsed: float,
     result: dict[str, Any],
+    run_id: str,
 ) -> None:
     """Log delegation call to .solocode/opencode-usage.jsonl for auditing."""
-    entry: dict[str, Any] = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "model": model,
-        "prompt_chars": prompt_len,
-        "elapsed_s": round(elapsed, 2),
-        "session_id": result.get("session_id"),
-        "usage": result.get("tokens"),
-        "cost": result.get("cost"),
-        "error": result.get("error"),
-    }
-    with USAGE_LOG.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry) + "\n")
+    try:
+        USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        entry: dict[str, Any] = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "model": model,
+            "prompt_chars": prompt_len,
+            "elapsed_s": round(elapsed, 2),
+            "session_id": result.get("session_id"),
+            "usage": result.get("tokens"),
+            "cost": result.get("cost"),
+            "error": result.get("error"),
+            "phase": "finish",
+            "run_id": run_id,
+        }
+        with USAGE_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass  # usage logging must never break a run
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -467,6 +498,8 @@ def main(argv: list[str] | None = None) -> int:
     _stderr(f"model={model}")
 
     # ── Run opencode CLI → parse events → log ──
+    run_id = uuid.uuid4().hex
+    log_start(model or f"agent:{args.agent}", len(prompt), run_id)
     start = time.monotonic()
     result = run_opencode_cli(
         prompt=prompt,
@@ -479,7 +512,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     elapsed = time.monotonic() - start
 
-    log_usage(model or f"agent:{args.agent}", len(prompt), elapsed, result)
+    log_usage(model or f"agent:{args.agent}", len(prompt), elapsed, result, run_id)
 
     # ── Output ──
     if result.get("error"):

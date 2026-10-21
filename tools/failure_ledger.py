@@ -225,6 +225,85 @@ def _usage_failure_reason(row: dict[str, Any]) -> str | None:
     return None
 
 
+def _is_start_row(row: dict[str, Any]) -> bool:
+    """True for a phase:start row, which records a launch, not an outcome."""
+    return row.get("phase") == "start"
+
+
+def _start_sort_key(row: dict[str, Any]) -> tuple[bool, datetime]:
+    """Order start rows oldest first; unparsable timestamps sort first."""
+    parsed = _parse_iso(row.get("ts"))
+    return (parsed is not None, parsed or datetime.min.replace(tzinfo=timezone.utc))
+
+
+def _unpaired_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize unpaired start/finish rows and legacy rows for one usage file.
+
+    Pairing is by count: for one run_id, unpaired starts are max(0, starts -
+    finishes) and unpaired finishes are max(0, finishes - starts). A finish proves
+    a run completed, so the most recent excess starts are the ones left without a
+    finish. Rows that cannot participate in pairing -- an unknown phase, or a
+    run_id that is absent, empty, or not a string -- count as legacy, never
+    unpaired.
+    """
+    starts: dict[str, list[dict[str, Any]]] = {}
+    finishes: dict[str, list[dict[str, Any]]] = {}
+    legacy = 0
+    for row in rows:
+        phase = row.get("phase")
+        run_id = row.get("run_id")
+        if (
+            phase not in ("start", "finish")
+            or not isinstance(run_id, str)
+            or not run_id
+        ):
+            legacy += 1
+            continue
+        if phase == "start":
+            starts.setdefault(run_id, []).append(row)
+        else:
+            finishes.setdefault(run_id, []).append(row)
+
+    unpaired_start_rows: list[dict[str, Any]] = []
+    for run_id, group in starts.items():
+        excess = len(group) - len(finishes.get(run_id, []))
+        if excess > 0:
+            # Pair finishes with the earliest starts (FIFO); the most recent
+            # excess starts are the ones left without a finish.
+            ordered = sorted(group, key=_start_sort_key)
+            unpaired_start_rows.extend(ordered[-excess:])
+
+    unpaired_finishes = sum(
+        max(0, len(group) - len(starts.get(run_id, [])))
+        for run_id, group in finishes.items()
+    )
+
+    most_recent: dict[str, Any] | None = None
+    most_recent_stamp: datetime | None = None
+    for row in unpaired_start_rows:
+        parsed = _parse_iso(row.get("ts"))
+        if parsed is None:
+            continue
+        if most_recent_stamp is None or parsed > most_recent_stamp:
+            most_recent_stamp = parsed
+            most_recent = row
+
+    return {
+        "unpaired_starts": len(unpaired_start_rows),
+        "unpaired_finishes": unpaired_finishes,
+        "most_recent_start": (
+            {
+                "timestamp": most_recent.get("ts"),
+                "model": most_recent.get("model"),
+                "run_id": most_recent.get("run_id"),
+            }
+            if most_recent is not None
+            else None
+        ),
+        "legacy": legacy,
+    }
+
+
 def _verification_error(value: Any) -> str | None:
     """Return the verification object's error, when it carries one."""
     if not value:
@@ -362,10 +441,17 @@ def collect(root: Path) -> dict[str, Any]:
             }
         )
 
+    # Start rows record a launch, not an outcome: only finish rows (and legacy
+    # rows, which predate pairing) feed the failure, cost, worker and unmetered
+    # totals below. Otherwise every invocation's start+finish pair doubles them.
+    outcome_rows = [
+        (worker, row) for worker, row in usage_rows if not _is_start_row(row)
+    ]
+
     cost_by_model: dict[str, float] = {}
     metered_rows = 0
     unmetered_rows = 0
-    for worker, row in usage_rows:
+    for worker, row in outcome_rows:
         reason = _usage_failure_reason(row)
         if reason is not None:
             failures.append(
@@ -391,7 +477,7 @@ def collect(root: Path) -> dict[str, Any]:
         _worker_name(path): {"total": 0, "errors": 0, "last": None}
         for path in _usage_files(root)
     }
-    for worker, row in usage_rows:
+    for worker, row in outcome_rows:
         entry = workers.setdefault(worker, {"total": 0, "errors": 0, "last": None})
         entry["total"] += 1
         if _usage_failure_reason(row) is not None:
@@ -399,6 +485,17 @@ def collect(root: Path) -> dict[str, Any]:
         stamp = _parse_iso(row.get("ts"))
         if stamp is not None and (entry["last"] is None or stamp > entry["last"]):
             entry["last"] = stamp
+
+    # A start without a finish means the wrapper died mid-run or its write was
+    # lost; a finish without a start means the start row itself was lost. Rows
+    # with no phase key predate pairing and count as legacy, never unpaired.
+    usage_by_worker: dict[str, list[dict[str, Any]]] = {}
+    for worker, row in usage_rows:
+        usage_by_worker.setdefault(worker, []).append(row)
+    unpaired: dict[str, dict[str, Any]] = {}
+    for path in _usage_files(root):
+        name = _worker_name(path)
+        unpaired[name] = _unpaired_summary(usage_by_worker.get(name, []))
 
     recent = sorted(failures, key=_failure_sort_key, reverse=True)[
         :RECENT_FAILURE_LIMIT
@@ -448,6 +545,7 @@ def collect(root: Path) -> dict[str, Any]:
             }
             for name, entry in sorted(workers.items())
         },
+        "unpaired": dict(sorted(unpaired.items())),
         "notes": notes,
     }
 
@@ -458,6 +556,7 @@ def print_report(report: dict[str, Any]) -> None:
     failures = report["failures"]
     cost = report["cost"]
     workers = report["workers"]
+    unpaired = report["unpaired"]
 
     print(f"Failure Ledger — {report['root']}")
     print()
@@ -511,6 +610,26 @@ def print_report(report: dict[str, Any]) -> None:
             print(
                 f"  {name:<18}  rows {entry['total']:>5}  "
                 f"errors {entry['errors']:>4}  last {_short_stamp(entry['last'])}"
+            )
+    else:
+        print("  no usage file found")
+
+    print()
+    print(f"Unpaired: {len(unpaired)} usage file(s)")
+    if unpaired:
+        for name, entry in unpaired.items():
+            recent = entry["most_recent_start"]
+            if recent:
+                suffix = (
+                    f"  last start {_short_stamp(recent['timestamp'])} "
+                    f"{str(recent['model'] or '-')}  run_id {recent['run_id']}"
+                )
+            else:
+                suffix = ""
+            print(
+                f"  {name:<18}  starts {entry['unpaired_starts']:>4}  "
+                f"finishes {entry['unpaired_finishes']:>4}  "
+                f"legacy {entry['legacy']:>4}{suffix}"
             )
     else:
         print("  no usage file found")

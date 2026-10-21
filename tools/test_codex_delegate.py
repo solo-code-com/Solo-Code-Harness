@@ -374,6 +374,7 @@ def test_main_full_run_with_mocked_plan(monkeypatch, capsys):
         mod, "change_summary", lambda root=None: {"status": " M x", "diffstat": ""}
     )
     monkeypatch.setattr(mod, "log_usage", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod, "log_start", lambda *_a, **_k: None)
     assert mod.main(["do x", "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["output"] == "the answer"
@@ -404,6 +405,7 @@ def _drive_main_to_print(monkeypatch, stream, argv, output):
         mod, "change_summary", lambda root=None: {"status": "", "diffstat": ""}
     )
     monkeypatch.setattr(mod, "log_usage", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod, "log_start", lambda *_a, **_k: None)
     monkeypatch.setattr(mod.sys, "stdout", stream)
     return mod.main(argv)
 
@@ -431,3 +433,68 @@ def test_main_json_print_survives_a_cp1252_console(monkeypatch):
     stream.flush()
     payload = json.loads(raw.getvalue().decode("utf-8"))
     assert payload["output"] == "answer \u2192 done"
+
+
+def _usage_rows(path: Path) -> list[dict]:
+    if not path.is_file():
+        return []
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def test_start_row_exists_before_the_worker_is_spawned(monkeypatch, tmp_path):
+    """The start row is on disk by the time the worker subprocess is spawned."""
+    mod = _load()
+    log = tmp_path / "codex-usage.jsonl"
+    launcher = tmp_path / "codex-env.ps1"
+    launcher.write_text("", encoding="utf-8")
+    monkeypatch.setattr(mod.sys, "platform", "win32")
+    monkeypatch.setattr(mod, "ROOT", tmp_path)
+    monkeypatch.setattr(mod, "LAUNCHER", launcher)
+    monkeypatch.setattr(mod, "USAGE_LOG", log)
+    monkeypatch.setattr(mod, "_find_powershell", lambda: "ps")
+
+    seen_at_spawn = {}
+
+    def fake_popen(argv, **kwargs):
+        seen_at_spawn["rows"] = _usage_rows(log)
+        return _FakePopen(stdout="the answer")
+
+    monkeypatch.setattr(mod.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(
+        mod, "change_summary", lambda root=None: {"status": "", "diffstat": ""}
+    )
+
+    assert mod.main(["do x", "--json"]) == 0
+
+    assert seen_at_spawn["rows"]
+    start = seen_at_spawn["rows"][-1]
+    assert start["phase"] == "start"
+    finish = _usage_rows(log)[-1]
+    assert finish["phase"] == "finish"
+    assert finish["run_id"] == start["run_id"]
+
+
+def test_unwritable_usage_log_does_not_break_the_run(monkeypatch, tmp_path):
+    """A start write that raises OSError must not crash the wrapper."""
+    mod = _load()
+    launcher = tmp_path / "codex-env.ps1"
+    launcher.write_text("", encoding="utf-8")
+    blocked = tmp_path / "usage-log-is-a-directory"
+    blocked.mkdir()
+    monkeypatch.setattr(mod.sys, "platform", "win32")
+    monkeypatch.setattr(mod, "ROOT", tmp_path)
+    monkeypatch.setattr(mod, "LAUNCHER", launcher)
+    monkeypatch.setattr(mod, "USAGE_LOG", blocked)
+    monkeypatch.setattr(mod, "_find_powershell", lambda: "ps")
+    monkeypatch.setattr(
+        mod, "run_plan", lambda _argv, _out, _t, **_kw: (0, "the answer")
+    )
+    monkeypatch.setattr(
+        mod, "change_summary", lambda root=None: {"status": "", "diffstat": ""}
+    )
+
+    assert mod.main(["do x", "--json"]) == 0
