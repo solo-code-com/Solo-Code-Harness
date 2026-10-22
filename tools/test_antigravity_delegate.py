@@ -726,3 +726,38 @@ def test_start_row_exists_before_the_worker_is_spawned(monkeypatch, tmp_path):
     finish = _usage_rows()[-1]
     assert finish["phase"] == "finish"
     assert finish["run_id"] == start["run_id"]
+
+
+def _allow_tools_argv(ws: Path) -> list[str]:
+    return ["task", "--target-dir", str(ws), "--allow-tools"]
+
+
+def test_main_allow_tools_fails_when_the_workspace_changes(
+    monkeypatch, tmp_path, capsys
+):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+
+    def fake_run(**kwargs):
+        (kwargs["target_dir"] / "docs" / "edited.md").write_text(
+            "changed", encoding="utf-8"
+        )
+        return {"text": "done", "error": None}, 0
+
+    monkeypatch.setattr(antigravity_delegate, "run_agy_cli", fake_run)
+
+    assert antigravity_delegate.main(_allow_tools_argv(ws)) == 4
+    assert (
+        "read-only violation; --allow-tools changed: docs/edited.md"
+        in capsys.readouterr().err
+    )
+
+
+def test_main_allow_tools_passes_when_nothing_changes(monkeypatch, tmp_path):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "run_agy_cli",
+        lambda **kwargs: ({"text": "done", "error": None}, 0),
+    )
+
+    assert antigravity_delegate.main(_allow_tools_argv(ws)) == 0

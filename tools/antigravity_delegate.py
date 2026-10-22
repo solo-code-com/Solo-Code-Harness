@@ -2,7 +2,9 @@
 """Run Google Antigravity's headless worker behind harness guardrails.
 
 The caller remains responsible for reviewing the diff and running verification.
-Writes require both ``--auto-approve`` and an explicit ``--allow-dir`` scope.
+Writes require both ``--auto-approve`` and an explicit ``--allow-dir`` scope. With
+``--allow-tools`` any workspace change is detected after the run and fails with
+exit 4.
 """
 
 from __future__ import annotations
@@ -461,7 +463,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--allow-tools",
         action="store_true",
-        help="Auto-approve read/execute tool use without granting a write scope",
+        help=(
+            "Auto-approve read/execute tools; writes need --auto-approve plus "
+            "--allow-dir, and any change fails with exit 4"
+        ),
     )
     parser.add_argument(
         "--no-guardrail",
@@ -524,7 +529,9 @@ def main(argv: list[str] | None = None) -> int:
         guardrail=not args.no_guardrail,
         allow_tools=args.allow_tools,
     )
-    before = snapshot_workspace(target_dir) if args.auto_approve else {}
+    before = (
+        snapshot_workspace(target_dir) if args.auto_approve or args.allow_tools else {}
+    )
     session_id = f"antigravity-{os.getpid()}-{time.monotonic_ns()}"
     locked = False
     started = time.monotonic()
@@ -568,6 +575,13 @@ def main(argv: list[str] | None = None) -> int:
                 _stderr(
                     "scope violation; changed outside --allow-dir: "
                     + ", ".join(outside)
+                )
+                return 4
+        elif args.allow_tools:
+            changed = changed_workspace_paths(before, snapshot_workspace(target_dir))
+            if changed:
+                _stderr(
+                    "read-only violation; --allow-tools changed: " + ", ".join(changed)
                 )
                 return 4
         if result.get("denied_actions"):
