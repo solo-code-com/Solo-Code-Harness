@@ -320,7 +320,7 @@ def collect_test_counts() -> dict[str, int]:
     try:
         proc = subprocess.run(
             [
-                "python",
+                sys.executable,
                 "-m",
                 "pytest",
                 "tools/",
