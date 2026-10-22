@@ -229,7 +229,12 @@ def test_update_does_not_write_exempt_file_into_budget(monkeypatch, capsys):
     new number never replaces it.
     """
     saved: dict[str, float] = {}
-    monkeypatch.setattr(coverage_gate, "save_budget", lambda data: saved.update(data))
+    monkeypatch.setattr(
+        coverage_gate, "save_budget", lambda data, *a, **k: saved.update(data)
+    )
+    monkeypatch.setattr(
+        coverage_gate, "collect_test_counts", lambda: {"tools/test_a.py": 2}
+    )
     monkeypatch.setattr(coverage_gate, "load_budget", lambda: {})
     monkeypatch.setattr(
         coverage_gate,
@@ -276,7 +281,12 @@ def test_check_ratchet_flags_exempt_file_that_did_not_run():
 def test_update_drops_exempt_entry_when_file_did_not_run(monkeypatch):
     """--update must not carry an exempt baseline for a file missing from the run."""
     saved: dict[str, float] = {}
-    monkeypatch.setattr(coverage_gate, "save_budget", lambda data: saved.update(data))
+    monkeypatch.setattr(
+        coverage_gate, "save_budget", lambda data, *a, **k: saved.update(data)
+    )
+    monkeypatch.setattr(
+        coverage_gate, "collect_test_counts", lambda: {"tools/test_a.py": 2}
+    )
     monkeypatch.setattr(
         coverage_gate,
         "load_budget",
@@ -294,7 +304,12 @@ def test_update_drops_exempt_entry_when_file_did_not_run(monkeypatch):
 def test_update_keeps_exempt_entry_when_file_ran(monkeypatch):
     """A pre-existing exempt entry survives only while its file is present."""
     saved: dict[str, float] = {}
-    monkeypatch.setattr(coverage_gate, "save_budget", lambda data: saved.update(data))
+    monkeypatch.setattr(
+        coverage_gate, "save_budget", lambda data, *a, **k: saved.update(data)
+    )
+    monkeypatch.setattr(
+        coverage_gate, "collect_test_counts", lambda: {"tools/test_a.py": 2}
+    )
     monkeypatch.setattr(
         coverage_gate,
         "load_budget",
@@ -405,9 +420,14 @@ def test_update_writes_only_the_current_platform_section(tmp_path, monkeypatch):
 
     monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
     monkeypatch.setattr(
-        coverage_gate, "save_budget", lambda data, *a, **k: real_save(data, bfile)
+        coverage_gate,
+        "save_budget",
+        lambda data, *a, **k: real_save(data, bfile, **k),
     )
     monkeypatch.setattr(coverage_gate, "run_coverage", lambda: {"tools/a.py": 88.0})
+    monkeypatch.setattr(
+        coverage_gate, "collect_test_counts", lambda: {"tools/test_a.py": 3}
+    )
     monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--update"])
 
     assert coverage_gate.main() == 0
@@ -416,7 +436,8 @@ def test_update_writes_only_the_current_platform_section(tmp_path, monkeypatch):
         "platforms": {
             other: before["platforms"][other],
             sys.platform: {"tools/a.py": 88.0},
-        }
+        },
+        "test_counts": {sys.platform: {"tools/test_a.py": 3}},
     }
     assert bfile.read_text(encoding="utf-8") == (
         json.dumps(expected, indent=2, sort_keys=True) + "\n"
@@ -444,6 +465,8 @@ def test_capture_emits_one_baseline_chunk_when_platform_is_missing(
         "run_coverage",
         lambda: {"tools/a.py": 61.0, "tools/test_e2e.py": 88.0},
     )
+    # No counts on the fake platform: keep the emitted lines coverage-only.
+    monkeypatch.setattr(coverage_gate, "collect_test_counts", lambda: {})
     monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--capture"])
 
     assert coverage_gate.main() == 0
@@ -464,6 +487,7 @@ def _run_capture(tmp_path, monkeypatch, capsys, measured):
 
     monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
     monkeypatch.setattr(coverage_gate, "run_coverage", lambda: dict(measured))
+    monkeypatch.setattr(coverage_gate, "collect_test_counts", lambda: {})
     monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--capture"])
 
     assert coverage_gate.main() == 0
@@ -512,16 +536,30 @@ def test_capture_prints_nothing_when_platform_has_a_baseline(
     """Nothing to hand back: the platform already has a section, so stay quiet."""
     bfile = tmp_path / "budget.json"
     bfile.write_text(
-        json.dumps({"platforms": {sys.platform: {"tools/a.py": 90.0}}}),
+        json.dumps(
+            {
+                "platforms": {sys.platform: {"tools/a.py": 90.0}},
+                "test_counts": {sys.platform: {"tools/test_a.py": 4}},
+            }
+        ),
         encoding="utf-8",
     )
     real_load = coverage_gate.load_budget
+    real_load_counts = coverage_gate.load_test_counts
 
     monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(
+        coverage_gate, "load_test_counts", lambda *a, **k: real_load_counts(bfile)
+    )
     monkeypatch.setattr(
         coverage_gate,
         "run_coverage",
         lambda: pytest.fail("a platform with a baseline must not run coverage"),
+    )
+    monkeypatch.setattr(
+        coverage_gate,
+        "collect_test_counts",
+        lambda: pytest.fail("a platform with counts must not collect tests"),
     )
     monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--capture"])
 
@@ -708,3 +746,91 @@ def test_empty_platform_section_fails_instead_of_enforcing_nothing(
     out = capsys.readouterr().out
     assert f"[FAIL] the baseline for {sys.platform} is empty" in out
     assert "run --update on this platform" in out
+
+
+def test_collect_test_counts_parses_pytest_collect_only_output(monkeypatch):
+    """One `path::test_name` line per collected test, keyed by the part before `::`.
+
+    The trailing "N tests collected" summary has no `::`, so it must not appear as a
+    file key - that was the only subtlety in parsing the -q output.
+    """
+    sample = (
+        "tools/test_alpha.py::test_one\n"
+        "tools/test_alpha.py::test_two\n"
+        "tools/test_beta.py::test_three\n"
+        "\n"
+        "3 tests collected in 0.04s\n"
+    )
+
+    class _Proc:
+        returncode = 0
+        stdout = sample
+        stderr = ""
+
+    monkeypatch.setattr(coverage_gate.subprocess, "run", lambda *a, **k: _Proc())
+
+    assert coverage_gate.collect_test_counts() == {
+        "tools/test_alpha.py": 2,
+        "tools/test_beta.py": 1,
+    }
+
+
+def test_check_test_counts_flags_deleted_tests_naming_both_numbers():
+    """12 recorded, 9 collected: the count ratchet fails and names both numbers."""
+    passed, violations = coverage_gate.check_test_counts(
+        {"tools/test_x.py": 12}, {"tools/test_x.py": 9}
+    )
+
+    assert passed is False
+    assert len(violations) == 1
+    assert (
+        "tools/test_x.py: 12 collected tests -> 9 (-3) - tests were deleted"
+        in violations[0]
+    )
+
+
+def test_check_test_counts_accepts_the_same_count():
+    """12 with 12 is the normal, unchanged case."""
+    passed, violations = coverage_gate.check_test_counts(
+        {"tools/test_x.py": 12}, {"tools/test_x.py": 12}
+    )
+
+    assert passed is True
+    assert violations == []
+
+
+def test_check_test_counts_accepts_more_tests():
+    """12 with 15 is adding tests, which is never a regression."""
+    passed, violations = coverage_gate.check_test_counts(
+        {"tools/test_x.py": 12}, {"tools/test_x.py": 15}
+    )
+
+    assert passed is True
+    assert violations == []
+
+
+def test_check_test_counts_flags_a_recorded_file_that_collects_nothing():
+    """A budgeted test file that now collects zero tests had its bodies deleted."""
+    passed, violations = coverage_gate.check_test_counts({"tools/test_x.py": 12}, {})
+
+    assert passed is False
+    assert len(violations) == 1
+    assert (
+        "tools/test_x.py: 12 collected tests -> 0 (-12) - tests were deleted"
+        in violations[0]
+    )
+
+
+def test_check_test_counts_notes_an_unconfigured_platform_without_failing():
+    """No test_counts section is a documented note; coverage stays enforced."""
+    notes: list[str] = []
+
+    passed, violations = coverage_gate.check_test_counts(
+        None, {"tools/test_x.py": 12}, notes
+    )
+
+    assert passed is True
+    assert violations == []
+    assert len(notes) == 1
+    assert "[NOTE] test-count enforcement is not configured" in notes[0]
+    assert "--update" in notes[0]

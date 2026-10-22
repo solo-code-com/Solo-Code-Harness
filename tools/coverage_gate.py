@@ -15,6 +15,11 @@ Budget lives in `tools/config/coverage-budget.json` with format:
       "path/to/file.py": 85.5,
       "another/file.py": 100.0
     }
+  },
+  "test_counts": {
+    "win32": {
+      "tools/test_x.py": 12
+    }
   }
 }
 
@@ -32,6 +37,12 @@ percentage measures how much of the test code this platform ran (a POSIX-only te
 skips on Windows), not how much production code the suite exercises. Their
 presence is still required: a budgeted test file missing from the run means its
 tests were deleted, renamed or failed to collect.
+
+`test_counts` closes the last gap in that rule. A test file whose test bodies were
+emptied still collects and still appears in the run, so its presence proves
+nothing, and its percentage is not compared. Each platform records how many tests
+every test file collected there; a file that collects fewer fails, and --capture
+emits those baselines as `TEST_COUNTS` chunks.
 
 Usage:
     python tools/coverage_gate.py             # enforce this platform's budget
@@ -122,34 +133,86 @@ def load_budget(budget_file: Path = BUDGET_FILE) -> dict[str, dict[str, float]]:
         raise ValueError(f"Malformed budget file: {exc}") from exc
 
 
+def load_test_counts(
+    budget_file: Path = BUDGET_FILE,
+) -> dict[str, dict[str, int]]:
+    """Read the collected-test baselines, one section per platform.
+
+    Returns empty dict when the file is absent or has no `test_counts` section,
+    which means no platform has a count baseline yet. Raises on malformed JSON or a
+    section that is not `{platform: {path: int}}`.
+
+    Kept separate from load_budget() so the coverage ratchet keeps reading exactly
+    the shape it was written against: `test_counts` is a sibling of `platforms`,
+    not a field inside it.
+    """
+    if not budget_file.exists():
+        return {}
+
+    try:
+        payload = json.loads(budget_file.read_text(encoding="utf-8"))
+        sections = payload.get("test_counts", {})
+
+        if not isinstance(sections, dict):
+            raise ValueError("budget must contain a 'test_counts' dict")
+
+        for platform, counts in sections.items():
+            if not isinstance(counts, dict):
+                raise ValueError(
+                    f"test_counts for {platform} must map to a 'file: count' dict"
+                )
+            for path, count in counts.items():
+                # bool is an int subclass, so True would pass as a count of 1.
+                if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                    raise ValueError(
+                        f"Invalid test count for {platform}:{path}: {count} "
+                        "(must be a non-negative integer)"
+                    )
+
+        return sections
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ValueError(f"Malformed budget file: {exc}") from exc
+
+
 def save_budget(
     coverage_data: dict[str, float],
     budget_file: Path = BUDGET_FILE,
     platform: str | None = None,
+    test_counts: dict[str, int] | None = None,
 ) -> None:
     """Save one platform's coverage budget, leaving the other sections as they are.
 
     Only `platform` (the running one by default) is replaced: a baseline measured
     on another platform cannot be reproduced here, so rewriting it would lower or
     raise a number this run has no evidence for.
+
+    `test_counts`, when given, replaces this platform's collected-test section the
+    same way. None preserves whatever the file already holds, so a caller that only
+    measured coverage cannot drop the counts.
     """
     platform = platform or sys.platform
     budget_file.parent.mkdir(parents=True, exist_ok=True)
 
     platforms: dict[str, dict[str, float]] = {}
+    counts: dict[str, dict[str, int]] = {}
     if budget_file.exists():
         # A malformed budget cannot be re-read, so the other platforms' sections are
         # unrecoverable from it. Refuse instead of rewriting from an empty dict: that
         # silently dropped every sibling section the file still held.
         try:
             platforms = load_budget(budget_file)
+            counts = load_test_counts(budget_file)
         except (OSError, ValueError) as exc:
             raise ValueError(
                 f"cannot update {budget_file}: {exc} - refusing to overwrite it"
             ) from exc
     platforms[platform] = dict(sorted(coverage_data.items()))
+    if test_counts is not None:
+        counts[platform] = dict(sorted(test_counts.items()))
 
-    payload = {"platforms": platforms}
+    payload: dict[str, object] = {"platforms": platforms}
+    if counts:
+        payload["test_counts"] = counts
 
     # newline="\n": on Windows the default translation writes CRLF, which
     # contradicts .gitattributes (`* text=auto eol=lf`) and leaves the file
@@ -245,6 +308,53 @@ def run_coverage() -> dict[str, float]:
     return files_coverage
 
 
+def collect_test_counts() -> dict[str, int]:
+    """Count how many tests each test file collects on this platform.
+
+    `pytest --collect-only -q` prints one `path::test_name` line per collected test,
+    plus a trailing `N tests collected` summary that contains no `::` and is ignored
+    by construction. A run that fails prints one warning and returns {} rather than
+    reporting "no tests", so a collection error can never make the count check look
+    satisfied.
+    """
+    try:
+        proc = subprocess.run(
+            [
+                "python",
+                "-m",
+                "pytest",
+                "tools/",
+                "--collect-only",
+                "-q",
+                "-p",
+                "no:cacheprovider",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+            cwd=ROOT,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"[WARN] test collection failed: {exc} - test counts were not verified")
+        return {}
+
+    if proc.returncode != 0:
+        print(
+            f"[WARN] test collection failed (exit {proc.returncode}) - "
+            "test counts were not verified"
+        )
+        return {}
+
+    counts: dict[str, int] = {}
+    for line in proc.stdout.splitlines():
+        if "::" not in line:
+            continue
+        path = Path(line.split("::", 1)[0].strip()).as_posix()
+        counts[path] = counts.get(path, 0) + 1
+    return counts
+
+
 def check_ratchet(
     platforms: dict[str, dict[str, float]],
     current: dict[str, float],
@@ -329,6 +439,50 @@ def check_ratchet(
     return len(violations) == 0, violations
 
 
+def check_test_counts(
+    recorded: dict[str, int] | None,
+    collected: dict[str, int],
+    notes: list[str] | None = None,
+) -> tuple[bool, list[str]]:
+    """Check that no test file collects fewer tests than its recorded baseline.
+
+    A test file whose bodies were deleted still collects and still appears in the
+    coverage run, so the coverage ratchet cannot see it: test files are excluded
+    from the numeric comparison, and presence alone is proven by the shell of the
+    file. The collected count can see it, per file and per platform - the same
+    scoping the coverage baselines use, because platform-only tests legitimately
+    collect on one platform and not another.
+
+    `recorded` is None when the platform has no `test_counts` section: that is a
+    note, not a failure, and coverage enforcement carries on.
+
+    Returns:
+        (passed, violations) where violations lists files that lost tests
+    """
+    if notes is None:
+        notes = []
+    if recorded is None:
+        notes.append(
+            f"  [NOTE] test-count enforcement is not configured for {sys.platform} - "
+            "run python tools/coverage_gate.py --update to record it"
+        )
+        return True, []
+
+    violations = []
+    for path in sorted(recorded):
+        old_count = recorded[path]
+        # A recorded file missing from the run collects zero tests: same failure,
+        # and the message names both numbers so the -N is the drop that was seen.
+        new_count = collected.get(path, 0)
+        if new_count < old_count:
+            violations.append(
+                f"  {path}: {old_count} collected tests -> {new_count} "
+                f"(-{old_count - new_count}) - tests were deleted"
+            )
+
+    return len(violations) == 0, violations
+
+
 BASELINE_CHUNK_SIZE = 3000
 """Characters per emitted baseline chunk.
 
@@ -339,7 +493,7 @@ has 121 entries, so the single captured line arrived cut in half and unusable.
 
 
 def chunk_baseline(
-    section: dict[str, float], chunk_size: int = BASELINE_CHUNK_SIZE
+    section: dict[str, float | int], chunk_size: int = BASELINE_CHUNK_SIZE
 ) -> list[str]:
     """Split one platform's compact JSON section into annotation-safe chunks.
 
@@ -375,6 +529,9 @@ def main() -> int:
         # A missing file is a first run, and load_budget() returns {} for it.
         try:
             existing = load_budget().get(sys.platform, {})
+            # Validate the sibling section too, so a malformed test_counts refuses
+            # here, before the suite runs, rather than at save time.
+            load_test_counts()
         except (OSError, ValueError) as exc:
             print(f"[FAIL] coverage budget {BUDGET_FILE}: {exc}")
             return 1
@@ -398,8 +555,12 @@ def main() -> int:
             if path in RATCHET_EXEMPT and path in skipped:
                 current[path] = saved_coverage
 
+        # Counted after coverage because the coverage run takes minutes, and a
+        # failed collection must not replace a recorded baseline with {}.
+        counts = collect_test_counts()
+
         try:
-            save_budget(current)
+            save_budget(current, test_counts=counts or None)
         except (OSError, ValueError) as exc:
             print(f"[FAIL] saving budget: {exc}")
             return 1
@@ -409,6 +570,10 @@ def main() -> int:
                 "coverage depends on whether the provider answered"
             )
         print(f"[OK] Updated budget: {len(current)} files tracked")
+        if counts:
+            print(f"     Test counts recorded for {len(counts)} file(s)")
+        else:
+            print("     Test counts NOT recorded: collection failed")
         print(f"     Saved to: {BUDGET_FILE}")
         return 0
 
@@ -455,30 +620,49 @@ def main() -> int:
     if "--capture" in sys.argv:
         try:
             platforms = load_budget()
+            recorded_counts = load_test_counts()
         except (OSError, ValueError) as exc:
             print(f"[FAIL] coverage budget: {exc}")
             return 1
 
         # A workflow cannot commit, so an unbudgeted runner hands its measured
-        # baseline back through the log for a human to paste into the budget.
-        if sys.platform in platforms:
+        # baseline back through the log for a human to paste into the budget. The
+        # two sections are captured independently: a platform can have coverage but
+        # no counts (the section was added later), and that half is still useful.
+        has_baseline = sys.platform in platforms
+        has_counts = recorded_counts.get(sys.platform) is not None
+
+        if has_baseline and has_counts:
             return 0
 
-        try:
-            current = run_coverage()
-        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
-            print(f"[FAIL] coverage run: {exc}")
-            return 1
+        if not has_baseline:
+            try:
+                current = run_coverage()
+            except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+                print(f"[FAIL] coverage run: {exc}")
+                return 1
 
-        # The set --update would write for a platform with no history: a live-API
-        # file stays out, because its number tracks the provider, not the suite.
-        for path in [path for path in current if path in RATCHET_EXEMPT]:
-            del current[path]
+            # The set --update would write for a platform with no history: a
+            # live-API file stays out, because its number tracks the provider, not
+            # the suite.
+            for path in [path for path in current if path in RATCHET_EXEMPT]:
+                del current[path]
 
-        chunks = chunk_baseline(current)
-        count = len(chunks)
-        for index, chunk in enumerate(chunks, start=1):
-            print(f"COVERAGE_BASELINE {sys.platform} {index}/{count} {chunk}")
+            chunks = chunk_baseline(current)
+            count = len(chunks)
+            for index, chunk in enumerate(chunks, start=1):
+                print(f"COVERAGE_BASELINE {sys.platform} {index}/{count} {chunk}")
+
+        if not has_counts:
+            counts = collect_test_counts()
+            # {} means collection failed: collect_test_counts() already warned, and
+            # emitting an empty baseline would claim the platform collects no tests.
+            if counts:
+                chunks = chunk_baseline(counts)
+                count = len(chunks)
+                for index, chunk in enumerate(chunks, start=1):
+                    print(f"TEST_COUNTS {sys.platform} {index}/{count} {chunk}")
+
         return 0
 
     # Default: enforce budget
@@ -496,6 +680,7 @@ def main() -> int:
 
     try:
         platforms = load_budget()
+        test_counts = load_test_counts()
     except (OSError, ValueError) as exc:
         print(f"[FAIL] coverage budget: {exc}")
         return 1
@@ -531,14 +716,24 @@ def main() -> int:
     notes: list[str] = []
     passed, violations = check_ratchet(platforms, current, notes)
 
+    recorded_test_counts = test_counts.get(sys.platform)
+    collected_test_counts = collect_test_counts()
+    counts_passed, count_violations = check_test_counts(
+        recorded_test_counts, collected_test_counts, notes
+    )
+    passed = passed and counts_passed
+    violations.extend(count_violations)
+
     print(f"Files tracked       : {len(platforms[sys.platform])}")
     print(f"Files in current run: {len(current)}")
+    if recorded_test_counts is not None:
+        print(f"Test files tracked  : {len(recorded_test_counts)}")
 
     for note in notes:
         print(note)
 
     if not passed:
-        print(f"\n[FAIL] Coverage decreased for {len(violations)} file(s):")
+        print(f"\n[FAIL] {len(violations)} coverage/test-count violation(s):")
         for violation in violations:
             print(violation)
         print(
