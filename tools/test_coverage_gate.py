@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -422,10 +423,14 @@ def test_update_writes_only_the_current_platform_section(tmp_path, monkeypatch):
     )
 
 
-def test_capture_emits_one_baseline_line_when_platform_is_missing(
+def test_capture_emits_one_baseline_chunk_when_platform_is_missing(
     tmp_path, monkeypatch, capsys
 ):
-    """A runner with no baseline hands back exactly one line a human can paste."""
+    """A small section still carries the index/count header, so one parser reads both.
+
+    The header is always `1/1`, never omitted for the single-chunk case: a consumer
+    that splits on the index would otherwise have to special-case it.
+    """
     bfile = tmp_path / "budget.json"
     other = "linux" if sys.platform != "linux" else "win32"
     bfile.write_text(
@@ -443,9 +448,62 @@ def test_capture_emits_one_baseline_line_when_platform_is_missing(
 
     assert coverage_gate.main() == 0
 
-    assert capsys.readouterr().out.splitlines() == [
-        f'COVERAGE_BASELINE {sys.platform} {{"tools/a.py":61.0}}'
-    ]
+    lines = capsys.readouterr().out.splitlines()
+    assert lines == [f'COVERAGE_BASELINE {sys.platform} 1/1 {{"tools/a.py":61.0}}']
+    assert json.loads(lines[0].split(" ", 3)[3]) == {"tools/a.py": 61.0}
+
+
+def _run_capture(tmp_path, monkeypatch, capsys, measured):
+    """Run --capture against a budget that only knows another platform."""
+    bfile = tmp_path / "budget.json"
+    other = "linux" if sys.platform != "linux" else "win32"
+    bfile.write_text(
+        json.dumps({"platforms": {other: {"tools/a.py": 90.0}}}), encoding="utf-8"
+    )
+    real_load = coverage_gate.load_budget
+
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(coverage_gate, "run_coverage", lambda: dict(measured))
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--capture"])
+
+    assert coverage_gate.main() == 0
+    return capsys.readouterr().out.splitlines()
+
+
+def test_capture_splits_a_large_section_into_contiguous_chunks(
+    tmp_path, monkeypatch, capsys
+):
+    """The Linux baseline is 121 entries and did not fit one 4096-char annotation.
+
+    Every emitted line must carry an index that runs 1..n with no gap, and joining
+    the chunks in that order must parse back to the measured dict exactly.
+    """
+    measured = {f"tools/module_{index:03d}.py": 90.0 for index in range(200)}
+
+    lines = _run_capture(tmp_path, monkeypatch, capsys, measured)
+
+    pattern = re.compile(
+        rf"^COVERAGE_BASELINE {re.escape(sys.platform)} (\d+)/(\d+) (.*)$"
+    )
+    assert len(lines) > 1
+    parsed = [pattern.match(line) for line in lines]
+    assert all(parsed), lines
+    indexes = [int(match.group(1)) for match in parsed]
+    counts = {int(match.group(2)) for match in parsed}
+    assert indexes == list(range(1, len(lines) + 1))
+    assert counts == {len(lines)}
+    assert json.loads("".join(match.group(3) for match in parsed)) == measured
+
+
+def test_capture_chunks_never_exceed_the_annotation_budget():
+    """No chunk may reach the 4096-character annotation limit, prefix included."""
+    measured = {f"tools/module_{index:03d}.py": 100.0 for index in range(200)}
+
+    chunks = coverage_gate.chunk_baseline(measured)
+
+    assert len(chunks) > 1
+    assert max(len(chunk) for chunk in chunks) <= 3000
+    assert json.loads("".join(chunks)) == measured
 
 
 def test_capture_prints_nothing_when_platform_has_a_baseline(

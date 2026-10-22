@@ -302,6 +302,31 @@ def check_ratchet(
     return len(violations) == 0, violations
 
 
+BASELINE_CHUNK_SIZE = 3000
+"""Characters per emitted baseline chunk.
+
+GitHub truncates an annotation message at 4096 characters, and the Linux section
+has 121 entries, so the single captured line arrived cut in half and unusable.
+3000 leaves room for the `::notice::` prefix the workflow adds.
+"""
+
+
+def chunk_baseline(
+    section: dict[str, float], chunk_size: int = BASELINE_CHUNK_SIZE
+) -> list[str]:
+    """Split one platform's compact JSON section into annotation-safe chunks.
+
+    Chunks are plain slices of the compact JSON, so joining them in order gives
+    back the exact string `json.loads` accepts - no per-chunk JSON, which would
+    not concatenate into a document.
+    """
+    payload = json.dumps(section, separators=(",", ":"), sort_keys=True)
+    return [
+        payload[offset : offset + chunk_size]
+        for offset in range(0, len(payload), chunk_size)
+    ] or [payload]
+
+
 def harness_tests_present(root: Path) -> bool:
     """Does this checkout contain the harness's own tests?
 
@@ -414,10 +439,10 @@ def main() -> int:
         for path in [path for path in current if path in RATCHET_EXEMPT]:
             del current[path]
 
-        print(
-            f"COVERAGE_BASELINE {sys.platform} "
-            f"{json.dumps(current, separators=(',', ':'), sort_keys=True)}"
-        )
+        chunks = chunk_baseline(current)
+        count = len(chunks)
+        for index, chunk in enumerate(chunks, start=1):
+            print(f"COVERAGE_BASELINE {sys.platform} {index}/{count} {chunk}")
         return 0
 
     # Default: enforce budget
