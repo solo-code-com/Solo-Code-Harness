@@ -93,7 +93,7 @@ function cmdList() {
   const available = ref ? Object.entries(ref.mcpServers || {}) : [];
   const activeNames = new Set(active.map(([k]) => k));
 
-  process.stdout.write(`\n📦 MCP Servers — ${active.length} active, ${available.length - active.size} available, max ${MAX_ACTIVE_MCPS}\n`);
+  process.stdout.write(`\n📦 MCP Servers — ${active.length} active, ${available.length - active.length} available, max ${MAX_ACTIVE_MCPS}\n`);
   process.stdout.write('═'.repeat(80) + '\n\n');
 
   process.stdout.write('🟢 Active:\n');
