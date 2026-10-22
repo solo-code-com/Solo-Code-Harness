@@ -11,8 +11,11 @@ import json
 import os
 import subprocess
 import sys
+import time
 import types
 from pathlib import Path
+
+import pytest
 
 SCRIPT = Path(__file__).resolve().parent / "session_registry.py"
 
@@ -246,3 +249,38 @@ def test_is_zombie_is_false_for_a_live_stat(monkeypatch):
     for stdout in ("S\n", "S+\n"):
         _fake_ps(monkeypatch, mod, stdout)
         assert mod._is_zombie(4242) is False
+
+
+# ── our own killed child ─────────────────────────────────────────────────────
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows has no zombie state: a killed child stops existing at once.",
+)
+def test_pid_alive_is_false_for_our_sigkilled_child_before_it_is_reaped(monkeypatch):
+    """The macOS regression, reproduced on any POSIX box.
+
+    There ps did not report the zombie, so an unreaped SIGKILLed child of ours
+    still looked alive. `ps` is made blind here for the same reason, leaving
+    waitid as the only authority; it must answer without reaping, so the caller's
+    own ``wait()`` still collects the status afterwards.
+    """
+    mod = _load()
+    monkeypatch.setattr(mod, "_is_zombie", lambda pid: False)
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        assert mod.pid_alive(child.pid) is True
+        child.kill()
+        # SIGKILL delivery is asynchronous; nothing below waits on the child.
+        deadline = time.monotonic() + 5
+        while mod.pid_alive(child.pid) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert mod.pid_alive(child.pid) is False
+        # A reaping probe would leave wait() nothing to collect and it would
+        # report 0 instead of the signal that killed the child.
+        assert child.wait(timeout=10) != 0
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=10)

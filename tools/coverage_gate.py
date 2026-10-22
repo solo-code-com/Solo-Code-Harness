@@ -7,20 +7,34 @@ Coverage can only stay the same or improve, never regress.
 
 Budget lives in `tools/config/coverage-budget.json` with format:
 {
-  "files": {
-    "path/to/file.py": 85.5,
-    "another/file.py": 100.0
+  "platforms": {
+    "win32": {
+      "path/to/file.py": 85.5,
+      "another/file.py": 100.0
+    }
   }
 }
 
+Each platform owns its section because coverage percentages are not comparable
+across platforms: `tools/test_win_sandbox.py` is 100% on Windows and 51.8% on
+Linux (its tests skip there), and `tools/session_registry.py` is 92.1% against
+83.5% because the Windows branch never runs on Linux. One shared floor therefore
+fails on every platform but the one it was measured on.
+
 Budget keys are POSIX-relative paths (`tools/garden.py`), never OS-native ones,
-so the same file is valid on Windows, macOS and Linux and CI can compare it
-against a run on any platform.
+so the same key is valid on Windows, macOS and Linux.
+
+Test files keep their entries but are never compared numerically, because their
+percentage measures how much of the test code this platform ran (a POSIX-only test
+skips on Windows), not how much production code the suite exercises. Their
+presence is still required: a budgeted test file missing from the run means its
+tests were deleted, renamed or failed to collect.
 
 Usage:
-    python tools/coverage_gate.py             # enforce the budget
-    python tools/coverage_gate.py --update    # update budget to current coverage
+    python tools/coverage_gate.py             # enforce this platform's budget
+    python tools/coverage_gate.py --update    # rewrite this platform's section
     python tools/coverage_gate.py --report    # show current coverage vs budget
+    python tools/coverage_gate.py --capture   # emit a baseline when this platform has none
 """
 
 from __future__ import annotations
@@ -41,11 +55,21 @@ COVERAGE_FILE = ROOT / ".coverage"
 RATCHET_EXEMPT = {"tools/test_e2e.py"}
 
 
-def load_budget(budget_file: Path = BUDGET_FILE) -> dict[str, float]:
-    """Read per-file coverage budget.
+def is_test_file(path: str) -> bool:
+    """A `test_` basename marks a test file, whatever directory holds it."""
+    return Path(path).name.startswith("test_")
+
+
+def load_budget(budget_file: Path = BUDGET_FILE) -> dict[str, dict[str, float]]:
+    """Read the coverage budget as one section per platform.
 
     Returns empty dict if file doesn't exist (first run).
     Raises on malformed JSON.
+
+    A file still in the OLD shape - a single top-level `"files"` map - is read as
+    `{"win32": <those files>}` and not as a neutral budget. Those numbers were
+    measured on Windows, so an older checkout keeps working while a Linux run no
+    longer enforces Windows percentages it cannot match.
     """
     if not budget_file.exists():
         # `return` here made load_budget() return None, and --report then did
@@ -54,30 +78,64 @@ def load_budget(budget_file: Path = BUDGET_FILE) -> dict[str, float]:
 
     try:
         payload = json.loads(budget_file.read_text(encoding="utf-8"))
-        files = payload.get("files", {})
+        platforms = payload.get("platforms")
 
-        if not isinstance(files, dict):
-            raise ValueError("budget must contain 'files' dict")
+        if platforms is None:
+            # OLD shape: one flat map, measured on the Windows runner.
+            files = payload.get("files", {})
+            if not isinstance(files, dict):
+                raise ValueError("budget must contain 'files' dict")
+            platforms = {"win32": files} if files else {}
 
-        # Validate all values are numeric
-        for path, coverage in files.items():
-            if not isinstance(coverage, int | float) or coverage < 0 or coverage > 100:
-                raise ValueError(
-                    f"Invalid coverage for {path}: {coverage} (must be 0-100)"
-                )
+        if not isinstance(platforms, dict):
+            raise ValueError("budget must contain 'platforms' dict")
 
-        return files
+        # Validate every platform section the same way
+        for platform, files in platforms.items():
+            if not isinstance(files, dict):
+                raise ValueError(f"platform {platform} must map to a 'files' dict")
+            for path, coverage in files.items():
+                if (
+                    not isinstance(coverage, int | float)
+                    or coverage < 0
+                    or coverage > 100
+                ):
+                    raise ValueError(
+                        f"Invalid coverage for {platform}:{path}: {coverage} "
+                        "(must be 0-100)"
+                    )
+
+        return platforms
     except (json.JSONDecodeError, ValueError) as exc:
         raise ValueError(f"Malformed budget file: {exc}") from exc
 
 
 def save_budget(
-    coverage_data: dict[str, float], budget_file: Path = BUDGET_FILE
+    coverage_data: dict[str, float],
+    budget_file: Path = BUDGET_FILE,
+    platform: str | None = None,
 ) -> None:
-    """Save per-file coverage budget to JSON."""
+    """Save one platform's coverage budget, leaving the other sections as they are.
+
+    Only `platform` (the running one by default) is replaced: a baseline measured
+    on another platform cannot be reproduced here, so rewriting it would lower or
+    raise a number this run has no evidence for.
+    """
+    platform = platform or sys.platform
     budget_file.parent.mkdir(parents=True, exist_ok=True)
 
-    payload = {"files": dict(sorted(coverage_data.items()))}
+    platforms: dict[str, dict[str, float]] = {}
+    if budget_file.exists():
+        try:
+            platforms = load_budget(budget_file)
+        except (OSError, ValueError):
+            # A malformed file is about to be replaced for this platform only;
+            # the other sections may still be recoverable from the same read,
+            # but nothing else was loaded, so start from this section alone.
+            platforms = {}
+    platforms[platform] = dict(sorted(coverage_data.items()))
+
+    payload = {"platforms": platforms}
 
     # newline="\n": on Windows the default translation writes CRLF, which
     # contradicts .gitattributes (`* text=auto eol=lf`) and leaves the file
@@ -174,28 +232,45 @@ def run_coverage() -> dict[str, float]:
 
 
 def check_ratchet(
-    budget: dict[str, float], current: dict[str, float]
+    platforms: dict[str, dict[str, float]], current: dict[str, float]
 ) -> tuple[bool, list[str]]:
-    """Check if coverage decreased for any file.
+    """Check if coverage decreased for any file on the current platform.
+
+    Only `platforms[sys.platform]` is compared: another platform's baselines were
+    measured where some of this run's tests skip, so comparing them would report
+    regressions that do not exist. A missing section passes here because main()
+    has already printed the documented [SKIP] line - a skip that is announced,
+    never inferred from an empty comparison.
 
     Returns:
         (passed, violations) where violations lists files with decreased coverage
     """
     violations = []
 
+    budget = platforms.get(sys.platform)
+    if budget is None:
+        return True, []
+
     # Exempt files are not compared, so an oscillating live-API file can neither
     # raise a violation nor be counted as a path-mismatch casualty. It must still
     # run, though: an absent entry means its tests were deleted or failed to collect.
+    # Test files are skipped for the same reason: their number tracks which tests
+    # this platform executed, not how much production code the suite reaches.
     tracked = {
         path: old_coverage
         for path, old_coverage in budget.items()
-        if path not in RATCHET_EXEMPT
+        if path not in RATCHET_EXEMPT and not is_test_file(path)
     }
     for path in sorted(budget):
         if path in RATCHET_EXEMPT and path not in current:
             violations.append(
                 f"{path} is exempt from coverage, but it did not run at all - "
                 "deleted tests, or a collection error?"
+            )
+        elif is_test_file(path) and path not in current:
+            violations.append(
+                f"{path} is a test file, so its coverage is not compared, but it "
+                "did not run at all - deleted tests, or a collection error?"
             )
 
     # A whole-platform separator difference shows up as "every file dropped to
@@ -253,8 +328,10 @@ def main() -> int:
         # A live-API file's coverage tracks the network, not the suite, so it is
         # never a baseline. Drop it from this run, and re-add a pre-existing entry
         # only when the file actually ran: a deleted file must not outlive itself.
+        # The other platforms' sections are not measured by this run, so only
+        # this platform's baseline is refreshed; save_budget() keeps the rest.
         try:
-            existing = load_budget()
+            existing = load_budget().get(sys.platform, {})
         except (OSError, ValueError):
             existing = {}
         skipped = [path for path in current if path in RATCHET_EXEMPT]
@@ -276,7 +353,8 @@ def main() -> int:
 
     if "--report" in sys.argv:
         try:
-            budget = load_budget()
+            # Another platform's baselines would read as mass regressions here.
+            budget = load_budget().get(sys.platform, {})
             current = run_coverage()
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
             print(f"[FAIL] coverage report: {exc}")
@@ -313,6 +391,35 @@ def main() -> int:
 
         return 0
 
+    if "--capture" in sys.argv:
+        try:
+            platforms = load_budget()
+        except (OSError, ValueError) as exc:
+            print(f"[FAIL] coverage budget: {exc}")
+            return 1
+
+        # A workflow cannot commit, so an unbudgeted runner hands its measured
+        # baseline back through the log for a human to paste into the budget.
+        if sys.platform in platforms:
+            return 0
+
+        try:
+            current = run_coverage()
+        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+            print(f"[FAIL] coverage run: {exc}")
+            return 1
+
+        # The set --update would write for a platform with no history: a live-API
+        # file stays out, because its number tracks the provider, not the suite.
+        for path in [path for path in current if path in RATCHET_EXEMPT]:
+            del current[path]
+
+        print(
+            f"COVERAGE_BASELINE {sys.platform} "
+            f"{json.dumps(current, separators=(',', ':'), sort_keys=True)}"
+        )
+        return 0
+
     # Default: enforce budget
     # Measured on a real target: the gate failed with 40-odd files at 0% while the project was
     # perfectly fine, because a deployed copy ships no harness tests and the budget keeps the full
@@ -327,13 +434,21 @@ def main() -> int:
         return 0
 
     try:
-        budget = load_budget()
+        platforms = load_budget()
     except (OSError, ValueError) as exc:
         print(f"[FAIL] coverage budget: {exc}")
         return 1
 
-    if not budget:
+    if not platforms:
         print("[WARN] No coverage budget found. Run with --update to create one.")
+        return 0
+
+    if sys.platform not in platforms:
+        enforced = ", ".join(sorted(platforms))
+        print(
+            f"[SKIP] no coverage baseline for {sys.platform}; the enforced "
+            f"baselines are: {enforced}. Run --update on this platform to add one."
+        )
         return 0
 
     print("Running coverage...")
@@ -343,9 +458,9 @@ def main() -> int:
         print(f"[FAIL] coverage run: {exc}")
         return 1
 
-    passed, violations = check_ratchet(budget, current)
+    passed, violations = check_ratchet(platforms, current)
 
-    print(f"Files tracked       : {len(budget)}")
+    print(f"Files tracked       : {len(platforms[sys.platform])}")
     print(f"Files in current run: {len(current)}")
 
     if not passed:
@@ -361,7 +476,7 @@ def main() -> int:
     # Check for improvements
     improvements = []
     for file_path, new_coverage in current.items():
-        old_coverage = budget.get(file_path, 0.0)
+        old_coverage = platforms[sys.platform].get(file_path, 0.0)
         if new_coverage > old_coverage:
             diff = new_coverage - old_coverage
             improvements.append(f"  {file_path}: +{diff:.1f}%")

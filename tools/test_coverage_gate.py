@@ -46,11 +46,14 @@ def test_load_budget_missing_file(tmp_path):
 
 
 def test_load_budget_valid(tmp_path):
-    """Valid budget JSON loads correctly."""
+    """Valid budget JSON loads as one section per platform."""
     bfile = tmp_path / "budget.json"
-    bfile.write_text(json.dumps({"files": {"tools/deploy.py": 85.5}}), encoding="utf-8")
+    bfile.write_text(
+        json.dumps({"platforms": {"win32": {"tools/deploy.py": 85.5}}}),
+        encoding="utf-8",
+    )
     loaded = coverage_gate.load_budget(bfile)
-    assert loaded == {"tools/deploy.py": 85.5}
+    assert loaded == {"win32": {"tools/deploy.py": 85.5}}
 
 
 def test_load_budget_malformed(tmp_path):
@@ -63,7 +66,7 @@ def test_load_budget_malformed(tmp_path):
 
 def test_check_ratchet_maintained():
     """Ratchet passes when all files maintain coverage."""
-    budget = {"a.py": 80.0, "b.py": 90.0}
+    budget = {sys.platform: {"a.py": 80.0, "b.py": 90.0}}
     current = {"a.py": 80.0, "b.py": 95.0}
     passed, violations = coverage_gate.check_ratchet(budget, current)
     assert passed is True
@@ -72,7 +75,7 @@ def test_check_ratchet_maintained():
 
 def test_check_ratchet_decreased():
     """Ratchet fails when coverage drops below budget."""
-    budget = {"a.py": 80.0, "b.py": 90.0}
+    budget = {sys.platform: {"a.py": 80.0, "b.py": 90.0}}
     current = {"a.py": 75.0, "b.py": 90.0}
     passed, violations = coverage_gate.check_ratchet(budget, current)
     assert passed is False
@@ -148,10 +151,12 @@ def test_check_ratchet_reports_path_mismatch_not_mass_regressions():
     Windows-separated budget emitted 120 violations instead of one diagnostic.
     """
     budget = {
-        "tools/a.py": 90.0,
-        "tools/b.py": 90.0,
-        "tools/c.py": 90.0,
-        "tools/d.py": 90.0,
+        sys.platform: {
+            "tools/a.py": 90.0,
+            "tools/b.py": 90.0,
+            "tools/c.py": 90.0,
+            "tools/d.py": 90.0,
+        },
     }
     current = {"tools/a.py": 95.0}
 
@@ -167,14 +172,16 @@ def test_check_ratchet_reports_path_mismatch_not_mass_regressions():
 def test_check_ratchet_single_regression_still_reported():
     """The mismatch guard must not swallow a genuine one-file drop."""
     budget = {
-        "tools/a.py": 80.0,
-        "tools/b.py": 90.0,
-        "tools/c.py": 70.0,
-        "tools/d.py": 60.0,
-        "tools/e.py": 50.0,
-        "tools/f.py": 40.0,
+        sys.platform: {
+            "tools/a.py": 80.0,
+            "tools/b.py": 90.0,
+            "tools/c.py": 70.0,
+            "tools/d.py": 60.0,
+            "tools/e.py": 50.0,
+            "tools/f.py": 40.0,
+        },
     }
-    current = dict(budget)
+    current = dict(budget[sys.platform])
     current["tools/a.py"] = 75.0
 
     passed, violations = coverage_gate.check_ratchet(budget, current)
@@ -190,7 +197,7 @@ def test_check_ratchet_ignores_drop_in_exempt_live_api_file():
     tools/test_e2e.py runs live API calls that skip on a provider timeout, so its
     coverage measures the network. Measured: 89.5% -> 87.2% with no test removed.
     """
-    budget = {"tools/test_e2e.py": 89.53}
+    budget = {sys.platform: {"tools/test_e2e.py": 89.53}}
     current = {"tools/test_e2e.py": 87.2}
 
     passed, violations = coverage_gate.check_ratchet(budget, current)
@@ -201,7 +208,9 @@ def test_check_ratchet_ignores_drop_in_exempt_live_api_file():
 
 def test_check_ratchet_still_reports_drop_in_non_exempt_file():
     """The exemption is one file wide: a normal file still fails on a drop."""
-    budget = {"tools/test_e2e.py": 89.53, "tools/coverage_gate.py": 50.0}
+    budget = {
+        sys.platform: {"tools/test_e2e.py": 89.53, "tools/coverage_gate.py": 50.0}
+    }
     current = {"tools/test_e2e.py": 80.0, "tools/coverage_gate.py": 45.0}
 
     passed, violations = coverage_gate.check_ratchet(budget, current)
@@ -236,7 +245,9 @@ def test_update_does_not_write_exempt_file_into_budget(monkeypatch, capsys):
     # An existing entry stays untouched: kept, not refreshed, not deleted.
     saved.clear()
     monkeypatch.setattr(
-        coverage_gate, "load_budget", lambda: {"tools/test_e2e.py": 89.53}
+        coverage_gate,
+        "load_budget",
+        lambda: {sys.platform: {"tools/test_e2e.py": 89.53}},
     )
 
     assert coverage_gate.main() == 0
@@ -245,7 +256,9 @@ def test_update_does_not_write_exempt_file_into_budget(monkeypatch, capsys):
 
 def test_check_ratchet_flags_exempt_file_that_did_not_run():
     """An absent exempt file means deleted tests or a collection error, not a quiet pass."""
-    budget = {"tools/test_e2e.py": 89.53, "tools/coverage_gate.py": 50.0}
+    budget = {
+        sys.platform: {"tools/test_e2e.py": 89.53, "tools/coverage_gate.py": 50.0}
+    }
     current = {"tools/coverage_gate.py": 50.0}
 
     passed, violations = coverage_gate.check_ratchet(budget, current)
@@ -264,7 +277,9 @@ def test_update_drops_exempt_entry_when_file_did_not_run(monkeypatch):
     saved: dict[str, float] = {}
     monkeypatch.setattr(coverage_gate, "save_budget", lambda data: saved.update(data))
     monkeypatch.setattr(
-        coverage_gate, "load_budget", lambda: {"tools/test_e2e.py": 89.53}
+        coverage_gate,
+        "load_budget",
+        lambda: {sys.platform: {"tools/test_e2e.py": 89.53}},
     )
     monkeypatch.setattr(
         coverage_gate, "run_coverage", lambda: {"tools/coverage_gate.py": 50.0}
@@ -280,7 +295,9 @@ def test_update_keeps_exempt_entry_when_file_ran(monkeypatch):
     saved: dict[str, float] = {}
     monkeypatch.setattr(coverage_gate, "save_budget", lambda data: saved.update(data))
     monkeypatch.setattr(
-        coverage_gate, "load_budget", lambda: {"tools/test_e2e.py": 89.53}
+        coverage_gate,
+        "load_budget",
+        lambda: {sys.platform: {"tools/test_e2e.py": 89.53}},
     )
     monkeypatch.setattr(
         coverage_gate,
@@ -297,10 +314,12 @@ def test_update_keeps_exempt_entry_when_file_ran(monkeypatch):
 def test_check_ratchet_path_mismatch_still_reports_present_file_drop():
     """The diagnostic explains the missing majority; a present file's drop is still real."""
     budget = {
-        "tools/a.py": 90.0,
-        "tools/b.py": 90.0,
-        "tools/c.py": 90.0,
-        "tools/d.py": 90.0,
+        sys.platform: {
+            "tools/a.py": 90.0,
+            "tools/b.py": 90.0,
+            "tools/c.py": 90.0,
+            "tools/d.py": 90.0,
+        },
     }
     current = {"tools/a.py": 85.0}
 
@@ -310,3 +329,216 @@ def test_check_ratchet_path_mismatch_still_reports_present_file_drop():
     assert len(violations) == 2
     assert "path mismatch: 3 of 4 budget entries are missing" in violations[0]
     assert "tools/a.py: 90.0% -> 85.0%" in violations[1]
+
+
+def test_load_budget_old_shape_is_read_as_win32(tmp_path):
+    """A budget written before platform scoping holds Windows numbers.
+
+    Those entries were measured on Windows, so reading them as win32 keeps an old
+    checkout working instead of enforcing them on a platform that cannot match.
+    """
+    bfile = tmp_path / "budget.json"
+    bfile.write_text(json.dumps({"files": {"tools/deploy.py": 85.5}}), encoding="utf-8")
+
+    assert coverage_gate.load_budget(bfile) == {"win32": {"tools/deploy.py": 85.5}}
+
+
+def test_check_ratchet_enforces_the_current_platform_section():
+    """This platform's section is the one compared, and a drop in it fails."""
+    budget = {sys.platform: {"tools/a.py": 80.0}}
+
+    passed, violations = coverage_gate.check_ratchet(budget, {"tools/a.py": 75.0})
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "tools/a.py: 80.0% -> 75.0%" in violations[0]
+
+
+def test_missing_platform_baseline_skips_with_documented_message(
+    tmp_path, monkeypatch, capsys
+):
+    """No section for this platform is a documented skip naming the enforced ones.
+
+    The gate must skip before paying for a coverage run, and it must say which
+    baselines do exist so the log tells a reader where the numbers came from.
+    """
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "test_gate.py").write_text("x = 1\n", encoding="utf-8")
+    other = "linux" if sys.platform != "linux" else "win32"
+    bfile = tmp_path / "budget.json"
+    bfile.write_text(
+        json.dumps({"platforms": {other: {"tools/a.py": 90.0}}}), encoding="utf-8"
+    )
+    real_load = coverage_gate.load_budget
+
+    monkeypatch.setattr(coverage_gate, "ROOT", tmp_path)
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(
+        coverage_gate,
+        "run_coverage",
+        lambda: pytest.fail("a missing baseline must skip before running coverage"),
+    )
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py"])
+
+    assert coverage_gate.main() == 0
+    out = capsys.readouterr().out
+    assert f"[SKIP] no coverage baseline for {sys.platform}" in out
+    assert f"baselines are: {other}." in out
+    assert "Run --update on this platform to add one." in out
+
+
+def test_update_writes_only_the_current_platform_section(tmp_path, monkeypatch):
+    """--update replaces this platform's section and leaves every other one intact.
+
+    Another platform's baselines were measured there; refreshing them from this
+    run would replace numbers this platform cannot reproduce.
+    """
+    bfile = tmp_path / "budget.json"
+    other = "linux" if sys.platform != "linux" else "win32"
+    before = {"platforms": {other: {"tools/a.py": 71.0, "tools/b.py": 62.5}}}
+    bfile.write_text(
+        json.dumps(before, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    real_load = coverage_gate.load_budget
+    real_save = coverage_gate.save_budget
+
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(
+        coverage_gate, "save_budget", lambda data, *a, **k: real_save(data, bfile)
+    )
+    monkeypatch.setattr(coverage_gate, "run_coverage", lambda: {"tools/a.py": 88.0})
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--update"])
+
+    assert coverage_gate.main() == 0
+
+    expected = {
+        "platforms": {
+            other: before["platforms"][other],
+            sys.platform: {"tools/a.py": 88.0},
+        }
+    }
+    assert bfile.read_text(encoding="utf-8") == (
+        json.dumps(expected, indent=2, sort_keys=True) + "\n"
+    )
+
+
+def test_capture_emits_one_baseline_line_when_platform_is_missing(
+    tmp_path, monkeypatch, capsys
+):
+    """A runner with no baseline hands back exactly one line a human can paste."""
+    bfile = tmp_path / "budget.json"
+    other = "linux" if sys.platform != "linux" else "win32"
+    bfile.write_text(
+        json.dumps({"platforms": {other: {"tools/a.py": 90.0}}}), encoding="utf-8"
+    )
+    real_load = coverage_gate.load_budget
+
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(
+        coverage_gate,
+        "run_coverage",
+        lambda: {"tools/a.py": 61.0, "tools/test_e2e.py": 88.0},
+    )
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--capture"])
+
+    assert coverage_gate.main() == 0
+
+    assert capsys.readouterr().out.splitlines() == [
+        f'COVERAGE_BASELINE {sys.platform} {{"tools/a.py":61.0}}'
+    ]
+
+
+def test_capture_prints_nothing_when_platform_has_a_baseline(
+    tmp_path, monkeypatch, capsys
+):
+    """Nothing to hand back: the platform already has a section, so stay quiet."""
+    bfile = tmp_path / "budget.json"
+    bfile.write_text(
+        json.dumps({"platforms": {sys.platform: {"tools/a.py": 90.0}}}),
+        encoding="utf-8",
+    )
+    real_load = coverage_gate.load_budget
+
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(
+        coverage_gate,
+        "run_coverage",
+        lambda: pytest.fail("a platform with a baseline must not run coverage"),
+    )
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--capture"])
+
+    assert coverage_gate.main() == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_check_ratchet_ignores_drop_in_test_file():
+    """A test file's coverage measures which tests ran here, not production code.
+
+    Measured: tools/test_session_registry.py is 100% on a platform where all its
+    tests run and 62.3% where a POSIX-only test skips, with nothing deleted.
+    """
+    budget = {sys.platform: {"tools/test_session_registry.py": 100.0}}
+    current = {"tools/test_session_registry.py": 50.0}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is True
+    assert violations == []
+
+
+def test_check_ratchet_flags_test_file_that_did_not_run():
+    """Not comparing a test file numerically must not make a deleted test file silent."""
+    budget = {sys.platform: {"tools/test_session_registry.py": 100.0}}
+    current: dict[str, float] = {}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert (
+        "tools/test_session_registry.py is a test file, so its coverage is not compared"
+        in violations[0]
+    )
+    assert "did not run at all" in violations[0]
+
+
+def test_check_ratchet_still_reports_drop_in_production_module():
+    """The test-file exclusion is one file kind wide: a production module still fails."""
+    budget = {
+        sys.platform: {
+            "tools/test_session_registry.py": 100.0,
+            "tools/session_registry.py": 92.1,
+        },
+    }
+    current = {
+        "tools/test_session_registry.py": 50.0,
+        "tools/session_registry.py": 80.0,
+    }
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "tools/session_registry.py: 92.1% -> 80.0%" in violations[0]
+    assert "tools/test_session_registry.py" not in violations[0]
+
+
+def test_test_file_rule_uses_basename_not_directory():
+    """A `test_` basename under `.github/scripts/` is still a test file for the ratchet.
+
+    The rule is the basename, not the path: the gate must not treat a script under
+    .github/scripts/ as production just because it lives outside tools/.
+    """
+    path = ".github/scripts/test_like_production.py"
+    budget = {sys.platform: {path: 100.0}}
+
+    passed, violations = coverage_gate.check_ratchet(budget, {path: 40.0})
+
+    assert passed is True
+    assert violations == []
+
+    passed, violations = coverage_gate.check_ratchet(budget, {})
+
+    assert passed is False
+    assert len(violations) == 1
+    assert f"{path} is a test file" in violations[0]

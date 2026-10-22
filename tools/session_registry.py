@@ -53,7 +53,11 @@ def pid_alive(pid: int) -> bool:
     the very session being asked about.
 
     On POSIX an unreaped SIGKILLed child stays a zombie, which os.kill(pid, 0)
-    still reports as present, so a zombie is settled as dead here by asking ps.
+    still reports as present, so the answer is settled in three steps:
+    existence (os.kill), our-child-exited (os.waitid with WNOWAIT, which reports
+    the state without reaping, so a later Popen.wait/poll still works), and
+    zombie-by-ps (the fallback for pids that are not our children, where waitid
+    cannot speak, and for platforms whose ps does not expose the zombie state).
     """
     if pid <= 0:
         return False
@@ -65,6 +69,13 @@ def pid_alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True
+    if hasattr(os, "waitid"):
+        try:
+            info = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+        except ChildProcessError:
+            info = None  # not our child
+        if info is not None:
+            return False  # our child has exited; a zombie is not alive
     return not _is_zombie(pid)
 
 
