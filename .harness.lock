@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-10-22T15:42:11Z"
+generated_at = "2026-10-22T16:01:51Z"
 mode = "root"
-content_fingerprint = "sha256:641ff6ccf3fc49c45d0f580bf0549cd46df405e6c9ee203b72ad7226e2d087f7"
+content_fingerprint = "sha256:0aad835a03ec7937791eaf2a96d22f39566e58709eff6088841ff7ead606b12d"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---

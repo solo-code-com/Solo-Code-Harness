@@ -128,11 +128,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Aggregate Results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
           python -c "
-          import json, sys
-          needs = json.loads('''${{ toJSON(needs) }}''')
-          failed = [k for k,v in needs.items() if v.get('result') != 'success']
+          import json, os, sys
+          needs = json.loads(os.environ['NEEDS_JSON'])
+          failed = [k for k, v in needs.items() if v.get('result') != 'success']
           if failed:
               print(f'FAILED: {failed}')
               sys.exit(1)
