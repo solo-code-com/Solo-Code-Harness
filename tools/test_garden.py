@@ -1299,3 +1299,49 @@ def test_check_harness_fingerprint_reports_only_the_missing_path(tmp_path):
     assert len(issues) == 1, issues
     assert "tools/b.py" in issues[0]
     assert "content changed" not in issues[0]
+
+
+# ─── Gemini command parity (documented exceptions) ──────────────────────────
+
+
+def _gemini_commands_fixture(tmp_path, src_commands, dst_commands):
+    """Fake .kilo/command + .gemini/antigravity/commands trees for parity tests."""
+    src, dst = tmp_path / ".kilo", tmp_path / ".gemini" / "antigravity"
+    for name in src_commands:
+        _write(src / "command" / f"{name}.md", "body\n")
+    for name in dst_commands:
+        _write(dst / "commands" / f"{name}.md", "body\n")
+    return src, dst
+
+
+def test_check_gemini_commands_ignore_documented_exceptions(tmp_path, monkeypatch):
+    """The two engine-specific commands and Antigravity's own code-review are
+    declared exceptions, so they must not be reported as command drift."""
+    monkeypatch.setattr(garden, "ROOT", tmp_path)
+    src, dst = _gemini_commands_fixture(
+        tmp_path,
+        {"commit", "commit-push-pr", "decide", "review", "ship"},
+        {"code-review", "commit", "commit-push-pr", "decide"},
+    )
+
+    assert garden.check_gemini(src, dst) == []
+
+
+def test_check_gemini_commands_flag_undeclared_divergence(tmp_path, monkeypatch):
+    """A divergence outside the declared exceptions is real drift, named by file."""
+    monkeypatch.setattr(garden, "ROOT", tmp_path)
+    src, dst = _gemini_commands_fixture(
+        tmp_path,
+        {"commit", "commit-push-pr", "decide", "enhance", "review", "ship"},
+        {"code-review", "commit", "ghost"},
+    )
+
+    issues = garden.check_gemini(src, dst)
+
+    assert any(
+        "Missing command: .gemini/antigravity/commands/enhance.md" in i for i in issues
+    ), issues
+    assert any(
+        "Stale command (no source): .gemini/antigravity/commands/ghost.md" in i
+        for i in issues
+    ), issues

@@ -96,7 +96,7 @@ python tools/deploy.py
 | `.claude/` | **Orchestrator** — Claude Code: agents (15), skills (53), commands (15, incl. `ship`), instruction (10), guard + lifecycle hooks + `settings.json`; rulebook `CLAUDE.md` at root. Generated from `.kilo/` via `tools/generate_harness.py --harness claude`. |
 | `.copilot/` | GitHub Copilot: agents (15), skills (53), commands (15), instruction (10), memory (4). Manually kept in parity with `.kilo/`; checked (not generated) by `tools/garden.py`. |
 | `.kilo/` | **Source of truth** — Kilo Code: agents (15), skills (53), commands (15, incl. `ship`), hooks, memory, instruction. Edit here first. |
-| `.gemini/` | Gemini/Antigravity: agents (15), skills (53), commands (12), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
+| `.gemini/` | Gemini/Antigravity: agents (15), skills (53), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
 | `.codex/` | Codex CLI integration: README, session tracking, verified write guard (`tools/codex_guard.py`), and launcher `codex-env.ps1`. |
 | `.github/` | Shared scripts: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py`, `security-allowlist.txt` + `copilot-instructions.md`, `prompts/` |
 | `tools/` | Generator (`generate_harness.py`, `claude_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` (runtime dep of Claude session hooks) |
@@ -185,12 +185,16 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | Gate | Command | What it checks |
 |---|---|---|
 | Lint | `ruff check .` | Python code style |
+| Lint budget | `python tools/check_lint_budget.py` | Findings that `.ruff.toml` does not enable stay at their recorded budget |
 | Schema | `make validate` | `.kilo/` agent + skill frontmatter validity |
-| Drift | `make garden` | `.kilo` ↔ `.claude` (generated) / `.copilot` / `.gemini` (manual parity) |
+| Coverage ratchet | `python tools/coverage_gate.py` | Per-file coverage may not fall below `tools/config/coverage-budget.json` |
+| Drift | `make garden` | `.kilo` ↔ `.claude` (generated) / `.copilot` / `.gemini` parity, with documented command exceptions |
 | Document truth | `make garden` | Counts, cited paths, documented CLI flags, enforcement claims and skill references must match reality — see [SPEC.md §7.2.1](SPEC.md) |
 | Harness Tests | `make test` | Generator + shared-state (`tools/test_*.py`) |
 | Integration | `python tools/test_integration.py` | Copilot structure + shared state schema |
+| Codex verify | `python tools/codex_verify.py` | The five core gates a Codex session runs before it reports back |
 | Security | `make security-scan` | Hardcoded secrets |
+| Gitleaks | `make gitleaks` | Secret scan over the whole tree with `.gitleaks.toml` (the harness's own scanner runs separately) |
 | Boundary | `python .github/scripts/boundary_audit.py .` | No project files leaked into harness dirs |
 | No-Skips | `python .github/scripts/check_skips.py tools/` | Unauthorized test skips (skip/skipif without reason) |
 | Stdlib-only | `make stdlib-only` | `tools/` and `.github/scripts/` import nothing outside the standard library (SPEC section 4) |
@@ -454,7 +458,7 @@ python tools/deploy.py
 | `.claude/` | **Điều phối** — Claude Code: agents (15), skills (53), commands (15, gồm `ship`), instruction (10), guard + lifecycle hooks + `settings.json`; rulebook `CLAUDE.md` ở root. Sinh từ `.kilo/` qua `tools/generate_harness.py --harness claude`. |
 | `.copilot/` | GitHub Copilot: agents (15), skills (53), commands (15), instruction (10), memory (4). Giữ song song thủ công với `.kilo/`; `tools/garden.py` chỉ kiểm tra, không tự sinh. |
 | `.kilo/` | **Nguồn gốc** — Kilo Code: agents (15), skills (53), commands (15, gồm `ship`), hooks, memory, instruction. Sửa ở đây trước tiên. |
-| `.gemini/` | Gemini/Antigravity: agents (15), skills (53), commands (12), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
+| `.gemini/` | Gemini/Antigravity: agents (15), skills (53), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
 | `.github/` | Script dùng chung: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py` + `copilot-instructions.md`, `prompts/` |
 | `tools/` | Generator (`generate_harness.py`, `claude_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` (runtime dep của Claude session hooks) |
 | `.vscode/` | VS Code settings + MCP config cho Copilot |
@@ -528,7 +532,7 @@ cần đổi harness.
 |---|---|---|
 | Lint | `ruff check .` | Python code style |
 | Schema | `make validate` | Frontmatter agent + skill trong `.kilo/` |
-| Drift | `make garden` | `.kilo` ↔ `.claude` (sinh tự động) / `.copilot` / `.gemini` (giữ song song thủ công) |
+| Drift | `make garden` | `.kilo` ↔ `.claude` (sinh tự động) / `.copilot` / `.gemini` (song song, có ngoại lệ command đã ghi) |
 | Document truth | `make garden` | Số đếm, path trích dẫn, flag CLI, tuyên bố "chặn" và tên skill phải khớp thực tế — xem [SPEC.md §7.2.1](SPEC.md) |
 | Harness Tests | `make test` | Generator + shared-state (`tools/test_*.py`) |
 | Integration | `python tools/test_integration.py` | Cấu trúc Copilot + schema shared state |

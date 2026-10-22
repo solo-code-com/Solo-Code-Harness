@@ -5,8 +5,8 @@ shared_state.py — Cross-engine shared state reader/writer (SQLite backend).
 Single source of truth at .solocode/shared-state.db (LOCAL ONLY — not committed to git,
 directory already excluded via .gitignore). All engines (Claude Code, Kilo, Copilot, Gemini)
 read/write this file when running on the same machine/workspace.
-("opencode" remains a VALID_ENGINES value for backward-compat reads of
-historical rows -- OpenCode engine was removed in v4.0.0, see .harness.lock.)
+("opencode" remains a VALID_ENGINES value: OpenCode was reintroduced as a
+primary engine in v4.2.0, and historical rows still name it that way.)
 
 Why SQLite instead of JSON + manual file locking:
   - Each mutation (acquire_lock, set_feature_status, ...) runs inside its own
@@ -89,10 +89,13 @@ def _lock_paths_conflict(left: str, right: str) -> bool:
             or left_path.startswith(right_path + "/")
             or right_path.startswith(left_path + "/")
         )
-    directory, file_path = (left_path, right_path) if left_is_dir else (right_path, left_path)
+    directory, file_path = (
+        (left_path, right_path) if left_is_dir else (right_path, left_path)
+    )
     if not directory:
         return True
     return file_path == directory or file_path.startswith(directory + "/")
+
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -216,9 +219,7 @@ class SharedState:
         return _ImmediateTransaction(self._conn)
 
     def _expire_locks(self) -> None:
-        self._conn.execute(
-            "DELETE FROM active_locks WHERE expires_at <= ?", (_now(),)
-        )
+        self._conn.execute("DELETE FROM active_locks WHERE expires_at <= ?", (_now(),))
 
     def _prune_session_log(self) -> None:
         # Sắp xếp phụ theo `id DESC` để có thứ tự xác định (deterministic) khi
@@ -313,7 +314,11 @@ class SharedState:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    _now(), engine, model, session_id, summary,
+                    _now(),
+                    engine,
+                    model,
+                    session_id,
+                    summary,
                     json.dumps(features_touched or []),
                     json.dumps(files_changed or []),
                     json.dumps(commits or []),
@@ -331,10 +336,15 @@ class SharedState:
         ).fetchall()
         return [
             {
-                "timestamp": r[0], "engine": r[1], "model": r[2], "session_id": r[3],
+                "timestamp": r[0],
+                "engine": r[1],
+                "model": r[2],
+                "session_id": r[3],
                 "summary": r[4],
-                "features_touched": json.loads(r[5]), "files_changed": json.loads(r[6]),
-                "commits": json.loads(r[7]), "verification": json.loads(r[8]),
+                "features_touched": json.loads(r[5]),
+                "files_changed": json.loads(r[6]),
+                "commits": json.loads(r[7]),
+                "verification": json.loads(r[8]),
             }
             for r in rows
         ]
@@ -342,7 +352,13 @@ class SharedState:
     # ── File Locking ─────────────────────────────────────────
 
     def acquire_lock(
-        self, path: str, *, engine: str, model: str, session_id: str = "", reason: str = ""
+        self,
+        path: str,
+        *,
+        engine: str,
+        model: str,
+        session_id: str = "",
+        reason: str = "",
     ) -> bool:
         """Atomically acquire a lock. Returns False if another engine already holds it."""
         path = _normalise_lock_path(path)
@@ -350,7 +366,9 @@ class SharedState:
         expires = now + timedelta(hours=LOCK_TIMEOUT_HOURS)
         with self._transaction():
             self._expire_locks()
-            rows = self._conn.execute("SELECT path, engine, session_id FROM active_locks").fetchall()
+            rows = self._conn.execute(
+                "SELECT path, engine, session_id FROM active_locks"
+            ).fetchall()
             if any(
                 (owner != engine or owner_session != session_id)
                 and _lock_paths_conflict(path, existing)
@@ -366,12 +384,26 @@ class SharedState:
                     session_id = excluded.session_id, locked_at = excluded.locked_at,
                     expires_at = excluded.expires_at, reason = excluded.reason
                 """,
-                (path, engine, model, session_id, now.isoformat(), expires.isoformat(), reason),
+                (
+                    path,
+                    engine,
+                    model,
+                    session_id,
+                    now.isoformat(),
+                    expires.isoformat(),
+                    reason,
+                ),
             )
             return True
 
     def acquire_directory_lock(
-        self, path: str, *, engine: str, model: str, session_id: str = "", reason: str = ""
+        self,
+        path: str,
+        *,
+        engine: str,
+        model: str,
+        session_id: str = "",
+        reason: str = "",
     ) -> bool:
         """Lock a directory, conflicting with every locked path it contains."""
         return self.acquire_lock(
@@ -422,7 +454,9 @@ class SharedState:
             {
                 "path": r[0],
                 "locked_by": {"engine": r[1], "model": r[2], "session_id": r[3]},
-                "locked_at": r[4], "expires_at": r[5], "reason": r[6],
+                "locked_at": r[4],
+                "expires_at": r[5],
+                "reason": r[6],
             }
             for r in rows
         ]
@@ -468,16 +502,30 @@ class SharedState:
         ).fetchall()
         return {
             "conventions": [
-                {"key": r[0], "value": r[1], "added_by": {"engine": r[2], "model": r[3]}, "added_at": r[4]}
+                {
+                    "key": r[0],
+                    "value": r[1],
+                    "added_by": {"engine": r[2], "model": r[3]},
+                    "added_at": r[4],
+                }
                 for r in conventions
             ],
             "gotchas": [
-                {"description": r[0], "added_by": {"engine": r[1], "model": r[2]}, "added_at": r[3]}
+                {
+                    "description": r[0],
+                    "added_by": {"engine": r[1], "model": r[2]},
+                    "added_at": r[3],
+                }
                 for r in gotchas
             ],
             "decisions": [
-                {"title": r[0], "decision": r[1], "rationale": r[2],
-                 "made_by": {"engine": r[3], "model": r[4]}, "made_at": r[5]}
+                {
+                    "title": r[0],
+                    "decision": r[1],
+                    "rationale": r[2],
+                    "made_by": {"engine": r[3], "model": r[4]},
+                    "made_at": r[5],
+                }
                 for r in decisions
             ],
         }
@@ -487,8 +535,12 @@ class SharedState:
     def touch_meta(self, *, engine: str, model: str) -> None:
         now = _now()
         with self._transaction():
-            for k, v in (("version", "1.0.0"), ("updated_at", now),
-                         ("updated_by_engine", engine), ("updated_by_model", model)):
+            for k, v in (
+                ("version", "1.0.0"),
+                ("updated_at", now),
+                ("updated_by_engine", engine),
+                ("updated_by_model", model),
+            ):
                 self._conn.execute(
                     "INSERT INTO meta (key, value) VALUES (?, ?) "
                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -523,12 +575,16 @@ class _ImmediateTransaction:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Solo-Code Shared State Manager (SQLite, local-only)")
+    parser = argparse.ArgumentParser(
+        description="Solo-Code Shared State Manager (SQLite, local-only)"
+    )
     sub = parser.add_subparsers(dest="command")
 
     show_parser = sub.add_parser("show", help="Display current shared state summary")
     feat_parser = sub.add_parser("features", help="List feature status")
-    feat_parser.add_argument("--status", choices=VALID_STATUSES, help="Filter by status")
+    feat_parser.add_argument(
+        "--status", choices=VALID_STATUSES, help="Filter by status"
+    )
     sess_parser = sub.add_parser("sessions", help="Show recent session log")
     sess_parser.add_argument("--limit", type=int, default=5)
     sub.add_parser("locks", help="Show active file locks")
@@ -541,20 +597,26 @@ if __name__ == "__main__":
             features = state.get_features()
             print(f"Features: {len(features)}")
             for f in features:
-                print(f"  {f['id']} [{f['status']}] — {f.get('name') or '?'} (owner: {f['owner']['engine'] or '-'})")
+                print(
+                    f"  {f['id']} [{f['status']}] — {f.get('name') or '?'} (owner: {f['owner']['engine'] or '-'})"
+                )
             print(f"Sessions: {len(state.get_recent_sessions(limit=10_000_000))}")
             print(f"Active locks: {len(state.get_active_locks())}")
         elif args.command == "features":
             for f in state.get_features():
                 if args.status and f["status"] != args.status:
                     continue
-                print(f"  [{f['status']}] {f['id']}: {f.get('name') or '?'} (owner: {f['owner']['engine'] or '-'})")
+                print(
+                    f"  [{f['status']}] {f['id']}: {f.get('name') or '?'} (owner: {f['owner']['engine'] or '-'})"
+                )
         elif args.command == "sessions":
             for s in state.get_recent_sessions(args.limit):
                 print(f"  [{s['engine']}] {s['timestamp'][:16]} — {s['summary'][:80]}")
         elif args.command == "locks":
             for lock in state.get_active_locks():
-                print(f"  {lock['path']} — locked by {lock['locked_by']['engine']} ({lock['locked_by']['model']})")
+                print(
+                    f"  {lock['path']} — locked by {lock['locked_by']['engine']} ({lock['locked_by']['model']})"
+                )
         elif args.command == "memory":
             mem = state.get_shared_memory()
             print("Conventions:")

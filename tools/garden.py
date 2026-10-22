@@ -640,6 +640,16 @@ def check_shared_state() -> list[str]:
     return issues
 
 
+# Two commands stay engine-specific by design. `ship` is the only command
+# carrying Kilo's `task:` frontmatter, a key no Gemini command uses. Gemini's
+# `code-review` is not a replacement for `review`: review records a receipt
+# over the git index, and code-review has no such step.
+GEMINI_COMMAND_EXCEPTIONS = {
+    "missing_in_gemini": {"review", "ship"},
+    "extra_in_gemini": {"code-review"},
+}
+
+
 def check_gemini(
     src: Path, dst: Path, *, skip_set: set[str] | None = None
 ) -> list[str]:
@@ -652,6 +662,7 @@ def check_gemini(
     No memory/ parity check: Gemini stores project knowledge under
     knowledge/ (artifacts + metadata.json), not a MEMORY.md/project-
     conventions.md mirror like the other engines -- not a comparable shape.
+    Commands are checked against .kilo/command with documented exceptions.
     """
     issues: list[str] = []
     skip_set = skip_set or set()
@@ -682,6 +693,34 @@ def check_gemini(
                     issues.append(
                         f"Skill missing SKILL.md: .gemini/antigravity/skills/{entry.name}"
                     )
+
+    # Commands: .kilo/command/*.md must exist in .gemini/antigravity/commands/*.md,
+    # minus the documented exceptions (GEMINI_COMMAND_EXCEPTIONS). A missing
+    # directory on either side is reported rather than skipped -- with no mirror
+    # there is nothing to compare, so staying silent would hide the whole gap.
+    src_cmd = src / "command"
+    dst_cmd = dst / "commands"
+    if not src_cmd.is_dir():
+        issues.append(
+            "Missing command source: .kilo/command (command parity uncheckable)"
+        )
+    elif not dst_cmd.is_dir():
+        issues.append(
+            "Missing command mirror: .gemini/antigravity/commands "
+            "(command parity uncheckable)"
+        )
+    else:
+        src_stems = {f.stem for f in src_cmd.iterdir() if f.suffix == ".md"}
+        dst_stems = {f.stem for f in dst_cmd.iterdir() if f.suffix == ".md"}
+        expected = src_stems - GEMINI_COMMAND_EXCEPTIONS["missing_in_gemini"]
+        for name in sorted(expected - dst_stems):
+            issues.append(f"Missing command: .gemini/antigravity/commands/{name}.md")
+        for name in sorted(
+            dst_stems - src_stems - GEMINI_COMMAND_EXCEPTIONS["extra_in_gemini"]
+        ):
+            issues.append(
+                f"Stale command (no source): .gemini/antigravity/commands/{name}.md"
+            )
 
     # Instructions (direct copy, same filename + identical content)
     issues.extend(check_instructions(src, dst, ".gemini/antigravity"))
@@ -1024,7 +1063,7 @@ def check_manifest(root: Path) -> list[str]:
 
 
 # Where each engine keeps its artifacts. Engines genuinely diverge —
-# .gemini/ ships 12 commands, not .kilo/'s 14 — so a doc line describing
+# .gemini/ ships 14 commands, not .kilo/'s 15 — so a doc line describing
 # .gemini/ must be measured against .gemini/, never against the source of
 # truth. Comparing everything to .kilo/ produces false drift reports.
 _ENGINE_LAYOUT = {
@@ -1063,7 +1102,7 @@ _ENGINE_LAYOUT = {
 # .gemini/ nests its harness one level deeper.
 _ENGINE_ROOT = {".gemini": Path(".gemini") / "antigravity"}
 
-# Matches an engine mention anywhere on the line, e.g. "`.gemini/` commands (12)".
+# Matches an engine mention anywhere on the line, e.g. "`.gemini/` commands (14)".
 _ENGINE_MENTION = re.compile(r"`?(\.(?:kilo|claude|copilot|gemini|opencode))/")
 
 

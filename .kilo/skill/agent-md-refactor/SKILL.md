@@ -146,11 +146,11 @@ One-sentence description of the project.
 ## Detailed Instructions
 
 For specific guidelines, see:
-- [TypeScript Conventions](.claude/typescript.md)
-- [Testing Guidelines](.claude/testing.md)
-- [Code Style](.claude/code-style.md)
-- [Git Workflow](.claude/git-workflow.md)
-- [Architecture Patterns](.claude/architecture.md)
+- [TypeScript Conventions](typescript.md)
+- [Testing Guidelines](testing.md)
+- [Code Style](code-style.md)
+- [Git Workflow](git-workflow.md)
+- [Architecture Patterns](architecture.md)
 ```
 
 **Each linked file template:**
