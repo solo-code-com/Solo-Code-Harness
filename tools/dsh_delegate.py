@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Run the DeepSeek Harness (dsh) as a worker in a sibling checkout.
+"""Run the DeepSeek Harness (dsh) as an optional worker from an external checkout.
 
-dsh lives in `reference/deepseek-harness-master/` and runs from source with
-`pnpm dsh --profile <name> "<task>"`. This wrapper locates that checkout, loads
-`DEEPSEEK_API_KEY` from the project `.env`, runs the task, and returns its output.
+The dsh checkout is NOT shipped with this repository and is not expected to exist
+here. This wrapper resolves one from an explicit `--dsh-dir`, then the `DSH_DIR`
+environment variable, then three sibling locations
+(`../reference/deepseek-harness-master`, `../deepseek-harness-master`,
+`../../reference/deepseek-harness-master`). When it finds a checkout, the wrapper
+loads `DEEPSEEK_API_KEY` from the project `.env`, runs the task from source with
+`pnpm dsh --profile <name> "<task>"`, and returns its output. `--self-test` prints
+`dsh checkout: NOT FOUND` and still exits 0, because the checkout is optional. A
+real run needs that checkout, `pnpm` on PATH, and one `pnpm build` in it.
 
 This wrapper injects NO guardrail prompt, takes no directory lock, and runs no
 post-run scope audit -- unlike `antigravity_delegate.py`. Whatever the task can
