@@ -3,7 +3,10 @@
 Coverage Gate — per-file coverage ratchet
 ==========================================
 Tracks test coverage per file and prevents coverage from decreasing.
-Coverage can only stay the same or improve, never regress.
+Coverage can only stay the same or improve, never regress, except that a
+production file may lose up to COVERAGE_TOLERANCE (1.0 point) without failing,
+because files exercised through subprocesses are measured noisily; such drops
+are still reported as notes.
 
 Budget lives in `tools/config/coverage-budget.json` with format:
 {
@@ -53,6 +56,15 @@ COVERAGE_FILE = ROOT / ".coverage"
 # The exemption covers a lower number only: the file must still appear in the run,
 # because an absent entry means its tests were deleted or failed to collect.
 RATCHET_EXEMPT = {"tools/test_e2e.py"}
+
+# Percentage points a production file may lose before the ratchet fails.
+# A file exercised through a subprocess is measured by the parent's import, not the
+# child's execution, so its number is noisy: measured on CI, `.github/scripts/
+# boundary_audit.py` recorded 65.1% on the linux baseline and 64.2% on the very next
+# enforcing run of the same commit, with no code change. Treating that swing as a
+# regression reddens a green tree at random; a drop within this many points is a
+# note instead, so it stays visible without failing the gate.
+COVERAGE_TOLERANCE = 1.0
 
 
 def is_test_file(path: str) -> bool:
@@ -126,13 +138,15 @@ def save_budget(
 
     platforms: dict[str, dict[str, float]] = {}
     if budget_file.exists():
+        # A malformed budget cannot be re-read, so the other platforms' sections are
+        # unrecoverable from it. Refuse instead of rewriting from an empty dict: that
+        # silently dropped every sibling section the file still held.
         try:
             platforms = load_budget(budget_file)
-        except (OSError, ValueError):
-            # A malformed file is about to be replaced for this platform only;
-            # the other sections may still be recoverable from the same read,
-            # but nothing else was loaded, so start from this section alone.
-            platforms = {}
+        except (OSError, ValueError) as exc:
+            raise ValueError(
+                f"cannot update {budget_file}: {exc} - refusing to overwrite it"
+            ) from exc
     platforms[platform] = dict(sorted(coverage_data.items()))
 
     payload = {"platforms": platforms}
@@ -232,7 +246,9 @@ def run_coverage() -> dict[str, float]:
 
 
 def check_ratchet(
-    platforms: dict[str, dict[str, float]], current: dict[str, float]
+    platforms: dict[str, dict[str, float]],
+    current: dict[str, float],
+    notes: list[str] | None = None,
 ) -> tuple[bool, list[str]]:
     """Check if coverage decreased for any file on the current platform.
 
@@ -242,9 +258,14 @@ def check_ratchet(
     has already printed the documented [SKIP] line - a skip that is announced,
     never inferred from an empty comparison.
 
+    A drop within COVERAGE_TOLERANCE is appended to `notes`, not `violations`:
+    subprocess-driven files are noisy, but the drop must stay visible.
+
     Returns:
         (passed, violations) where violations lists files with decreased coverage
     """
+    if notes is None:
+        notes = []
     violations = []
 
     budget = platforms.get(sys.platform)
@@ -294,10 +315,16 @@ def check_ratchet(
 
         if new_coverage < old_coverage:
             diff = old_coverage - new_coverage
-            violations.append(
-                f"  {file_path}: {old_coverage:.1f}% -> {new_coverage:.1f}% "
-                f"(-{diff:.1f}%)"
-            )
+            if diff <= COVERAGE_TOLERANCE:
+                notes.append(
+                    f"  [NOTE] {file_path}: {old_coverage:.1f}% -> "
+                    f"{new_coverage:.1f}% (-{diff:.1f}%, within tolerance)"
+                )
+            else:
+                violations.append(
+                    f"  {file_path}: {old_coverage:.1f}% -> {new_coverage:.1f}% "
+                    f"(-{diff:.1f}%)"
+                )
 
     return len(violations) == 0, violations
 
@@ -343,6 +370,15 @@ def main() -> int:
         return 0
 
     if "--update" in sys.argv:
+        # Read the existing budget before paying for a coverage run: a malformed
+        # file must fail here and stay untouched, not after the suite has run.
+        # A missing file is a first run, and load_budget() returns {} for it.
+        try:
+            existing = load_budget().get(sys.platform, {})
+        except (OSError, ValueError) as exc:
+            print(f"[FAIL] coverage budget {BUDGET_FILE}: {exc}")
+            return 1
+
         print("Running coverage...")
         try:
             current = run_coverage()
@@ -355,10 +391,6 @@ def main() -> int:
         # only when the file actually ran: a deleted file must not outlive itself.
         # The other platforms' sections are not measured by this run, so only
         # this platform's baseline is refreshed; save_budget() keeps the rest.
-        try:
-            existing = load_budget().get(sys.platform, {})
-        except (OSError, ValueError):
-            existing = {}
         skipped = [path for path in current if path in RATCHET_EXEMPT]
         for path in skipped:
             del current[path]
@@ -366,7 +398,11 @@ def main() -> int:
             if path in RATCHET_EXEMPT and path in skipped:
                 current[path] = saved_coverage
 
-        save_budget(current)
+        try:
+            save_budget(current)
+        except (OSError, ValueError) as exc:
+            print(f"[FAIL] saving budget: {exc}")
+            return 1
         if skipped:
             print(
                 f"[SKIP] {len(skipped)} live-API file(s) not written to the budget: "
@@ -476,6 +512,15 @@ def main() -> int:
         )
         return 0
 
+    # An empty section enforces nothing, so a green [OK] would claim a guarantee the
+    # budget does not hold. Fail instead, and name the command that fills it.
+    if not platforms[sys.platform]:
+        print(
+            f"[FAIL] the baseline for {sys.platform} is empty - "
+            "run --update on this platform"
+        )
+        return 1
+
     print("Running coverage...")
     try:
         current = run_coverage()
@@ -483,10 +528,14 @@ def main() -> int:
         print(f"[FAIL] coverage run: {exc}")
         return 1
 
-    passed, violations = check_ratchet(platforms, current)
+    notes: list[str] = []
+    passed, violations = check_ratchet(platforms, current, notes)
 
     print(f"Files tracked       : {len(platforms[sys.platform])}")
     print(f"Files in current run: {len(current)}")
+
+    for note in notes:
+        print(note)
 
     if not passed:
         print(f"\n[FAIL] Coverage decreased for {len(violations)} file(s):")

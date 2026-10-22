@@ -109,6 +109,7 @@ jobs:
       - name: Coverage baseline capture
         shell: bash
         run: |
+          set -o pipefail
           python tools/coverage_gate.py --capture | while IFS= read -r line; do
             [ -n "$line" ] && echo "::notice::$line"
           done

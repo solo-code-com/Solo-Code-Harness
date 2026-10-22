@@ -600,3 +600,111 @@ def test_test_file_rule_uses_basename_not_directory():
     assert passed is False
     assert len(violations) == 1
     assert f"{path} is a test file" in violations[0]
+
+
+def test_check_ratchet_tolerates_a_sub_tolerance_drop_with_a_note():
+    """A 0.9 point drop is measured noise, not a regression - but it stays visible.
+
+    Measured on CI: .github/scripts/boundary_audit.py was 65.1% on the recorded
+    linux baseline and 64.2% on the next enforcing run of the same commit.
+    """
+    budget = {sys.platform: {".github/scripts/boundary_audit.py": 65.1}}
+    current = {".github/scripts/boundary_audit.py": 64.2}
+
+    notes: list[str] = []
+    passed, violations = coverage_gate.check_ratchet(budget, current, notes)
+
+    assert passed is True
+    assert violations == []
+    assert len(notes) == 1
+    assert (
+        ".github/scripts/boundary_audit.py: 65.1% -> 64.2% (-0.9%, within tolerance)"
+        in notes[0]
+    )
+    assert "[NOTE]" in notes[0]
+
+
+def test_check_ratchet_fails_above_the_tolerance():
+    """A 1.1 point drop is still a violation: the tolerance is not a free pass."""
+    budget = {sys.platform: {"tools/garden.py": 85.1}}
+    current = {"tools/garden.py": 84.0}
+
+    notes: list[str] = []
+    passed, violations = coverage_gate.check_ratchet(budget, current, notes)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "tools/garden.py: 85.1% -> 84.0% (-1.1%)" in violations[0]
+    assert notes == []
+
+
+def test_save_budget_refuses_to_overwrite_a_malformed_file(tmp_path):
+    """A malformed budget may still hold the other platforms: do not rewrite it.
+
+    The old code swallowed the parse error and wrote this platform alone, silently
+    destroying every sibling section.
+    """
+    bfile = tmp_path / "coverage-budget.json"
+    original = '{"platforms": {"linux": {"tools/a.py": 90.0}'
+    bfile.write_text(original, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="refusing to overwrite"):
+        coverage_gate.save_budget({"tools/a.py": 88.0}, bfile)
+
+    assert bfile.read_text(encoding="utf-8") == original
+
+
+def test_update_fails_on_a_malformed_budget_without_writing(
+    tmp_path, monkeypatch, capsys
+):
+    """--update must name the file and the parse error, and leave it alone."""
+    bfile = tmp_path / "coverage-budget.json"
+    original = '{"platforms": {"linux": {"tools/a.py": 90.0}'
+    bfile.write_text(original, encoding="utf-8")
+    real_load = coverage_gate.load_budget
+    real_save = coverage_gate.save_budget
+
+    monkeypatch.setattr(coverage_gate, "BUDGET_FILE", bfile)
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(
+        coverage_gate, "save_budget", lambda data, *a, **k: real_save(data, bfile)
+    )
+    monkeypatch.setattr(
+        coverage_gate,
+        "run_coverage",
+        lambda: pytest.fail("a malformed budget must fail before the coverage run"),
+    )
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--update"])
+
+    assert coverage_gate.main() == 1
+
+    out = capsys.readouterr().out
+    assert str(bfile) in out
+    assert "Malformed budget file" in out
+    assert bfile.read_text(encoding="utf-8") == original
+
+
+def test_empty_platform_section_fails_instead_of_enforcing_nothing(
+    tmp_path, monkeypatch, capsys
+):
+    """An empty section measures nothing, so [OK] would be a false guarantee."""
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "test_gate.py").write_text("x = 1\n", encoding="utf-8")
+    bfile = tmp_path / "budget.json"
+    bfile.write_text(json.dumps({"platforms": {sys.platform: {}}}), encoding="utf-8")
+    real_load = coverage_gate.load_budget
+
+    monkeypatch.setattr(coverage_gate, "ROOT", tmp_path)
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(
+        coverage_gate,
+        "run_coverage",
+        lambda: pytest.fail("an empty baseline must fail before running coverage"),
+    )
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py"])
+
+    assert coverage_gate.main() == 1
+
+    out = capsys.readouterr().out
+    assert f"[FAIL] the baseline for {sys.platform} is empty" in out
+    assert "run --update on this platform" in out
