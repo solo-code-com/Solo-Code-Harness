@@ -1,5 +1,5 @@
 ---
-allowed-tools: Read, Grep, Glob
+allowed-tools: Read, Grep, Glob, Bash(git *)
 description: Brainstorm solutions with trade-off analysis
 ---
 

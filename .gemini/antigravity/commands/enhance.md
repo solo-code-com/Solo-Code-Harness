@@ -1,5 +1,5 @@
 ---
-allowed-tools: Read, Edit, Grep, Glob
+allowed-tools: Read, Edit, Grep, Glob, Bash(git *)
 description: Enhance existing code — add features, improve error handling, optimize
 ---
 

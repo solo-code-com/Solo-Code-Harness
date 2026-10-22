@@ -48,5 +48,4 @@ packages = ["tools"]
 include = ["/tools", "/.kilo", "/.claude", "/.github", "/README.md", "/LICENSE", "/AGENTS.md", "/SPEC.md"]
 
 [tool.pytest.ini_options]
-addopts = "--basetemp=.pytest_temp"
 testpaths = ["tools"]
