@@ -112,7 +112,12 @@ def test_load_file_reads_toml_and_json(tmp_path):
     mod = _load()
     t = tmp_path / "settings.toml"
     t.write_text("[gates]\nsecurity = false\n", encoding="utf-8")
-    assert mod._load_file(t) == {"gates": {"security": False}}
+    if sys.version_info >= (3, 11):
+        assert mod._load_file(t) == {"gates": {"security": False}}
+    else:
+        # harness_config documents that TOML needs 3.11+; on 3.10 it raises rather than guessing.
+        with pytest.raises(RuntimeError, match="tomllib"):
+            mod._load_file(t)
     j = tmp_path / "settings.json"
     j.write_text('{"gates": {"lint": false}}', encoding="utf-8")
     assert mod._load_file(j) == {"gates": {"lint": False}}

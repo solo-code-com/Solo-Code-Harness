@@ -1025,11 +1025,13 @@ def _merge_list_file(src: Path, dst: Path, dry_run: bool, base: Path) -> str:
         shutil.copy2(src, dst)
         return f"  [NEW] {rel}"
 
-    # newline="" so a CRLF file is seen as CRLF: read_text() would normalise it to LF first and the
-    # appended block would then change every line ending in the file (caught by a test).
-    text = dst.read_text(encoding="utf-8", errors="replace", newline="")
+    # newline="" so a CRLF file is seen as CRLF: opening without it would translate the endings to LF
+    # and the appended block would then change every line ending in the file (caught by a test).
+    with dst.open("r", encoding="utf-8", errors="replace", newline="") as fh:
+        text = fh.read()
     existing = {ln.strip() for ln in text.splitlines()}
-    wanted = src.read_text(encoding="utf-8", errors="replace", newline="").splitlines()
+    with src.open("r", encoding="utf-8", errors="replace", newline="") as fh:
+        wanted = fh.read().splitlines()
     # Comment-only lines are documentation, not rules. Targets often carry the same comment with a
     # different dash character, and appending those would duplicate the file for no behavioural
     # gain - the marker line already explains why rules were added.

@@ -13,6 +13,10 @@ Budget lives in `tools/config/coverage-budget.json` with format:
   }
 }
 
+Budget keys are POSIX-relative paths (`tools/garden.py`), never OS-native ones,
+so the same file is valid on Windows, macOS and Linux and CI can compare it
+against a run on any platform.
+
 Usage:
     python tools/coverage_gate.py             # enforce the budget
     python tools/coverage_gate.py --update    # update budget to current coverage
@@ -29,6 +33,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BUDGET_FILE = ROOT / "tools" / "config" / "coverage-budget.json"
 COVERAGE_FILE = ROOT / ".coverage"
+
+# Live-API tests: coverage depends on whether the provider answered, so a drop here
+# says nothing about lost tests. Exempt from the ratchet, never written by --update.
+# The exemption covers a lower number only: the file must still appear in the run,
+# because an absent entry means its tests were deleted or failed to collect.
+RATCHET_EXEMPT = {"tools/test_e2e.py"}
 
 
 def load_budget(budget_file: Path = BUDGET_FILE) -> dict[str, float]:
@@ -115,7 +125,10 @@ def run_coverage() -> dict[str, float]:
         ],
         capture_output=True,
         text=True,
-        timeout=300,
+        # The suite measured ~345s locally (1668 tests). checklist.py gives this gate a
+        # 900s outer budget, so 840 leaves headroom for a slower CI runner while still
+        # finishing before the outer limit trips.
+        timeout=840,
         check=False,
         cwd=ROOT,
     )
@@ -150,8 +163,10 @@ def run_coverage() -> dict[str, float]:
         try:
             rel_path = Path(file_path).relative_to(ROOT).as_posix()
         except ValueError:
-            # File outside ROOT, use as-is
-            rel_path = file_path
+            # coverage.py writes relative paths when run from ROOT, so there is
+            # nothing to strip. Keep the POSIX form anyway: on Windows the native
+            # form (`tools\gate.py`) matches none of the committed budget keys.
+            rel_path = Path(file_path).as_posix()
 
         files_coverage[rel_path] = round(percent, 2)
 
@@ -168,7 +183,38 @@ def check_ratchet(
     """
     violations = []
 
-    for file_path, old_coverage in budget.items():
+    # Exempt files are not compared, so an oscillating live-API file can neither
+    # raise a violation nor be counted as a path-mismatch casualty. It must still
+    # run, though: an absent entry means its tests were deleted or failed to collect.
+    tracked = {
+        path: old_coverage
+        for path, old_coverage in budget.items()
+        if path not in RATCHET_EXEMPT
+    }
+    for path in sorted(budget):
+        if path in RATCHET_EXEMPT and path not in current:
+            violations.append(
+                f"{path} is exempt from coverage, but it did not run at all - "
+                "deleted tests, or a collection error?"
+            )
+
+    # A whole-platform separator difference shows up as "every file dropped to
+    # 0%". A genuine regression removes one or two files, never half of them, so
+    # below that threshold the per-file report is still authoritative. When the
+    # threshold trips, the present files are still compared: the diagnostic
+    # explains the missing majority, not why a surviving file fell.
+    missing = [path for path in tracked if path not in current]
+    mismatch = bool(tracked) and len(missing) * 2 > len(tracked)
+    if mismatch:
+        violations.append(
+            f"path mismatch: {len(missing)} of {len(tracked)} budget entries are "
+            "missing from this run (Windows vs POSIX separators?) - run "
+            "python tools/coverage_gate.py --update"
+        )
+
+    for file_path, old_coverage in tracked.items():
+        if mismatch and file_path not in current:
+            continue
         new_coverage = current.get(file_path, 0.0)
 
         if new_coverage < old_coverage:
@@ -204,7 +250,26 @@ def main() -> int:
             print(f"[FAIL] coverage run: {exc}")
             return 1
 
+        # A live-API file's coverage tracks the network, not the suite, so it is
+        # never a baseline. Drop it from this run, and re-add a pre-existing entry
+        # only when the file actually ran: a deleted file must not outlive itself.
+        try:
+            existing = load_budget()
+        except (OSError, ValueError):
+            existing = {}
+        skipped = [path for path in current if path in RATCHET_EXEMPT]
+        for path in skipped:
+            del current[path]
+        for path, saved_coverage in existing.items():
+            if path in RATCHET_EXEMPT and path in skipped:
+                current[path] = saved_coverage
+
         save_budget(current)
+        if skipped:
+            print(
+                f"[SKIP] {len(skipped)} live-API file(s) not written to the budget: "
+                "coverage depends on whether the provider answered"
+            )
         print(f"[OK] Updated budget: {len(current)} files tracked")
         print(f"     Saved to: {BUDGET_FILE}")
         return 0
@@ -223,6 +288,11 @@ def main() -> int:
         all_files = sorted(set(budget.keys()) | set(current.keys()))
 
         for file_path in all_files:
+            # --report must not call an exempt file a regression while enforcement
+            # passes it.
+            if file_path in RATCHET_EXEMPT:
+                continue
+
             old = budget.get(file_path)
             new = current.get(file_path)
 

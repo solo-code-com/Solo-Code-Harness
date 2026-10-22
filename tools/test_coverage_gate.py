@@ -103,3 +103,210 @@ def test_harness_tests_present_detects_both_checkouts(tmp_path):
     assert coverage_gate.harness_tests_present(ROOT) is True
     (tmp_path / "tools").mkdir()
     assert coverage_gate.harness_tests_present(tmp_path) is False
+
+
+def test_run_coverage_normalises_native_separators(tmp_path, monkeypatch):
+    """coverage.py keys arrive with the OS separator; they must come back POSIX.
+
+    coverage.py writes relative paths when run from ROOT, so the fallback in
+    run_coverage() is what CI exercises. On Windows that produced
+    `tools\\coverage_gate.py`, which matched none of the committed budget keys and
+    read every file as 0.0% (CI run 39726010702). On POSIX the native form is
+    already POSIX, so the assertion holds there too.
+    """
+    coverage_json = tmp_path / "coverage.json"
+    native_key = str(Path("tools", "coverage_gate.py"))
+
+    class _Proc:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        if "--version" in cmd:
+            return _Proc()
+        coverage_json.write_text(
+            json.dumps({"files": {native_key: {"summary": {"percent_covered": 87.5}}}}),
+            encoding="utf-8",
+        )
+        return _Proc()
+
+    monkeypatch.setattr(coverage_gate.subprocess, "run", fake_run)
+    monkeypatch.setattr(coverage_gate, "ROOT", tmp_path)
+    monkeypatch.setattr(coverage_gate, "COVERAGE_FILE", tmp_path / ".coverage")
+
+    result = coverage_gate.run_coverage()
+
+    assert result == {"tools/coverage_gate.py": 87.5}
+    assert all("\\" not in key for key in result)
+
+
+def test_check_ratchet_reports_path_mismatch_not_mass_regressions():
+    """Most of the budget missing at once is a separator mismatch, not a regression.
+
+    The old code reported every missing key as 0.0%, so a POSIX run against the
+    Windows-separated budget emitted 120 violations instead of one diagnostic.
+    """
+    budget = {
+        "tools/a.py": 90.0,
+        "tools/b.py": 90.0,
+        "tools/c.py": 90.0,
+        "tools/d.py": 90.0,
+    }
+    current = {"tools/a.py": 95.0}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "path mismatch: 3 of 4 budget entries are missing" in violations[0]
+    assert "Windows vs POSIX separators" in violations[0]
+    assert "--update" in violations[0]
+
+
+def test_check_ratchet_single_regression_still_reported():
+    """The mismatch guard must not swallow a genuine one-file drop."""
+    budget = {
+        "tools/a.py": 80.0,
+        "tools/b.py": 90.0,
+        "tools/c.py": 70.0,
+        "tools/d.py": 60.0,
+        "tools/e.py": 50.0,
+        "tools/f.py": 40.0,
+    }
+    current = dict(budget)
+    current["tools/a.py"] = 75.0
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "tools/a.py: 80.0% -> 75.0%" in violations[0]
+
+
+def test_check_ratchet_ignores_drop_in_exempt_live_api_file():
+    """An exempt live-API file can drop without failing the ratchet.
+
+    tools/test_e2e.py runs live API calls that skip on a provider timeout, so its
+    coverage measures the network. Measured: 89.5% -> 87.2% with no test removed.
+    """
+    budget = {"tools/test_e2e.py": 89.53}
+    current = {"tools/test_e2e.py": 87.2}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is True
+    assert violations == []
+
+
+def test_check_ratchet_still_reports_drop_in_non_exempt_file():
+    """The exemption is one file wide: a normal file still fails on a drop."""
+    budget = {"tools/test_e2e.py": 89.53, "tools/coverage_gate.py": 50.0}
+    current = {"tools/test_e2e.py": 80.0, "tools/coverage_gate.py": 45.0}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "tools/coverage_gate.py: 50.0% -> 45.0%" in violations[0]
+    assert "tools/test_e2e.py" not in violations[0]
+
+
+def test_update_does_not_write_exempt_file_into_budget(monkeypatch, capsys):
+    """--update must not turn a live-API file's oscillation into a baseline.
+
+    An entry already in the budget is preserved rather than deleted, but the run's
+    new number never replaces it.
+    """
+    saved: dict[str, float] = {}
+    monkeypatch.setattr(coverage_gate, "save_budget", lambda data: saved.update(data))
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda: {})
+    monkeypatch.setattr(
+        coverage_gate,
+        "run_coverage",
+        lambda: {"tools/test_e2e.py": 87.2, "tools/coverage_gate.py": 50.0},
+    )
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--update"])
+
+    assert coverage_gate.main() == 0
+    assert saved == {"tools/coverage_gate.py": 50.0}
+    out = capsys.readouterr().out
+    assert "1 live-API file(s) not written to the budget" in out
+
+    # An existing entry stays untouched: kept, not refreshed, not deleted.
+    saved.clear()
+    monkeypatch.setattr(
+        coverage_gate, "load_budget", lambda: {"tools/test_e2e.py": 89.53}
+    )
+
+    assert coverage_gate.main() == 0
+    assert saved == {"tools/coverage_gate.py": 50.0, "tools/test_e2e.py": 89.53}
+
+
+def test_check_ratchet_flags_exempt_file_that_did_not_run():
+    """An absent exempt file means deleted tests or a collection error, not a quiet pass."""
+    budget = {"tools/test_e2e.py": 89.53, "tools/coverage_gate.py": 50.0}
+    current = {"tools/coverage_gate.py": 50.0}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert (
+        "tools/test_e2e.py is exempt from coverage, but it did not run at all"
+        in violations[0]
+    )
+    assert "deleted tests, or a collection error?" in violations[0]
+
+
+def test_update_drops_exempt_entry_when_file_did_not_run(monkeypatch):
+    """--update must not carry an exempt baseline for a file missing from the run."""
+    saved: dict[str, float] = {}
+    monkeypatch.setattr(coverage_gate, "save_budget", lambda data: saved.update(data))
+    monkeypatch.setattr(
+        coverage_gate, "load_budget", lambda: {"tools/test_e2e.py": 89.53}
+    )
+    monkeypatch.setattr(
+        coverage_gate, "run_coverage", lambda: {"tools/coverage_gate.py": 50.0}
+    )
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--update"])
+
+    assert coverage_gate.main() == 0
+    assert saved == {"tools/coverage_gate.py": 50.0}
+
+
+def test_update_keeps_exempt_entry_when_file_ran(monkeypatch):
+    """A pre-existing exempt entry survives only while its file is present."""
+    saved: dict[str, float] = {}
+    monkeypatch.setattr(coverage_gate, "save_budget", lambda data: saved.update(data))
+    monkeypatch.setattr(
+        coverage_gate, "load_budget", lambda: {"tools/test_e2e.py": 89.53}
+    )
+    monkeypatch.setattr(
+        coverage_gate,
+        "run_coverage",
+        lambda: {"tools/test_e2e.py": 87.2, "tools/coverage_gate.py": 50.0},
+    )
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py", "--update"])
+
+    assert coverage_gate.main() == 0
+    # The saved number is preserved, not refreshed from the live run.
+    assert saved == {"tools/test_e2e.py": 89.53, "tools/coverage_gate.py": 50.0}
+
+
+def test_check_ratchet_path_mismatch_still_reports_present_file_drop():
+    """The diagnostic explains the missing majority; a present file's drop is still real."""
+    budget = {
+        "tools/a.py": 90.0,
+        "tools/b.py": 90.0,
+        "tools/c.py": 90.0,
+        "tools/d.py": 90.0,
+    }
+    current = {"tools/a.py": 85.0}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is False
+    assert len(violations) == 2
+    assert "path mismatch: 3 of 4 budget entries are missing" in violations[0]
+    assert "tools/a.py: 90.0% -> 85.0%" in violations[1]

@@ -107,12 +107,42 @@ def test_launcher_covers_the_aliases_env_file_derives() -> None:
         )
 
 
-def test_provider_endpoint_prefers_the_raw_env_value() -> None:
+def test_provider_endpoint_prefers_the_raw_env_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A URL built for a request must not be normalised: the API path needs its /v1."""
-    url, key = env_file.provider_endpoint("commandcode", "chat")
-    raw = env_file.parse_env_file(ROOT / ".env").get("COMMANDCODE_BASE_URL", "")
-    assert raw and url.startswith(raw.rstrip("/")), (
-        f"{url} should keep the raw base {raw}"
+    raw = "https://api.commandcode.ai/provider/v1"
+    monkeypatch.setattr(
+        env_file,
+        "parse_env_file",
+        lambda _path: {
+            "COMMANDCODE_BASE_URL": raw,
+            "COMMANDCODE_API_KEY": "test-key",
+        },
     )
-    assert url.endswith("/chat/completions")
-    assert key, "expected a credential for the primary provider"
+    monkeypatch.delenv("COMMANDCODE_BASE_URL", raising=False)
+    monkeypatch.delenv("COMMANDCODE_API_KEY", raising=False)
+    url, key = env_file.provider_endpoint("commandcode", "chat")
+    assert "/v1" in url, f"{url} should keep the raw base {raw}"
+    assert url == raw + "/chat/completions"
+    assert key == "test-key"
+
+
+def test_provider_endpoint_keeps_the_models_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The models kind is built from the same raw base, so it keeps its /v1 too."""
+    raw = "https://api.commandcode.ai/provider/v1"
+    monkeypatch.setattr(
+        env_file,
+        "parse_env_file",
+        lambda _path: {
+            "COMMANDCODE_BASE_URL": raw,
+            "COMMANDCODE_API_KEY": "test-key",
+        },
+    )
+    monkeypatch.delenv("COMMANDCODE_BASE_URL", raising=False)
+    monkeypatch.delenv("COMMANDCODE_API_KEY", raising=False)
+    url, key = env_file.provider_endpoint("commandcode", "models")
+    assert url == raw + "/models"
+    assert key == "test-key"
