@@ -58,7 +58,15 @@ jobs:
         shell: bash
 
       - name: Harness Tests (auto-discovers all tools/test_*.py)
-        run: python -m pytest tools/ -v --tb=short
+        run: |
+          set +e
+          python -m pytest tools/ -v --tb=short > pytest.log 2>&1
+          rc=$?
+          grep -E "^(FAILED|ERROR)" pytest.log | head -40 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          tail -40 pytest.log
+          exit $rc
         shell: bash
 
   extended-gates:
@@ -84,7 +92,15 @@ jobs:
         shell: bash
 
       - name: Coverage Ratchet
-        run: python tools/coverage_gate.py
+        run: |
+          set +e
+          python tools/coverage_gate.py > coverage.log 2>&1
+          rc=$?
+          grep -E "^\s+[A-Za-z0-9_.\\\\/-]+: |^\[FAIL\]|^\[OK\]" coverage.log | head -40 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          tail -25 coverage.log
+          exit $rc
         shell: bash
 
       - name: Gitleaks
