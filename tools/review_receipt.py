@@ -115,6 +115,36 @@ def _git_output(args: list[str], root: Path, git: str = GIT) -> str:
     return proc.stdout
 
 
+def _git_bytes(args: list[str], root: Path, git: str = GIT) -> bytes:
+    """Run one git command in `root` and return stdout as raw bytes.
+
+    The patch is hashed byte-for-byte: decoding with errors="replace" maps two
+    different invalid byte sequences onto the same U+FFFD, so two distinct
+    patches would hash identically. Failures raise ReceiptError with the same
+    messages as `_git_output`.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603,S607 - fixed argv, no shell, no user input
+            [git, *args],
+            cwd=str(root),
+            capture_output=True,
+            text=False,
+            check=False,
+            timeout=120,
+        )
+    except FileNotFoundError as exc:
+        raise ReceiptError(f"git is not available: {git!r} was not found") from exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ReceiptError(f"could not run git in {root}: {exc}") from exc
+
+    if proc.returncode != 0:
+        raw = proc.stderr or proc.stdout or b""
+        lines = raw.decode("utf-8", errors="replace").strip().splitlines()
+        cause = lines[0] if lines else f"exit code {proc.returncode}"
+        raise ReceiptError(f"git {args[0]} failed in {root}: {cause}")
+    return proc.stdout
+
+
 def compute_change_set(root: Path = ROOT, git: str = GIT) -> dict[str, object]:
     """Measure the current change set: files, line count and tree hash."""
     names = _git_output(
@@ -133,7 +163,7 @@ def compute_change_set(root: Path = ROOT, git: str = GIT) -> dict[str, object]:
         changed_lines += int(added) if added.isdigit() else 0
         changed_lines += int(removed) if removed.isdigit() else 0
 
-    diff = _git_output(
+    diff = _git_bytes(
         ["diff", "--cached", "--binary", "--no-color", *_READ_ONLY_DIFF_FLAGS],
         root,
         git,
@@ -141,7 +171,7 @@ def compute_change_set(root: Path = ROOT, git: str = GIT) -> dict[str, object]:
     digest = hashlib.sha256()
     digest.update("\n".join(files).encode("utf-8"))
     digest.update(b"\n")
-    digest.update(diff.encode("utf-8"))
+    digest.update(diff)
 
     return {
         "files": files,
@@ -159,7 +189,9 @@ def load_policy(root: Path = ROOT) -> dict[str, object]:
     """
     path = root / POLICY_PATH
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        # utf-8-sig matches harness_fingerprint's BOM stripping on purpose: a BOM
+        # is platform noise, not a silent policy failure.
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except FileNotFoundError as exc:
         raise ReceiptError(f"review policy not found: {path}") from exc
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:

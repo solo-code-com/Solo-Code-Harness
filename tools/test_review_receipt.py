@@ -18,11 +18,14 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOL = ROOT / "tools" / "review_receipt.py"
@@ -555,6 +558,43 @@ def test_record_then_add_file_past_threshold_exits_1(tmp_path: Path, capsys) -> 
     _write(root, "f6.txt", "line 1\n")
     assert tool.main(["verify"], root=root) == 1
     assert "no receipt" in capsys.readouterr().out
+
+
+def test_tree_hash_differs_for_two_invalid_utf8_patches(tmp_path: Path) -> None:
+    """The hash covers raw bytes, not lossy-decoded text.
+
+    Both patches decode to the same U+FFFD under errors="replace"; hashing the
+    decoded text would make two distinct trees hash identically.
+    """
+    if shutil.which("git") is None:
+        pytest.skip("git is not available")
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    path = root / "base.txt"
+
+    path.write_bytes(b"line\xffend\n")
+    _git(root, "add", "base.txt")
+    first = tool.compute_change_set(root)["tree_hash"]
+
+    path.write_bytes(b"line\xfeend\n")
+    _git(root, "add", "base.txt")
+    second = tool.compute_change_set(root)["tree_hash"]
+
+    assert first != second
+
+
+def test_policy_with_a_bom_loads(tmp_path: Path) -> None:
+    """A BOM is platform noise, so it must not turn a valid policy into exit 2.
+
+    harness_fingerprint.canonical_bytes strips the BOM, so the policy loader
+    reading utf-8-sig keeps the fingerprint's "unchanged" claim honest.
+    """
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    policy_path = root / tool.POLICY_PATH
+    policy_path.write_bytes(b"\xef\xbb\xbf" + json.dumps(POLICY).encode("utf-8"))
+
+    assert tool.load_policy(root) == POLICY
 
 
 if __name__ == "__main__":
