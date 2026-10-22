@@ -36,7 +36,9 @@ _ANTHROPIC_SECRET = "sk-ant-abcdefghijklmnopqrstuvwxyz0123"  # noqa: S105
 _QUOTED_SECRET = "sk-abcdefghijklmnopqrstuvwxyz123456"  # noqa: S105
 
 
-def _run(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def _run(
+    *args: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     """Invoke codex_guard, returning the completed process."""
     merged = os.environ.copy()
     if env:
@@ -51,8 +53,10 @@ def _run(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedP
 
 
 def _norm(path: Path) -> str:
-    """Match shared_state._normalise_lock_path for lock-key comparison."""
-    return str(path).replace("\\", "/").strip("/").lower()
+    """Match the lock key shared_state actually stores, on every platform."""
+    from tools.shared_state import _normalise_lock_path
+
+    return _normalise_lock_path(str(path))
 
 
 def _active_lock_for(db: Path, path: Path) -> dict | None:
@@ -145,7 +149,9 @@ def test_write_benign_content_creates_file(tmp_path: Path) -> None:
 def test_write_secret_in_content_is_blocked(tmp_path: Path) -> None:
     """--write must not write to disk when secrets are detected."""
     target = tmp_path / "secret.txt"
-    result = _run("--content", f'api_key = "{_QUOTED_SECRET}"', "--path", str(target), "--write")
+    result = _run(
+        "--content", f'api_key = "{_QUOTED_SECRET}"', "--path", str(target), "--write"
+    )
     assert result.returncode == 2
     assert "BLOCKED" in result.stderr
     assert not target.exists()
@@ -167,7 +173,9 @@ def test_write_releases_lock_on_success(tmp_path: Path, isolated_db: Path) -> No
     assert _active_lock_for(isolated_db, target) is None
 
 
-def test_other_engine_lock_blocks_and_is_preserved(tmp_path: Path, isolated_db: Path) -> None:
+def test_other_engine_lock_blocks_and_is_preserved(
+    tmp_path: Path, isolated_db: Path
+) -> None:
     """Another engine's lock blocks the write and must not be released by us."""
     from tools.shared_state import SharedState
 
@@ -187,12 +195,19 @@ def test_other_engine_lock_blocks_and_is_preserved(tmp_path: Path, isolated_db: 
     assert lock["locked_by"]["engine"] == "kilo"
 
 
-def test_blocked_secret_does_not_acquire_lock(tmp_path: Path, isolated_db: Path) -> None:
+def test_blocked_secret_does_not_acquire_lock(
+    tmp_path: Path, isolated_db: Path
+) -> None:
     """A secret block happens before the lock is taken, so no lock is left."""
     target = tmp_path / "secret.txt"
     env = {"CODEX_GUARD_STATE_DB": str(isolated_db)}
     result = _run(
-        "--content", f'api_key = "{_QUOTED_SECRET}"', "--path", str(target), "--write", env=env
+        "--content",
+        f'api_key = "{_QUOTED_SECRET}"',
+        "--path",
+        str(target),
+        "--write",
+        env=env,
     )
     assert result.returncode == 2
     assert "BLOCKED" in result.stderr
@@ -210,7 +225,9 @@ def test_failed_write_releases_lock(tmp_path: Path, isolated_db: Path) -> None:
     assert _active_lock_for(isolated_db, target) is None
 
 
-def test_overlapping_invocations_use_distinct_lock_owners(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_overlapping_invocations_use_distinct_lock_owners(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A shared Codex session ID must not let invocations release each other's locks."""
     from tools import codex_guard
 
@@ -230,7 +247,9 @@ def test_overlapping_invocations_use_distinct_lock_owners(monkeypatch: pytest.Mo
     monkeypatch.setattr(codex_guard, "_state", FakeState)
     monkeypatch.setenv("CODEX_SESSION_ID", "same-codex-session")
     for _ in range(2):
-        monkeypatch.setattr(sys, "argv", [str(GUARD), "--content", "hello", "--path", "same.txt"])
+        monkeypatch.setattr(
+            sys, "argv", [str(GUARD), "--content", "hello", "--path", "same.txt"]
+        )
         assert codex_guard.main() == 0
 
     assert len(owner_ids) == 2

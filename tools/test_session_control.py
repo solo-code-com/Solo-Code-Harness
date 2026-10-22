@@ -304,12 +304,20 @@ def test_kill_tree_on_a_dead_pid_still_reports_what_it_signalled(mods):
     _, control = mods
     proc = subprocess.Popen([sys.executable, "-c", "pass"])
     proc.wait(timeout=30)
-    assert control.kill_tree(proc.pid) == [proc.pid]
+    # taskkill /T /F /PID is unconditional, so Windows reports the pid even
+    # though it was already gone; POSIX returns only what it actually signalled.
+    expected = [proc.pid] if sys.platform == "win32" else []
+    assert control.kill_tree(proc.pid) == expected
 
 
-def test_posix_descendant_walk_is_a_no_op_where_ps_is_absent(mods):
-    """`ps --ppid` is the POSIX half; on Windows the lookup must not raise."""
+def test_posix_descendant_walk_is_a_no_op_where_ps_is_absent(mods, monkeypatch):
+    """A missing `ps` must make the POSIX descendant walk return [], not raise."""
+
+    def _no_ps(*args, **kwargs):
+        raise OSError("ps not found")
+
     _, control = mods
+    monkeypatch.setattr(control.subprocess, "run", _no_ps)
     assert control._descendant_pids_windows_free(os.getpid()) == []
 
 

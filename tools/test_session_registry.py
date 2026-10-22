@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent / "session_registry.py"
@@ -206,3 +207,42 @@ def test_pid_alive_self_dead_child_and_nonsense():
     assert mod.pid_alive(_dead_pid()) is False
     assert mod.pid_alive(0) is False
     assert mod.pid_alive(-1) is False
+
+
+# ── zombie detection ─────────────────────────────────────────────────────────
+
+
+def _fake_ps(monkeypatch, mod, stdout: str):
+    """Make `mod`'s subprocess.run return a completed `ps` run with `stdout`."""
+
+    def run(*args, **kwargs):
+        return types.SimpleNamespace(stdout=stdout, returncode=0, stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", run)
+
+
+def test_is_zombie_is_false_when_ps_is_unavailable(monkeypatch):
+    """No `ps` on this platform: the pid must not be reported as a zombie."""
+    mod = _load()
+
+    def run(*args, **kwargs):
+        raise OSError("ps: not found")
+
+    monkeypatch.setattr(mod.subprocess, "run", run)
+    assert mod._is_zombie(4242) is False
+
+
+def test_is_zombie_is_true_for_a_zombie_stat(monkeypatch):
+    """`stat` starts with Z for a reaped-but-not-yet-waited child."""
+    mod = _load()
+    for stdout in ("Z\n", "Z+\n"):
+        _fake_ps(monkeypatch, mod, stdout)
+        assert mod._is_zombie(4242) is True
+
+
+def test_is_zombie_is_false_for_a_live_stat(monkeypatch):
+    """Any other `stat` (sleeping, foreground) is a live process."""
+    mod = _load()
+    for stdout in ("S\n", "S+\n"):
+        _fake_ps(monkeypatch, mod, stdout)
+        assert mod._is_zombie(4242) is False

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -50,6 +51,9 @@ def pid_alive(pid: int) -> bool:
     Deliberately not ``os.kill(pid, 0)``: on Windows os.kill calls
     TerminateProcess for every signal it does not special-case, which would kill
     the very session being asked about.
+
+    On POSIX an unreaped SIGKILLed child stays a zombie, which os.kill(pid, 0)
+    still reports as present, so a zombie is settled as dead here by asking ps.
     """
     if pid <= 0:
         return False
@@ -61,7 +65,22 @@ def pid_alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True
-    return True
+    return not _is_zombie(pid)
+
+
+def _is_zombie(pid: int) -> bool:
+    """Whether ps reports this pid as a zombie (state whose first letter is Z)."""
+    try:
+        proc = subprocess.run(  # noqa: S603, S607 - fixed argv
+            ["ps", "-o", "stat=", "-p", str(pid)],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.stdout.strip().startswith("Z")
 
 
 def _pid_alive_windows(pid: int) -> bool:
