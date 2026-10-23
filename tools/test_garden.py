@@ -1345,3 +1345,100 @@ def test_check_gemini_commands_flag_undeclared_divergence(tmp_path, monkeypatch)
         "Stale command (no source): .gemini/antigravity/commands/ghost.md" in i
         for i in issues
     ), issues
+
+
+# --- Instruction size caps -------------------------------------------------
+
+
+def test_check_instruction_caps_fails_an_oversized_agents_md(tmp_path):
+    _write(tmp_path / "AGENTS.md", "x" * (32_768 + 1))
+
+    issues = garden.check_instruction_caps(tmp_path)
+
+    assert len(issues) == 1, issues
+    assert "bytes" in issues[0] and "Codex" in issues[0]
+    assert "[WARN]" not in issues[0]
+
+
+def test_check_instruction_caps_warns_above_90_percent_without_failing(
+    tmp_path, capsys
+):
+    _write(tmp_path / "AGENTS.md", "x" * int(32_768 * 0.95))
+
+    issues = garden.check_instruction_caps(tmp_path)
+
+    assert issues == []
+    assert "WARN" in capsys.readouterr().out
+
+
+def test_check_instruction_caps_passes_with_a_warning_at_exactly_the_cap(
+    tmp_path, capsys
+):
+    _write(tmp_path / "AGENTS.md", "x" * 32_768)
+
+    issues = garden.check_instruction_caps(tmp_path)
+
+    assert issues == []
+    assert "WARN" in capsys.readouterr().out
+
+
+def test_check_instruction_caps_is_silent_at_half_the_limit(tmp_path):
+    _write(tmp_path / "AGENTS.md", "x" * (32_768 // 2))
+
+    assert garden.check_instruction_caps(tmp_path) == []
+
+
+def test_check_instruction_caps_missing_root_reports_nothing(tmp_path):
+    assert garden.check_instruction_caps(tmp_path / "absent") == []
+
+
+def test_check_instruction_caps_directory_named_agents_md_reports_nothing(tmp_path):
+    (tmp_path / "AGENTS.md").mkdir()
+
+    assert garden.check_instruction_caps(tmp_path) == []
+
+
+def test_check_instruction_caps_unreadable_agents_md_is_one_issue(
+    tmp_path, monkeypatch
+):
+    """A PermissionError must fail closed as one issue, never abort garden.
+
+    chmod cannot deny reads on Windows, so the read itself is made to raise;
+    that exercises the same OSError path a real unreadable file takes.
+    """
+    agents_md = tmp_path / "AGENTS.md"
+    _write(agents_md, "x")
+    real_read_bytes = Path.read_bytes
+
+    def _deny_agents_md(self):
+        if self == agents_md:
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", _deny_agents_md)
+
+    issues = garden.check_instruction_caps(tmp_path)
+
+    assert len(issues) == 1, issues
+    assert "AGENTS.md" in issues[0]
+
+
+def test_check_instruction_caps_counts_memory_characters(tmp_path):
+    """ASCII cannot tell characters from bytes, so use a 2-byte character.
+
+    4,001 "é" is 8,002 bytes but only 4,001 characters -- a byte-counting gate
+    would wrongly fail it; 8,001 characters is what the cap actually rejects.
+    """
+    memory = tmp_path / ".kilo" / "memory" / "MEMORY.md"
+    _write(memory, "é" * 4_001)
+
+    assert len(memory.read_bytes()) == 8_002
+    assert garden.check_instruction_caps(tmp_path) == []
+
+    _write(memory, "é" * 8_001)
+
+    issues = garden.check_instruction_caps(tmp_path)
+
+    assert len(issues) == 1, issues
+    assert "8,001" in issues[0]
+    assert "characters" in issues[0]

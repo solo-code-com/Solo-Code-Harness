@@ -1628,6 +1628,63 @@ def check_pattern_counts(root: Path = ROOT) -> list[str]:
     return issues
 
 
+# Always-on instruction files have hard size caps, and both were invisible:
+# Codex silently truncates an always-on AGENTS.md at 32,768 bytes, and
+# MEMORY.md documents an 8,000-character gate on its own line 4.
+AGENTS_MD_BYTE_LIMIT = 32_768
+AGENTS_MD_WARN_RATIO = 0.9
+MEMORY_MD_CHAR_LIMIT = 8_000
+
+
+def check_instruction_caps(root: Path = ROOT) -> list[str]:
+    """Flag always-on instruction files that are past their size caps.
+
+    The 90%..cap band is a printed warning, not an issue: garden stays green
+    while the file is still under the cap. An unreadable file fails closed with
+    one issue, so a size check can never abort the later garden checks with a
+    traceback.
+    """
+    issues: list[str] = []
+
+    agents_md = root / "AGENTS.md"
+    if agents_md.is_file():
+        try:
+            size = len(agents_md.read_bytes())
+        except OSError as exc:
+            issues.append(f"Cannot read AGENTS.md to check its size cap: {exc}")
+            return issues
+        if size > AGENTS_MD_BYTE_LIMIT:
+            issues.append(
+                f"AGENTS.md is {size:,} bytes, over the "
+                f"{AGENTS_MD_BYTE_LIMIT:,}-byte cap at which Codex silently "
+                "truncates it, so the tail is lost without a warning"
+            )
+        elif size > AGENTS_MD_BYTE_LIMIT * AGENTS_MD_WARN_RATIO:
+            print(
+                f"WARN: AGENTS.md is {size:,} bytes, above 90% of the "
+                f"{AGENTS_MD_BYTE_LIMIT:,}-byte cap at which Codex truncates "
+                "it silently"
+            )
+
+    memory_md = root / ".kilo" / "memory" / "MEMORY.md"
+    if memory_md.is_file():
+        try:
+            count = len(memory_md.read_text(encoding="utf-8"))
+        except OSError as exc:
+            issues.append(
+                f"Cannot read .kilo/memory/MEMORY.md to check its character cap: {exc}"
+            )
+            return issues
+        if count > MEMORY_MD_CHAR_LIMIT:
+            issues.append(
+                f".kilo/memory/MEMORY.md is {count:,} characters "
+                "(len(text), not bytes), over the "
+                f"{MEMORY_MD_CHAR_LIMIT:,}-character gate its own line 4 "
+                "documents"
+            )
+    return issues
+
+
 # Launcher scripts that start an engine, and the flags that switch that
 # engine into a reduced mode where the harness stops being enforced.
 # `claude --bare` skips hooks AND CLAUDE.md auto-discovery; `--safe-mode`
@@ -2038,6 +2095,17 @@ def main() -> int:
         all_issues.extend(flag_issues)
     else:
         print("[OK] Document flags")
+
+    # Instruction caps - are the always-on instruction files near their caps?
+    print("\n--- Instruction Caps ---")
+    cap_issues = check_instruction_caps(ROOT)
+    if cap_issues:
+        print("[DRIFT] Instruction files at or over their size caps:")
+        for i in cap_issues:
+            print(f"  {i}")
+        all_issues.extend(cap_issues)
+    else:
+        print("[OK] Instruction caps")
 
     # Enforcement claims — can a script called "blocking" actually block?
     print("\n--- Enforcement Claims ---")

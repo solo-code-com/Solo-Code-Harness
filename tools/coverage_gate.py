@@ -231,7 +231,7 @@ def run_coverage() -> dict[str, float]:
     """
     # Check if pytest-cov is available
     check_proc = subprocess.run(
-        ["python", "-m", "pytest", "--version"],
+        [sys.executable, "-m", "pytest", "--version"],
         capture_output=True,
         text=True,
         timeout=10,
@@ -246,7 +246,7 @@ def run_coverage() -> dict[str, float]:
     # Run pytest with coverage
     proc = subprocess.run(
         [
-            "python",
+            sys.executable,
             "-m",
             "pytest",
             "tools/",
