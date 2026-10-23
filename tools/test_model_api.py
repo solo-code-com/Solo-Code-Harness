@@ -34,7 +34,7 @@ def test_log_start_does_not_raise_when_the_usage_path_is_unwritable(
     blocked.mkdir()
     monkeypatch.setattr(model_api, "USAGE_LOG", blocked)
 
-    assert model_api.log_start("commandcode/x", 10, "run-1") is None
+    assert model_api.log_start("deepseek/deepseek-v4.1-flash", 10, "run-1") is None
     assert blocked.is_dir()
 
 

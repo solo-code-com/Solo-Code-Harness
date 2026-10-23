@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ask Jev for probabilities over a typed question set: no text, no streaming.
 
-Jev is CommandCode's decision model, and the usual discovery path does not see it: it is absent
+Jev is the decision model, and the usual discovery path does not see it: it is absent
 from `GET /provider/v1/models`, and `GET /systemone` answers 404 ("not a registered API route"),
 because the only route is `POST <base>/systemone` (measured 2026-10-20). Pointing `typesafe/jev`
 at `/chat/completions` is refused with `unsupported_model`; the release-pinned
@@ -22,7 +22,7 @@ with 400 `invalid_request_error` and a `param` pointer. The server's limits are 
 request, 64K tokens for state plus all questions, and 32K for state plus the longest question;
 only the question count is checkable without a tokeniser.
 
-Every request carries `opencode/1.0`, because CommandCode answers 403 to a default Python
+Every request carries `opencode/1.0`, because the provider answers 403 to a default Python
 User-Agent (measured 2026-10-16; the same reason `check_model_catalog.py` sets it).
 """
 
@@ -126,10 +126,10 @@ def decide(
     }
     started = time.monotonic()
     try:
-        url, key = env_file.provider_endpoint("commandcode", "chat")
+        url, key = env_file.provider_endpoint("deepseek", "chat")
         if not url or not key:
             raise JevDecideError(
-                "missing base url or commandcode credential in .env", config=True
+                "missing base url or deepseek credential in .env", config=True
             )
         endpoint = url.removesuffix("/chat/completions") + ENDPOINT_PATH
         request = urllib.request.Request(  # noqa: S310 - operator-configured https endpoint

@@ -104,13 +104,14 @@ python tools/deploy.py
 
 ## Model Providers & the 4-Role Pipeline
 
-Four providers are generated into `.opencode/opencode.json` — `commandcode`, `freemodel`,
-`deepseek`, `openrouter` — with **104 model ids** declared in `tools/opencode_engine.py`
-(commandcode 94, freemodel 3, deepseek 2, openrouter 5). Their base URLs come from `.env`, and
-only `freemodel`'s template appends a path (`${OPENAI_BASE_URL}/v1`); the others are interpolated
-verbatim, so nothing may strip a trailing `/v1` from them.
-`tools/check_model_catalog.py` checks the ids against `GET /models` (plus `--probe`), and probes
-`POST /systemone` for the Jev decision model, which `/models` never lists; ids are never taken
+Three providers are generated into `.opencode/opencode.json` — `freemodel`, `deepseek`,
+`openrouter` — with **10 model ids** (freemodel 3, deepseek 2, openrouter 5) declared in
+`tools/opencode_engine.py`. The `opencode-go` catalog (**95 ids**) is not generated: those ids
+come from OpenCode's global config (`~/.config/opencode/opencode.json`). Base URLs come from
+`.env`, and only `freemodel`'s template appends a path (`${OPENAI_BASE_URL}/v1`). The others are
+interpolated verbatim, so nothing may strip a trailing `/v1` from them.
+`tools/check_model_catalog.py` checks the declared ids against `GET /models` (plus `--probe`) and
+resolves each `opencode-go/...` role id against `_PROVIDER_MODELS`. Ids are never taken
 from memory.
 
 Work is routed through four roles, declared in `.kilo/agents/jev.md`:
@@ -159,7 +160,7 @@ Decision record: [`docs/dsh-port-plan.md`](docs/dsh-port-plan.md) (scope),
 [`docs/dsh-port-map.md`](docs/dsh-port-map.md) (49-package map + postmortem
 lessons). Tier B/C (running the dsh SDK/runtime as a third executor) is blocked:
 the runtime's single-file executable is a Linux/macOS-only non-goal, and
-`deepseek-v4-pro` is already reachable via OpenCode CLI + CommandCode — no
+`deepseek-v4-pro` is already reachable via OpenCode CLI + opencode-go — no
 harness change required.
 
 ## Shared State (Cross-Engine, Local-Only)
@@ -305,7 +306,7 @@ Copy-Item .env.template .env
 ```
 
 `.env.template` ships with 3 FreeModel VIP tiers (`cc.freemodel.dev`, `api-cc.freemodel.dev`, `cc-t2.freemodel.dev`)
-alongside a `COMMANDCODE_API_KEY` entry shared with Kilo CLI. Your real `.env` is gitignored and never deployed. Full mode is the default for every profile, so hooks and auto-memory stay active; pass `--bare` explicitly if a future provider swap needs the reduced mode.
+alongside the `DEEPSEEK_API_KEY` and `OPENROUTER_API_KEY` entries. Your real `.env` is gitignored and never deployed. Full mode is the default for every profile, so hooks and auto-memory stay active; pass `--bare` explicitly if a future provider swap needs the reduced mode.
 
 ## Gemini/Antigravity workers (headless CLI + GUI fallback)
 
@@ -469,13 +470,13 @@ python tools/deploy.py
 
 ## Provider model & pipeline 4 vai trò
 
-Bốn provider được sinh vào `.opencode/opencode.json` — `commandcode`, `freemodel`, `deepseek`,
-`openrouter` — với **104 model id** (commandcode 94, freemodel 3, deepseek 2, openrouter 5) khai
-trong `tools/opencode_engine.py`. Base URL lấy từ `.env`, và **chỉ** template của `freemodel` thêm
-đường dẫn (`${OPENAI_BASE_URL}/v1`); các cái còn lại dùng nguyên văn, nên không được cắt `/v1` của
-chúng. `tools/check_model_catalog.py` đối chiếu id với `GET /models` (kèm `--probe`), và probe
-`POST /systemone` cho Jev decision model — model này không hề xuất hiện trong `/models`; id không
-bao giờ lấy từ trí nhớ.
+Ba provider được sinh vào `.opencode/opencode.json` — `freemodel`, `deepseek`, `openrouter` — với
+**10 model id** (freemodel 3, deepseek 2, openrouter 5) khai trong `tools/opencode_engine.py`.
+Catalog `opencode-go` (**95 id**) không được sinh vào repo: nó nằm trong config global của OpenCode
+(`~/.config/opencode/opencode.json`). Base URL lấy từ `.env`, và **chỉ** template của `freemodel`
+thêm đường dẫn (`${OPENAI_BASE_URL}/v1`). Các cái còn lại dùng nguyên văn, nên không được cắt `/v1`
+của chúng. `tools/check_model_catalog.py` đối chiếu id đã khai với `GET /models` (kèm `--probe`),
+và resolve mọi role id `opencode-go/...` với `_PROVIDER_MODELS`. Id không bao giờ lấy từ trí nhớ.
 
 Việc được định tuyến qua 4 vai trò, khai ở `.kilo/agents/jev.md`:
 
@@ -523,7 +524,7 @@ Ghi chép quyết định: [`docs/dsh-port-plan.md`](docs/dsh-port-plan.md) (ph�
 [`docs/dsh-port-map.md`](docs/dsh-port-map.md) (bản đồ 49 package + bài học
 postmortem). Tầng B/C (chạy dsh SDK/runtime làm executor thứ ba) bị chặn:
 binary đóng gói của runtime chỉ hỗ trợ Linux/macOS (Windows là non-goal), và
-`deepseek-v4-pro` đã gọi được trực tiếp qua OpenCode CLI + CommandCode — không
+`deepseek-v4-pro` đã gọi được trực tiếp qua OpenCode CLI + opencode-go — không
 cần đổi harness.
 
 ## Verification Gates

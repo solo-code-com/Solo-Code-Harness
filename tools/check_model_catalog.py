@@ -7,7 +7,7 @@ from memory. This tool turns that rule into a command:
     python tools/check_model_catalog.py            # table + exit 1 on drift
     python tools/check_model_catalog.py --json     # machine-readable
 
-Why the User-Agent matters: CommandCode answers 403 to a default Python client and 200 to a
+Why the User-Agent matters: some gateways answer 403 to a default Python client and 200 to a
 client-shaped one (measured 2026-10-16), so every request carries `opencode/1.0`.
 
 A provider that serves a model the harness does not declare is drift, because that model is
@@ -35,13 +35,6 @@ import opencode_engine as engine  # noqa: E402
 
 UA = "opencode/1.0"
 
-#: The decision model behind `POST /systemone`. It is absent from `GET /models` -- that listing
-#: only carries the chat, responses and messages models -- so a listing check cannot see it.
-SYSTEMONE_MODEL = "typesafe/jev"
-SYSTEMONE_QUESTION = {
-    "urgent": {"type": "noul", "instructions": "Is this request urgent?"}
-}
-
 #: The raw `.env` values, unnormalised: the paths below already carry their `/v1`.
 RAW_ENV: dict[str, str] = env_file.parse_env_file(
     Path(__file__).resolve().parent.parent / ".env"
@@ -51,13 +44,6 @@ RAW_ENV: dict[str, str] = env_file.parse_env_file(
 #: Paths assume the *raw* `.env` value (with its `/v1`), so the checker reads `.env` directly
 #: instead of exporting through the launcher's normaliser.
 PROVIDERS: dict[str, tuple[str | None, str, str, dict, bool]] = {
-    "commandcode": (
-        "COMMANDCODE_BASE_URL",
-        "/models",
-        "COMMANDCODE_API_KEY",
-        engine._PROVIDER_MODELS,
-        False,
-    ),
     "freemodel": (
         "OPENAI_BASE_URL",
         "/v1/models",
@@ -104,7 +90,7 @@ def role_catalog_ids() -> set[str]:
     """
     ids: set[str] = set()
     for prefix, models in (
-        ("commandcode", engine._PROVIDER_MODELS),
+        ("opencode-go", engine._PROVIDER_MODELS),
         ("openrouter", engine._OPENROUTER_MODELS),
     ):
         for key, entry in models.items():
@@ -215,51 +201,6 @@ def probe(model_ref: str, timeout: int) -> tuple[bool, str]:
     return True, str(content).strip()[:40]
 
 
-def probe_systemone(base: str, key: str, timeout: int) -> tuple[str, str]:
-    """POST the System One endpoint once and report whether the decision model answers.
-
-    `typesafe/jev` is absent from the `/models` listing, so "the catalog is ok" says nothing
-    about it: only an answer from `/systemone` proves the model is still served and named the
-    same (measured 2026-10-20). A drift here means the endpoint answers with a body the
-    wrapper cannot read; an unreachable endpoint is reported, not failed, like any provider.
-    """
-    url = base.rstrip("/") + "/systemone"
-    payload = json.dumps(
-        {
-            "model": SYSTEMONE_MODEL,
-            "state": "ping",
-            "questions": SYSTEMONE_QUESTION,
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(  # noqa: S310 - operator-configured https endpoint
-        url,
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": UA,
-        },
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:120].replace("\n", " ")
-        return "unreachable", f"HTTP {exc.code}: {detail}"
-    except Exception as exc:  # noqa: BLE001
-        return "unreachable", type(exc).__name__
-    try:
-        value = body["answers"]["urgent"]["noul"]
-    except (KeyError, IndexError, TypeError):
-        return "drift", f"unexpected body: {json.dumps(body)[:100]}"
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return "drift", f"noul is not a number: {value!r}"
-    if not 0.0 <= float(value) <= 1.0:
-        return "drift", f"noul out of range: {float(value)}"
-    return "ok", f"noul={float(value):.2f}"
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Check model catalogs against the providers"
@@ -271,7 +212,7 @@ def main(argv: list[str] | None = None) -> int:
         nargs="+",
         metavar="PROVIDER/MODEL",
         help="call each model once instead of comparing listings, e.g. "
-        "commandcode/deepseek/deepseek-v4.1-flash freemodel/gpt-6.1-sol",
+        "deepseek/deepseek-v4.1-flash freemodel/gpt-6.1-sol",
     )
     args = parser.parse_args(argv)
 
@@ -353,32 +294,6 @@ def main(argv: list[str] | None = None) -> int:
         if status == "drift":
             drift += 1
         report.append(row)
-
-    # `/systemone` is its own route with its own model, so it gets its own row: the listing
-    # above cannot report on a model the listing never carries.
-    base_ref, _path, key_env, _catalog, _curated = PROVIDERS["commandcode"]
-    base = raw.get(base_ref or "", "")
-    key = raw.get(key_env, "") or os.environ.get(key_env, "")
-    row = {
-        "provider": "systemone",
-        "model": SYSTEMONE_MODEL,
-        "base_env": base_ref,
-        "key_env": key_env,
-        "declared": None,
-    }
-    if not base or not key:
-        row.update(
-            {
-                "status": f"skipped ({'base' if not base else 'key'} missing)",
-                "detail": "",
-            }
-        )
-    else:
-        status, detail = probe_systemone(base, key, args.timeout)
-        row.update({"status": status, "detail": detail})
-        if status == "drift":
-            drift += 1
-    report.append(row)
 
     # The roles block is static config, so this runs even when no provider answered: a role
     # id that resolves nowhere is drift whether or not the network is up.

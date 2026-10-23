@@ -1,7 +1,7 @@
 # opencode-env.ps1 — OpenCode CLI launcher for the Solo-Code harness
 #
 # Why this exists: bridges .env configuration to OpenCode runtime environment.
-# It reads OPENAI_BASE_URL, OPENAI_API_KEY, and COMMANDCODE credentials from .env,
+# It reads OPENAI_BASE_URL and OPENAI_API_KEY from .env,
 # normalizes the base URL (stripping any trailing /v1 so {env:OPENAI_BASE_URL}/v1
 # in opencode config resolves cleanly), exports them into the process environment,
 # and launches opencode with any pass-through arguments.
@@ -64,14 +64,6 @@ if ($config.ContainsKey("OPENAI_BASE_URL") -and $config["OPENAI_BASE_URL"]) {
         $baseUrl = $baseUrl.Substring(0, $baseUrl.Length - 3)
     }
     $env:OPENAI_BASE_URL = $baseUrl
-}
-
-# Export and normalize CommandCode credentials if present
-if ($config.ContainsKey("COMMANDCODE_API_KEY") -and $config["COMMANDCODE_API_KEY"]) {
-    $env:COMMANDCODE_API_KEY = $config["COMMANDCODE_API_KEY"]
-}
-if ($config.ContainsKey("COMMANDCODE_BASE_URL") -and $config["COMMANDCODE_BASE_URL"]) {
-    $env:COMMANDCODE_BASE_URL = $config["COMMANDCODE_BASE_URL"].Trim().TrimEnd("/")
 }
 
 # Export and normalize Anthropic credentials if present

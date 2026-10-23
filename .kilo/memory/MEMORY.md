@@ -79,13 +79,14 @@ High-signal context loaded at session start. Detailed history belongs in
   của PowerShell trên file UTF-8 không BOM đếm sai (8182 vs 7671) — đo bằng python.
 
 ## Decisions
-- [decision] CommandCode model ids are verified against
-  `GET {COMMANDCODE_BASE_URL}/models`, never from memory. Each consumer declares models
-  separately: `_PROVIDER_MODELS` in `tools/opencode_engine.py` (OpenCode uses the harness
-  key `commandcode/deepseek-v4-pro`), `.vscode/settings.json` (Copilot), and
+- [decision] Model ids are verified against the provider's own catalog, never from
+  memory. The `opencode-go` catalog (95 ids in `_PROVIDER_MODELS`, `tools/opencode_engine.py`)
+  is configured globally by OpenCode, not declared in `.opencode/opencode.json`. Each
+  consumer declares models separately: OpenCode uses the harness key
+  `opencode-go/deepseek-v4-pro`, `.vscode/settings.json` (Copilot), and
   `~/.config/kilo/kilo.jsonc` (Kilo uses the full upstream id
-  `commandcode/deepseek/deepseek-v4-pro`). `context_length` comes from the response, not
-  the file. (2026-09-28; catalog 80 model on 2026-10-16)
+  `opencode-go/deepseek/deepseek-v4-pro`). `context_length` comes from the response, not
+  the file. (2026-09-28; catalog 105 model on 2026-10-23)
 - [decision] Pipeline 4 vai trò (2026-10-16): Jev (agent trên **model JEV**
   `openrouter/jev-router`) điều phối; **Codex** ra đề bài + **verify** (`gpt-6.1-sol`,
   effort `medium`, đổi bằng `--model`/`--effort`); **DeepSeek V4.1 Flash** (OpenCode CLI,
@@ -95,12 +96,11 @@ High-signal context loaded at session start. Detailed history belongs in
   của wrapper opencode/agy là **120s** → job dài bị giết oan (đã nâng 900/600); `.ps1` tải
   về bị mark-of-the-web → phải `Unblock-File`. Catalog **80 model / 4 provider**.
 - [decision] Parity launcher ↔ delegate về biến môi trường (2026-10-16): chỉ cắt `/v1` ở biến mà
-  config sinh ra **thêm** `/v1` — hiện chỉ `OPENAI_BASE_URL`; `COMMANDCODE_BASE_URL` và
-  `DEEPSEEK_BASE_URL` dùng **nguyên văn**. Cắt `/v1` của commandcode từng làm mọi call delegate
-  hỏng (A/B cùng call: `Unknown error` → `OK` 8.2s). `tools/test_env_file.py` suy luật **từ chính**
-  `.opencode/opencode.json`, nên thêm provider có template `/v1` là test đỏ ngay. Ghi chú: launcher
-  xuất **mọi** key `.env` bằng vòng lặp chung nên nó và `env_file.py` đã ngang nhau — audit chỉ grep
-  `$env:NAME =` sẽ báo thiếu biến oan.
+  config sinh ra **thêm** `/v1` — hiện chỉ `OPENAI_BASE_URL`; `DEEPSEEK_BASE_URL` dùng **nguyên văn**.
+  (Cắt `/v1` của một gateway từng làm mọi call delegate hỏng: A/B cùng call `Unknown error` → `OK` 8.2s.)
+  `tools/test_env_file.py` suy luật **từ chính** `.opencode/opencode.json`, nên thêm provider có template
+  `/v1` là test đỏ ngay. Ghi chú: launcher xuất **mọi** key `.env` bằng vòng lặp chung nên nó và
+  `env_file.py` đã ngang nhau — audit chỉ grep `$env:NAME =` sẽ báo thiếu biến oan.
 - [decision] Sua cac loi im lang (2026-10-20): 3 agent thieu `description` nen
   SPEC 7.1 nay duoc enforce; `boundary_audit` bat `--strict` va sua bug bo qua
   theo path tuyet doi (repo duoi thu muc ten build/dist/venv lam ca audit cam);

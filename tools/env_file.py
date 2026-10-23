@@ -5,7 +5,7 @@ Why this exists: the delegates spawn their CLI directly instead of going through
 missing. The concrete failure this fixes (measured 2026-10-16): the generated OpenCode config
 declares the `freemodel` provider with `env: ["FREEMODEL_API_KEY"]`, the launcher derives that
 from `OPENAI_API_KEY`, and a delegate that bypasses the launcher starts OpenCode without the
-variable, so every `freemodel/...` model fails while `commandcode/...` works.
+variable, so every `freemodel/...` model fails while `opencode-go/...` works.
 
 Values are read but never logged, and an already-set process variable wins unless `override`
 is passed: the shell's environment stays the operator's decision.
@@ -24,9 +24,8 @@ ALIASES: dict[str, str] = {
 
 #: Base URLs that must not carry a trailing `/v1`, because the generated provider config appends
 #: it (`"baseURL": "${OPENAI_BASE_URL}/v1"`). Only names whose template appends `/v1` belong here:
-#: COMMANDCODE_BASE_URL is used **verbatim** (`"baseURL": "${COMMANDCODE_BASE_URL}"`), so stripping
-#: its `/v1` broke every commandcode call through the OpenCode delegate (measured 2026-10-16:
-#: .env holds `.../provider/v1`, the export handed OpenCode `.../provider`). A test asserts this
+#: providers whose template uses the base URL verbatim (no appended `/v1`) are excluded, since
+#: stripping their `/v1` would break those calls. A test asserts this
 #: list against the templates actually present in the generated config.
 NORMALIZE_BASE_URLS = ("OPENAI_BASE_URL",)
 
@@ -92,15 +91,15 @@ def model_override(role: str) -> str | None:
 #: paths below keep their `/v1`). Consumed by `tools/check_model_catalog.py` and
 #: `tools/model_api.py`.
 PROVIDERS: dict[str, dict[str, str]] = {
-    "commandcode": {
-        "base_env": "COMMANDCODE_BASE_URL",
-        "key_env": "COMMANDCODE_API_KEY",
-        "models_path": "/models",
-        "chat_path": "/chat/completions",
-    },
     "freemodel": {
         "base_env": "OPENAI_BASE_URL",
         "key_env": "FREEMODEL_API_KEY",
+        "models_path": "/v1/models",
+        "chat_path": "/v1/chat/completions",
+    },
+    "anthropic": {
+        "base_env": "ANTHROPIC_BASE_URL",
+        "key_env": "ANTHROPIC_API_KEY",
         "models_path": "/v1/models",
         "chat_path": "/v1/chat/completions",
     },

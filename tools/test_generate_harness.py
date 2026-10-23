@@ -327,7 +327,7 @@ def test_generated_opencode_json_gates_disabled_skills(tmp_path):
     expected_jev_model = (
         "openrouter/jev-router"
         if "jev-router" in opencode_engine._OPENROUTER_MODELS
-        else "commandcode/deepseek-v4.1-flash"
+        else "opencode-go/deepseek-v4.1-flash"
     )
     assert data["agents"]["jev"]["model"] == expected_jev_model
     # Legacy `permission` object (Kilo's bundled OpenCode v1 rejects `permissions`).
@@ -337,7 +337,7 @@ def test_generated_opencode_json_gates_disabled_skills(tmp_path):
     local = json.loads(
         (tmp_path / ".opencode" / "opencode.json").read_text(encoding="utf-8")
     )
-    assert "commandcode" in local["providers"]
+    assert "deepseek" in local["providers"]
     assert "freemodel" in local["providers"]
     freemodel = local["providers"]["freemodel"]
     assert freemodel["models"]["gpt-6-sol"]["modelID"] == "gpt-6-sol"

@@ -40,7 +40,7 @@ def test_record_start_writes_a_running_record(tmp_path):
     mod = _load()
     run_id = mod.record_start(
         "opencode",
-        model="commandcode/deepseek-v4.1-flash",
+        model="opencode-go/deepseek-v4.1-flash",
         argv=["opencode", "run"],
         log_path=tmp_path / "run.log",
         session_dir=tmp_path,
@@ -48,7 +48,7 @@ def test_record_start_writes_a_running_record(tmp_path):
     payload = json.loads((tmp_path / f"{run_id}.json").read_text(encoding="utf-8"))
     assert payload["run_id"] == run_id
     assert payload["worker"] == "opencode"
-    assert payload["model"] == "commandcode/deepseek-v4.1-flash"
+    assert payload["model"] == "opencode-go/deepseek-v4.1-flash"
     assert payload["argv"] == ["opencode", "run"]
     assert payload["pid"] == os.getpid()
     assert payload["state"] == "running"

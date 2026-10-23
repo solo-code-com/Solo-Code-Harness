@@ -12,7 +12,7 @@ The file is a cache; the process is the truth. A record whose pid is gone report
 Usage:
     from session_registry import record_start, record_finish, list_sessions
 
-    run_id = record_start("opencode", model="commandcode/deepseek-v4.1-flash", pid=proc.pid)
+    run_id = record_start("opencode", model="opencode-go/deepseek-v4.1-flash", pid=proc.pid)
     record_finish(run_id, proc.returncode)
 """
 

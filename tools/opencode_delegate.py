@@ -17,12 +17,12 @@ OPENCODE V2 NOTES (verified 2026-09-27, @opencode/cli 2.0.18):
   - --standalone runs a private server, so delegation never touches the user's
     shared background OpenCode server or its sessions.
   - The provider is self-contained in .opencode/opencode.json (v2 `providers`),
-    replacing the retired v1 plugin `commandcode-go-opencode-provider`; the root
+    replacing the retired v1 plugin with the `opencode-go` provider; the root
     opencode.json stays v1-safe for the host IDE's bundled OpenCode v1.
 
 Usage:
     python tools/opencode_delegate.py "<self-contained prompt>"
-    python tools/opencode_delegate.py "<prompt>" --model commandcode/deepseek-v4-pro
+    python tools/opencode_delegate.py "<prompt>" --model opencode-go/deepseek-v4-pro
     python tools/opencode_delegate.py "<prompt>" --model opencode/deepseek-v4-flash-free
     python tools/opencode_delegate.py "<prompt>" --no-guardrail
 
@@ -45,7 +45,7 @@ from typing import Any
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-DEFAULT_MODEL = "commandcode/deepseek-v4.1-flash"
+DEFAULT_MODEL = "opencode-go/beam-free"
 # The orchestrator runs WITHOUT --auto: that flag auto-approves past its
 # `edit: deny`, so the deny only holds once the flag is gone (measured 2026-10-16:
 # a write landed with the jev agent selected and --auto in play).
@@ -123,7 +123,7 @@ def resolve_model(*, free: bool, model: str | None, agent: str | None) -> str | 
     """The `--model` value to hand the CLI, or None to let OpenCode choose.
 
     OpenCode v2.0.32 ignores an agent's own `model` when `run --agent` gets no `--model`
-    (measured 2026-10-20: `--agent jev` ran commandcode/deepseek-v4-pro while `debug agents`
+    (measured 2026-10-20: `--agent jev` ran opencode-go/deepseek-v4-pro while `debug agents`
     resolved openrouter/jev-router), so the orchestrator's model is passed explicitly. Other
     agents keep None: their callers already name a model, and an agent with no model of its
     own should still fall back to its own config rather than to the project default.

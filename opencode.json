@@ -1,50 +1,50 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "commandcode/deepseek-v4-pro",
-  "small_model": "commandcode/deepseek-v4.1-flash",
+  "model": "opencode-go/deepseek-v4-pro",
+  "small_model": "opencode-go/deepseek-v4.1-flash",
   "default_agent": "jev",
   "agents": {
     "architect": {
-      "model": "commandcode/claude-opus-5.5"
+      "model": "opencode-go/claude-haiku-5-5"
     },
     "planner": {
-      "model": "commandcode/claude-opus-5.5"
+      "model": "opencode-go/claude-haiku-5-5"
     },
     "code-reviewer": {
-      "model": "commandcode/gpt-6.1-sol"
+      "model": "opencode-go/gpt-5.6-luna"
     },
     "security-auditor": {
-      "model": "commandcode/gpt-6.1-sol"
+      "model": "opencode-go/gpt-5.6-luna"
     },
     "python-reviewer": {
-      "model": "commandcode/gpt-6.1-sol"
+      "model": "opencode-go/gpt-5.6-luna"
     },
     "typescript-reviewer": {
-      "model": "commandcode/gpt-6.1-sol"
+      "model": "opencode-go/gpt-5.6-luna"
     },
     "database-reviewer": {
-      "model": "commandcode/gpt-6.1-sol"
+      "model": "opencode-go/gpt-5.6-luna"
     },
     "code-skeptic": {
-      "model": "commandcode/gemini-4-argon"
+      "model": "opencode-go/gemini-4-argon-contributor"
     },
     "web-performance-auditor": {
-      "model": "commandcode/gemini-3.8-flash"
+      "model": "opencode-go/qwen3.8-flash"
     },
     "test-engineer": {
-      "model": "commandcode/gemini-3.1-flash-lite"
+      "model": "opencode-go/qwen3.8-flash"
     },
     "tdd-guide": {
-      "model": "commandcode/gemini-3.1-flash-lite"
+      "model": "opencode-go/qwen3.8-flash"
     },
     "refactor-cleaner": {
-      "model": "commandcode/gemini-3.1-flash-lite"
+      "model": "opencode-go/qwen3.8-flash"
     },
     "code-simplifier": {
-      "model": "commandcode/gemini-3.1-flash-lite"
+      "model": "opencode-go/qwen3.8-flash"
     },
     "solo-code-engineer": {
-      "model": "commandcode/deepseek-v4.1-flash"
+      "model": "opencode-go/deepseek-v4.1-flash"
     },
     "jev": {
       "model": "openrouter/jev-router"

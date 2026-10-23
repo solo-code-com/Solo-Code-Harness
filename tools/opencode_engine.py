@@ -44,12 +44,11 @@ Transform rules (source -> OpenCode v2):
               v2-only keys. Root `opencode.json` keeps only v1-safe keys
               (`$schema`, `model`, `small_model`, `default_agent`, `agents`,
               `permission`); `.opencode/opencode.json` carries the v2-only
-              self-contained `commandcode` provider (replacing the retired v1
-              plugin `commandcode-go-opencode-provider`). OpenCode v2 merges the
+              self-contained `freemodel`, `deepseek` and `openrouter` provider
+              blocks. OpenCode v2 merges the
               local file with higher precedence; Kilo's validator ignores it.
               The permission gate uses the legacy `permission` object for the
-              same reason (v2 maps and enforces it). Only the `commandcode/<id>`
-              models the harness references are declared (_PROVIDER_MODELS).
+              same reason (v2 maps and enforces it).
 """
 
 from __future__ import annotations
@@ -75,15 +74,12 @@ _PERMISSION_ACTION_RENAME = {"bash": "shell", "task": "subagent"}
 # model may request the skill, but the user approves before it loads.
 _DISABLED_SKILL_PERMISSION = "ask"
 
-# Models the harness references, declared explicitly because the v2 provider is
-# self-contained and no longer inherits the retired v1 plugin's catalog. The key
-# is the harness-facing `commandcode/<key>` id; `modelID` is the upstream
-# Command Code catalog id (verified via GET {COMMANDCODE_BASE_URL}/models,
-# 2026-09-27). Only referenced models are declared -- add one here when a new
-# `commandcode/<id>` reference is introduced.
-_PROVIDER_ID = "commandcode"
-_DEFAULT_MODEL = "commandcode/deepseek-v4-pro"
-_SMALL_MODEL = "commandcode/deepseek-v4.1-flash"
+# The OpenCode model catalog, kept as the harness reference table:
+# OpenCode v2 no longer needs a declared provider for these models (the
+# opencode-go provider is configured globally), but
+# tools/check_model_catalog.py still resolves role ids against this catalog.
+_DEFAULT_MODEL = "opencode-go/deepseek-v4-pro"
+_SMALL_MODEL = "opencode-go/deepseek-v4.1-flash"
 # FreeModel's `/v1/models` is stale: it still lists `gpt-6-luna` (now HTTP 404)
 # and omits `gpt-6.1-sol`. Verified 2026-10-03 by posting a chat completion to
 # each id: `gpt-6-sol` and `gpt-6-astra` answer as themselves, `gpt-6.1-sol`
@@ -148,7 +144,7 @@ _PROVIDER_MODELS: dict[str, dict[str, Any]] = {
         "limit": {"context": 1000000, "output": 131072},
     },
     # Added 2026-10-06 from plan.md (Step 5 Preview). `modelID` and `context`
-    # verified against GET {COMMANDCODE_BASE_URL}/models (84-model catalog,
+    # verified against the provider's published catalog (84-model catalog,
     # 2026-10-06); `output` caps are family estimates, not from the catalog.
     # "Muse Spark 1.3 Max" has no catalog id -- only `meta/muse-spark-1.3`;
     # "Space Bunny Alpha" and "Jev" are absent (Jev is an agent, not a model).
@@ -217,10 +213,10 @@ _PROVIDER_MODELS: dict[str, dict[str, Any]] = {
         "name": "Step 5 Preview",
         "limit": {"context": 1000000, "output": 131072},
     },
-    # commandcode/* catalog extended from model.csv (2026-10-15). `name` and
+    # opencode-go catalog extended from model.csv (2026-10-15). `name` and
     # `context` mirror that file; `output` caps are family estimates, the same
     # convention as the 2026-10-06 block above. modelIDs verified against the
-    # provider's public catalog (GET {COMMANDCODE_BASE_URL}/models -> 90 ids,
+    # provider's public catalog (90 ids,
     # 2026-10-15); three rows were mapped by hand where the CSV name did not match
     # an id (Tencent Hy4 Preview, Tencent Hy3, MiMo V2.5 Pro-99%). `Jev` is an agent,
     # not a model, and the CSV's footer row is not a model either.
@@ -551,6 +547,11 @@ _PROVIDER_MODELS: dict[str, dict[str, Any]] = {
         "name": "Gemini 4 Argon",
         "limit": {"context": 1000000},
     },
+    "gemini-4-argon-contributor": {
+        "modelID": "google/gemini-4-argon-contributor",
+        "name": "Gemini 4 Argon Contributor",
+        "limit": {"context": 1000000},
+    },
     "gemini-3.6-flash": {
         "modelID": "google/gemini-3.6-flash",
         "name": "Gemini 3.6 Flash",
@@ -669,7 +670,7 @@ _JEV_AGENT_MODEL = "openrouter/jev-router"
 # Operator rule (2026-10-15): when the Jev model cannot be loaded, the agent runs
 # on DeepSeek V4.1 Flash -- the harness's default *executor* -- not on the
 # orchestrator default (V4 Pro).
-_JEV_AGENT_FALLBACK = "commandcode/deepseek-v4.1-flash"
+_JEV_AGENT_FALLBACK = "opencode-go/deepseek-v4.1-flash"
 
 
 # The per-agent model assignment lives in one place: tools/config/model-roles.json
@@ -1068,8 +1069,7 @@ def generate_opencode_json(
         `small_model`, `default_agent`, `agents`, `permission`), so
         `kilo config check` stays clean.
       - `.opencode/opencode.json` -> the v2-only self-contained
-        `providers.commandcode` and `providers.freemodel` blocks (replacing
-        the retired v1 plugin `commandcode-go-opencode-provider`). OpenCode v2
+        `freemodel`, `deepseek` and `openrouter` provider blocks. OpenCode v2
         merges this file with higher precedence; Kilo's validator ignores it.
 
     The gate uses the legacy `permission` object (not v2's `permissions`
@@ -1103,17 +1103,6 @@ def generate_opencode_json(
     local_config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
         "providers": {
-            _PROVIDER_ID: {
-                "name": "Command Code",
-                "env": ["COMMANDCODE_API_KEY"],
-                "package": "@opencode/ai/providers/openai-compatible",
-                # v2 rejects `{env:NAME}` references in *project* config
-                # (only global config may use them). `${NAME}` is the
-                # server-environment placeholder and is accepted here; the
-                # launcher exports COMMANDCODE_BASE_URL to that server.
-                "settings": {"baseURL": "${COMMANDCODE_BASE_URL}"},
-                "models": _PROVIDER_MODELS,
-            },
             "freemodel": {
                 "name": "FreeModel",
                 # A dedicated var, not OPENAI_API_KEY: OpenCode's built-in OpenAI

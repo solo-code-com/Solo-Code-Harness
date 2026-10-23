@@ -99,8 +99,8 @@ pick the cheapest worker that can finish it, then verify the result.
 | Receive the task, split it, dispatch, monitor, collect | **Jev itself** (JEV model) | `python tools/opencode_delegate.py "<task>" --agent jev` — routing only, never the code |
 | **Write the brief** for a code change (what to build, where, constraints) | **Codex / ChatGPT** (read-only) | `python tools/codex_delegate.py "<describe the change to be specified>"` |
 | **Verify the result** — the mandatory check of what came back | **Codex / ChatGPT** (read-only) | `python tools/codex_delegate.py "<verify this against the brief>"` |
-| Additional check, second opinion on the same result | **DeepSeek V4.1 Flash via OpenCode CLI** | `python tools/opencode_delegate.py "<check this too>" --model commandcode/deepseek-v4.1-flash` |
-| **Deep code work** — implement the brief | **DeepSeek V4.1 Flash via OpenCode CLI**, or **via Kilo CLI** when the OpenCode path is unstable | OpenCode: `python tools/opencode_delegate.py "<the brief>" --model commandcode/deepseek-v4.1-flash` · Kilo: `python tools/kilo_cli_delegate.py "<the brief>" --model commandcode/deepseek/deepseek-v4.1-flash` (same model, full upstream id, and the Kilo server must be running: `python tools/kilo_server_manager.py ensure`) |
+| Additional check, second opinion on the same result | **DeepSeek V4.1 Flash via OpenCode CLI** | `python tools/opencode_delegate.py "<check this too>" --model opencode-go/deepseek-v4.1-flash` |
+| **Deep code work** — implement the brief | **DeepSeek V4.1 Flash via OpenCode CLI**, or **via Kilo CLI** when the OpenCode path is unstable | OpenCode: `python tools/opencode_delegate.py "<the brief>" --model opencode-go/deepseek-v4.1-flash` · Kilo: `python tools/kilo_cli_delegate.py "<the brief>" --model opencode-go/deepseek/deepseek-v4.1-flash` (same model, full upstream id, and the Kilo server must be running: `python tools/kilo_server_manager.py ensure`) |
 | **A brief-shaped change, one file or one precise edit** — fastest path, and the worker can run the tests itself | **DeepSeek V4.1 Flash over the provider's own API** (no CLI in the middle) | `python tools/model_api.py --prompt-file <brief> --tools read,command --allow-program python3,ruff --sandbox wsl --transcript <file>` — measured: a trivial prompt 2.3s, a one-file change 22s, a two-command self-verification 10.9s inside the WSL fence; **the orchestrator applies and verifies the result**, and `--sandbox wsl` runs each command in namespaces where only the workspace is writable. Limits: keep the prompt under ~35K tokens (a 38K prompt drew HTTP 503 from the provider's gateway), and the returned diff may need a manual apply. |
 | DeepSeek-native heavier runs | **dsh** | `python tools/dsh_delegate.py "<brief>"` (needs its environment set up) |
 | **Fast / light work** — lookups, one-liners, "just check this": its tokens are free | **Gemini 3.8 Flash via Antigravity CLI** | `python tools/antigravity_delegate.py "<task>" --model gemini-3.8-flash-medium` |
@@ -115,7 +115,7 @@ attempt fails at the runtime instead of at the honour system. Codex never edits
 files either; Gemini takes the quick/light work because its tokens are free.
 
 The OpenCode wrapper also reaches the DeepSeek **strong** tier with
-`--model commandcode/deepseek-v4-pro`. Pick the Antigravity tier by complexity:
+`--model opencode-go/deepseek-v4-pro`. Pick the Antigravity tier by complexity:
 `gemini-3.8-flash-low` (mechanical), `medium` (default multi-file), `high` (hard
 reasoning).
 
@@ -126,7 +126,7 @@ own messages endpoint). `decisions-archive.md` records the prerequisites.
 **Implementer fallback (measured 2026-10-16).** Across four drill rounds the OpenCode path
 failed four times - two `Unknown error` exits, one 900-second timeout, one operator
 interruption - while the **same model through Kilo CLI** answered in 18.9s
-(`KILO_DEEPSEEK_ARM_OK`, `commandcode/deepseek/deepseek-v4.1-flash`) once its server was up
+(`KILO_DEEPSEEK_ARM_OK`, `opencode-go/deepseek/deepseek-v4.1-flash`) once its server was up
 (`python tools/kilo_server_manager.py ensure`). When the OpenCode arm hangs or errors, hand the
 same brief to the Kilo arm instead of retrying indefinitely; both arms reach the same model.
 

@@ -322,7 +322,7 @@ SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         ),
     ),
     # Unquoted `NAME=value` assignments. `generic_api_key` above requires quotes,
-    # so `export COMMANDCODE_API_KEY=<token>` and `AWS_SECRET_ACCESS_KEY=<token>`
+    # so `export ANTHROPIC_API_KEY=<token>` and `AWS_SECRET_ACCESS_KEY=<token>`
     # both passed straight through -- the exact forms an agent types when it
     # means to use a key. The `[a-z_-]*` tail matches the `_ACCESS_KEY` /
     # `_TOKEN` compound names. Two exclusions keep the detector honest:

@@ -91,33 +91,33 @@ Create temp_test_util.py with 4 test cases: valid, invalid format, missing parts
 
 MODELS = {
     "glm-5": {
-        "id": "commandcode/glm-5",
-        "provider": "commandcode",
-        "display": "GLM-5 (CommandCode)",
+        "id": "opencode-go/glm-5.3",
+        "provider": "opencode-go",
+        "display": "GLM-5 (OpenCode Go)",
     },
     "glm-5.1": {
-        "id": "commandcode/glm-5.1",
-        "provider": "commandcode",
-        "display": "GLM-5.1 (CommandCode)",
+        "id": "opencode-go/glm-5.2",
+        "provider": "opencode-go",
+        "display": "GLM-5.1 (OpenCode Go)",
     },
     "qwen3.6-plus": {
-        "id": "commandcode/qwen3.6-plus",
-        "provider": "commandcode",
+        "id": "opencode-go/qwen3.8-flash",
+        "provider": "opencode-go",
         "display": "Qwen 3.6 Plus",
     },
     "qwen3.7-max": {
-        "id": "commandcode/qwen3.7-max",
-        "provider": "commandcode",
+        "id": "opencode-go/qwen3.7-plus",
+        "provider": "opencode-go",
         "display": "Qwen 3.7 Max",
     },
     "qwen3.8-27b": {
-        "id": "commandcode/qwen3.6-plus",  # closest match to 3.8 27B
-        "provider": "commandcode",
+        "id": "opencode-go/qwen3.8-flash",  # closest match to 3.8 27B on opencode-go
+        "provider": "opencode-go",
         "display": "Qwen 3.8 27B (Alibaba)",
     },
     "deepseek-v4-flash": {
-        "id": "commandcode/deepseek-v4-flash",
-        "provider": "commandcode",
+        "id": "opencode-go/deepseek-v4-pro",
+        "provider": "opencode-go",
         "display": "DeepSeek V4 Flash",
     },
     "mimo-v2.6-flash-free": {
@@ -126,16 +126,16 @@ MODELS = {
         "display": "Mimo v2.6 Flash Free",
     },
     "deepseek-v4-pro": {
-        "id": "commandcode/deepseek-v4-pro",
-        "provider": "commandcode",
+        "id": "opencode-go/deepseek-v4-pro",
+        "provider": "opencode-go",
         "display": "DeepSeek V4 Pro (baseline)",
     },
     # Added 2026-10-06 (Step 5 Preview). `id` verified against the provider /models
     # endpoints; `deepseek-v4.1-flash` is unavailable on the official DeepSeek API,
-    # so it is reachable here only through CommandCode or OpenRouter.
+    # so it is reachable here only through OpenCode or OpenRouter.
     "deepseek-v4.1-flash": {
-        "id": "commandcode/deepseek-v4.1-flash",
-        "provider": "commandcode",
+        "id": "opencode-go/deepseek-v4.1-flash",
+        "provider": "opencode-go",
         "display": "DeepSeek V4.1 Flash",
     },
     "deepseek-v4.1-flash-openrouter": {
@@ -144,33 +144,34 @@ MODELS = {
         "display": "DeepSeek V4.1 Flash (OpenRouter)",
     },
     "claude-sonnet-5.5": {
-        "id": "commandcode/claude-sonnet-5.5",
-        "provider": "commandcode",
+        "id": "opencode-go/claude-haiku-5-5",
+        "provider": "opencode-go",
         "display": "Claude Sonnet 5.5",
     },
     "grok-4.7": {
-        "id": "commandcode/grok-4.7",
-        "provider": "commandcode",
+        "id": "opencode-go/grok-4.7",
+        "provider": "opencode-go",
         "display": "Grok 4.7",
     },
     "gpt-6-sol": {
-        "id": "commandcode/gpt-6-sol",
-        "provider": "commandcode",
+        "id": "opencode-go/gpt-6-luna",
+        "provider": "opencode-go",
         "display": "GPT-6 Sol",
     },
     "mimo-v2.6-pro": {
-        "id": "commandcode/mimo-v2.6-pro",
-        "provider": "commandcode",
+        "id": "opencode-go/mimo-v2.6-pro",
+        "provider": "opencode-go",
         "display": "MiMo V2.6 Pro",
     },
     "step-5-preview": {
-        "id": "commandcode/step-5-preview",
-        "provider": "commandcode",
+        "id": "opencode-go/step-5-preview",
+        "provider": "opencode-go",
         "display": "Step 5 Preview",
     },
 }
 
 # ── Data Structures ──────────────────────────────────────────────────────────
+
 
 @dataclass
 class BenchmarkResult:
@@ -191,6 +192,7 @@ class BenchmarkResult:
 
 
 # ── Runner ───────────────────────────────────────────────────────────────────
+
 
 def setup_task(task: dict[str, Any]) -> None:
     """Prepare filesystem fixtures before running a benchmark task."""
@@ -293,7 +295,9 @@ def run_task_with_model(
                 cost = float(cost_str)
 
         # Check if file was created
-        file_created = Path(task["expected_file"]).exists() if "expected_file" in task else False
+        file_created = (
+            Path(task["expected_file"]).exists() if "expected_file" in task else False
+        )
 
         # Run verification if provided
         verification_passed = False
@@ -369,15 +373,20 @@ def run_task_with_model(
         )
     finally:
         # Cleanup temp files
-        for f in ["temp_test_fib.py", "temp_messy.py", "temp_util.py", "temp_test_util.py"]:
+        for f in [
+            "temp_test_fib.py",
+            "temp_messy.py",
+            "temp_util.py",
+            "temp_test_util.py",
+        ]:
             Path(f).unlink(missing_ok=True)
 
 
 def print_summary(results: list[BenchmarkResult]) -> None:
     """Print benchmark summary table."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("BENCHMARK SUMMARY")
-    print("="*80)
+    print("=" * 80)
 
     # Group by model
     by_model: dict[str, list[BenchmarkResult]] = {}
@@ -392,10 +401,16 @@ def print_summary(results: list[BenchmarkResult]) -> None:
         successful = sum(1 for r in model_results if r.success)
         verified = sum(1 for r in model_results if r.verification_passed)
         total_cost = sum(r.cost_usd for r in model_results if r.cost_usd)
-        avg_time = sum(r.elapsed_s for r in model_results) / total_tasks if total_tasks else 0
+        avg_time = (
+            sum(r.elapsed_s for r in model_results) / total_tasks if total_tasks else 0
+        )
 
-        print(f"  Success rate: {successful}/{total_tasks} ({successful/total_tasks*100:.0f}%)")
-        print(f"  Verification pass: {verified}/{total_tasks} ({verified/total_tasks*100:.0f}%)")
+        print(
+            f"  Success rate: {successful}/{total_tasks} ({successful / total_tasks * 100:.0f}%)"
+        )
+        print(
+            f"  Verification pass: {verified}/{total_tasks} ({verified / total_tasks * 100:.0f}%)"
+        )
         print(f"  Total cost: ${total_cost:.6f}")
         print(f"  Avg time: {avg_time:.1f}s")
 
@@ -405,9 +420,9 @@ def print_summary(results: list[BenchmarkResult]) -> None:
         total_reason = sum(r.tokens_reasoning or 0 for r in model_results)
         print(f"  Tokens: in={total_in} out={total_out} reasoning={total_reason}")
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("WINNER ANALYSIS")
-    print("="*80)
+    print("=" * 80)
 
     # Find best by cost
     model_costs = {m: sum(r.cost_usd or 0 for r in rs) for m, rs in by_model.items()}
@@ -415,14 +430,21 @@ def print_summary(results: list[BenchmarkResult]) -> None:
     print(f"  [COST] Cheapest: {cheapest} (${model_costs[cheapest]:.6f})")
 
     # Find best by speed
-    model_times = {m: sum(r.elapsed_s for r in rs) / len(rs) for m, rs in by_model.items()}
+    model_times = {
+        m: sum(r.elapsed_s for r in rs) / len(rs) for m, rs in by_model.items()
+    }
     fastest = min(model_times, key=model_times.get)
     print(f"  [SPEED] Fastest: {fastest} ({model_times[fastest]:.1f}s avg)")
 
     # Find best by quality
-    model_quality = {m: sum(1 for r in rs if r.verification_passed) / len(rs) for m, rs in by_model.items()}
+    model_quality = {
+        m: sum(1 for r in rs if r.verification_passed) / len(rs)
+        for m, rs in by_model.items()
+    }
     best_quality = max(model_quality, key=model_quality.get)
-    print(f"  [QUALITY] Best quality: {best_quality} ({model_quality[best_quality]*100:.0f}% pass)")
+    print(
+        f"  [QUALITY] Best quality: {best_quality} ({model_quality[best_quality] * 100:.0f}% pass)"
+    )
 
     # Value score: quality / cost (higher is better)
     model_value = {m: model_quality[m] / (model_costs[m] + 0.00001) for m in by_model}
@@ -463,9 +485,9 @@ def main(argv: list[str] | None = None) -> int:
             task_names.append(t)
     task_names = list(dict.fromkeys(task_names))  # dedupe, preserve order
 
-    print("="*80)
+    print("=" * 80)
     print(f"BENCHMARKING {len(args.models)} models × {len(task_names)} tasks")
-    print("="*80)
+    print("=" * 80)
 
     results: list[BenchmarkResult] = []
 

@@ -616,7 +616,7 @@ def test_secret_placeholder_in_command_allows_both_engines(command):
 # transcript. Verified bypasses, 2026-10-07.
 
 UNQUOTED_SECRET_COMMANDS = [
-    "export COMMANDCODE_API_KEY=AbCdEf1234567890AbCdEfGhIjKl",
+    "export ANTHROPIC_API_KEY=AbCdEf1234567890AbCdEfGhIjKl",
     "export AWS_SECRET_ACCESS_KEY=AbCdEf1234567890AbCdEfGhIjKlMnO",
     'curl -H "authorization: bearer AbCdEf1234567890AbCdEfGhIjKl"',
     "export OPENAI_API_KEY=sk-AbCdEf1234567890AbCdEfGhIjKl",
@@ -631,7 +631,7 @@ def test_unquoted_secret_command_blocked(command):
 SECRET_REFERENCE_COMMANDS = [
     'API_KEY="$(op read op://vault/key)"',
     "export DB_PASSWORD=$(cat /run/secrets/db)",
-    "export COMMANDCODE_API_KEY=${COMMANDCODE_API_KEY:-}",
+    "export ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}",
 ]
 
 

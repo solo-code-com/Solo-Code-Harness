@@ -118,8 +118,8 @@ def test_resolve_model_gives_the_orchestrator_its_own_model(monkeypatch):
 
 def test_resolve_model_prefers_an_explicit_model():
     assert (
-        opencode_delegate.resolve_model(free=False, model="commandcode/x", agent="jev")
-        == "commandcode/x"
+        opencode_delegate.resolve_model(free=False, model="opencode-go/x", agent="jev")
+        == "opencode-go/x"
     )
 
 
@@ -217,7 +217,7 @@ def test_run_opencode_cli_passes_agent_and_session(monkeypatch, tmp_path):
     monkeypatch.setattr(opencode_delegate.subprocess, "Popen", fake_popen)
     opencode_delegate.run_opencode_cli(
         prompt="do x",
-        model="commandcode/deepseek-v4.1-flash",
+        model="opencode-go/deepseek-v4.1-flash",
         directory=str(tmp_path),
         opencode_binary="opencode",
         agent="jev",
@@ -256,7 +256,7 @@ def test_run_records_the_session_and_settles_it(monkeypatch, tmp_path):
     )
     result = opencode_delegate.run_opencode_cli(
         prompt="x",
-        model="commandcode/deepseek-v4.1-flash",
+        model="opencode-go/deepseek-v4.1-flash",
         directory=str(tmp_path),
         opencode_binary="opencode",
     )
@@ -320,7 +320,7 @@ def test_one_invocation_writes_a_start_then_finish_row(monkeypatch, tmp_path):
     monkeypatch.setattr(
         opencode_delegate,
         "resolve_model",
-        lambda **kw: "commandcode/deepseek-v4.1-flash",
+        lambda **kw: "opencode-go/deepseek-v4.1-flash",
     )
     monkeypatch.setattr(
         opencode_delegate,
@@ -355,7 +355,7 @@ def test_start_row_exists_before_the_worker_is_spawned(monkeypatch, tmp_path):
     monkeypatch.setattr(
         opencode_delegate,
         "resolve_model",
-        lambda **kw: "commandcode/deepseek-v4.1-flash",
+        lambda **kw: "opencode-go/deepseek-v4.1-flash",
     )
 
     seen_at_spawn = {}
@@ -386,7 +386,7 @@ def test_unwritable_usage_log_does_not_break_the_run(monkeypatch, tmp_path):
     monkeypatch.setattr(
         opencode_delegate,
         "resolve_model",
-        lambda **kw: "commandcode/deepseek-v4.1-flash",
+        lambda **kw: "opencode-go/deepseek-v4.1-flash",
     )
     monkeypatch.setattr(
         opencode_delegate,
@@ -413,7 +413,7 @@ def test_crash_after_start_leaves_one_unpaired_start(monkeypatch, tmp_path):
     monkeypatch.setattr(
         opencode_delegate,
         "resolve_model",
-        lambda **kw: "commandcode/deepseek-v4.1-flash",
+        lambda **kw: "opencode-go/deepseek-v4.1-flash",
     )
 
     def fake_run(**kwargs):
@@ -452,7 +452,7 @@ def _reach_the_wrapper(monkeypatch, tmp_path):
     monkeypatch.setattr(
         opencode_delegate,
         "resolve_model",
-        lambda **kw: "commandcode/deepseek-v4.1-flash",
+        lambda **kw: "opencode-go/deepseek-v4.1-flash",
     )
 
 

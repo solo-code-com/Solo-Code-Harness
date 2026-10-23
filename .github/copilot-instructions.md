@@ -198,25 +198,23 @@ Use `#` in Copilot Chat to invoke prompts:
 - `decide` — Delegate to architect agent
 - `ship` — Pre-launch checklist
 
-## Model Providers (DeepSeek & CommandCode)
+## Model Providers (DeepSeek & OpenCode)
 
 Two external LLM providers are configured in `.vscode/settings.json`. Switch models via **Command Palette** → `GitHub Copilot: Switch Model` or click the model name in the Copilot Chat header.
 
 `.vscode/settings.json` under `github.copilot.chat.models` is the source of truth for
-which models are selectable — don't restate the list here, because CommandCode adds and
+which models are selectable — don't restate the list here, because OpenCode adds and
 retires models without notice. To see what the provider serves right now:
 
-```powershell
-Invoke-RestMethod -Uri "$env:COMMANDCODE_BASE_URL/models" `
-  -Headers @{ Authorization = "Bearer $env:COMMANDCODE_API_KEY" } |
-  Select-Object -ExpandProperty data | Select-Object -ExpandProperty id | Sort-Object
-```
+`opencode-go/...` models resolve through OpenCode's own global provider config
+(`~/.config/opencode/opencode.json`), so the selectable ids come from
+`.vscode/settings.json` rather than a repo-declared `/models` probe.
 
-**API key management**: keys live in environment variables (`COMMANDCODE_API_KEY`, `COMMANDCODE_BASE_URL`). DeepSeek direct would need `DEEPSEEK_API_KEY` and `DEEPSEEK_BASE_URL`, and is **not** configured here. Never hardcode. See `.copilot/instruction/api-providers.md` for full API usage patterns.
+**API key management**: `opencode-go` keys live in OpenCode's global config (`OPENCODE_GO_API_KEY` if configured globally). DeepSeek direct would need `DEEPSEEK_API_KEY` and `DEEPSEEK_BASE_URL`, and is **not** configured here. Never hardcode. See `.copilot/instruction/api-providers.md` for full API usage patterns.
 
 **When to switch models:**
 - Default: use whichever model the user selected in VS Code
-- CommandCode ids carry the upstream vendor prefix (`deepseek/deepseek-v4-pro`, `Qwen/Qwen3.7-Max`, `google/gemini-3.5-flash`); verify an id against `/models` before using it
+- opencode-go ids are written `opencode-go/<model>` (`opencode-go/deepseek-v4-pro`, `opencode-go/qwen3.7-max`, `opencode-go/gemini-3.5-flash`); verify an id against `.vscode/settings.json` before using it
 - If task is complex architecture / multi-file refactor → prefer a Claude tier (`claude-opus-5`, `claude-sonnet-5`)
 - If cost matters → prefer `deepseek/deepseek-v4.1-flash` or `gpt-5.4-mini`
 - If analyzing large files / repos → prefer `google/gemini-3.5-flash` or `moonshotai/Kimi-K3`, and read `context_length` from `/models` rather than assuming a window size
@@ -299,7 +297,7 @@ Copilot Chat has no automatic hooks. You MUST self-enforce these on EVERY action
 ## Available MCP Tools
 
 - **context7**: Live documentation lookup for libraries/frameworks
-- **sequential-thinking**: Chain-of-thought reasoning for complex problems  
+- **sequential-thinking**: Chain-of-thought reasoning for complex problems
 - **memory**: Persistent knowledge graph across sessions
 - **playwright**: Browser automation for E2E testing (enabled)
 
@@ -312,4 +310,4 @@ If unable to proceed without a decision outside permitted scope:
 
 ---
 
-*Solo-Code Harness v3.2.0 — GitHub Copilot Engine with DeepSeek & CommandCode*
+*Solo-Code Harness v3.2.0 — GitHub Copilot Engine with DeepSeek & OpenCode*

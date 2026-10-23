@@ -24,7 +24,7 @@ IMPROVEMENTS OVER kilo_delegate.py (HTTP API):
 
 Usage:
     python tools/kilo_cli_delegate.py "<self-contained prompt>"
-    python tools/kilo_cli_delegate.py "<prompt>" --model commandcode/deepseek/deepseek-v4-pro
+    python tools/kilo_cli_delegate.py "<prompt>" --model opencode-go/deepseek/deepseek-v4-pro
     python tools/kilo_cli_delegate.py "<prompt>" --no-guardrail
 
 Requires Kilo server running: kilo serve --port 14096
@@ -51,7 +51,7 @@ from typing import Any
 TOOLS_DIR = Path(__file__).resolve().parent
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SERVER = "http://127.0.0.1:14096"
-DEFAULT_MODEL = "commandcode/deepseek/deepseek-v4.1-flash"
+DEFAULT_MODEL = "opencode-go/beam-free"
 
 #: Prompts at or below this length go on the command line; longer ones are written to a brief
 #: file and referenced by a short pointer (see `run_kilo_cli`). The bound comes from the

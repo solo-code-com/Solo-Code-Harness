@@ -1,11 +1,11 @@
 """Tests for tools/env_file.py, including the drift guard that would have caught today's bug.
 
-The bug it pins: `env_file` normalised `COMMANDCODE_BASE_URL` by stripping a trailing `/v1`, but the
-generated provider config uses that variable verbatim (`"baseURL": "${COMMANDCODE_BASE_URL}"`) while
+The bug it pins: `env_file` normalised `DEEPSEEK_BASE_URL` by stripping a trailing `/v1`, but the
+generated provider config uses that variable verbatim (`"baseURL": "${DEEPSEEK_BASE_URL}"`) while
 it appends `/v1` only for `OPENAI_BASE_URL`. The export therefore handed OpenCode
-`https://api.commandcode.ai/provider` instead of `.../provider/v1`, and every commandcode call
-through the OpenCode delegate had the wrong endpoint. The rule is derived from the generated config
-rather than from memory, so it cannot drift again.
+`https://api.deepseek.com` instead of `.../v1`, and every deepseek call through the OpenCode
+delegate had the wrong endpoint. The rule is derived from the generated config rather than from
+memory, so it cannot drift again.
 """
 
 from __future__ import annotations
@@ -68,10 +68,8 @@ def test_load_project_env_adds_the_launcher_aliases(
 
 
 def test_model_override_reads_the_env_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(
-        "SOLOCODE_MODEL_KILO", "commandcode/deepseek/deepseek-v4.1-flash"
-    )
-    assert env_file.model_override("kilo") == "commandcode/deepseek/deepseek-v4.1-flash"
+    monkeypatch.setenv("SOLOCODE_MODEL_KILO", "deepseek/deepseek-v4.1-flash")
+    assert env_file.model_override("kilo") == "deepseek/deepseek-v4.1-flash"
     monkeypatch.delenv("SOLOCODE_MODEL_KILO")
     assert env_file.model_override("kilo") is None
     assert env_file.model_override("no-such-role") is None
@@ -111,18 +109,18 @@ def test_provider_endpoint_prefers_the_raw_env_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A URL built for a request must not be normalised: the API path needs its /v1."""
-    raw = "https://api.commandcode.ai/provider/v1"
+    raw = "https://api.deepseek.com/v1"
     monkeypatch.setattr(
         env_file,
         "parse_env_file",
         lambda _path: {
-            "COMMANDCODE_BASE_URL": raw,
-            "COMMANDCODE_API_KEY": "test-key",
+            "DEEPSEEK_BASE_URL": raw,
+            "DEEPSEEK_API_KEY": "test-key",
         },
     )
-    monkeypatch.delenv("COMMANDCODE_BASE_URL", raising=False)
-    monkeypatch.delenv("COMMANDCODE_API_KEY", raising=False)
-    url, key = env_file.provider_endpoint("commandcode", "chat")
+    monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    url, key = env_file.provider_endpoint("deepseek", "chat")
     assert "/v1" in url, f"{url} should keep the raw base {raw}"
     assert url == raw + "/chat/completions"
     assert key == "test-key"
@@ -132,17 +130,17 @@ def test_provider_endpoint_keeps_the_models_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The models kind is built from the same raw base, so it keeps its /v1 too."""
-    raw = "https://api.commandcode.ai/provider/v1"
+    raw = "https://api.deepseek.com/v1"
     monkeypatch.setattr(
         env_file,
         "parse_env_file",
         lambda _path: {
-            "COMMANDCODE_BASE_URL": raw,
-            "COMMANDCODE_API_KEY": "test-key",
+            "DEEPSEEK_BASE_URL": raw,
+            "DEEPSEEK_API_KEY": "test-key",
         },
     )
-    monkeypatch.delenv("COMMANDCODE_BASE_URL", raising=False)
-    monkeypatch.delenv("COMMANDCODE_API_KEY", raising=False)
-    url, key = env_file.provider_endpoint("commandcode", "models")
+    monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    url, key = env_file.provider_endpoint("deepseek", "models")
     assert url == raw + "/models"
     assert key == "test-key"

@@ -287,15 +287,13 @@ def main():
     # Python pytest suite under tools/
     tools_dir = project_path / "tools"
     if tools_dir.is_dir() and any(tools_dir.rglob("test_*.py")):
-        # timeout=300, not 120: the suite runs ~95-130s on Windows (the guard
-        # parity corpus launches node + python per case), so 120 sat on the
-        # boundary and produced intermittent "Pytest: TIMEOUT" failures under
-        # load. The other long steps (coverage, npm) already allow 300-900s.
+        # timeout=600: the suite now takes about 345 seconds for 1758 tests, so
+        # 600 seconds leaves headroom rather than sitting on the boundary.
         results.append(
             run_check(
                 "Pytest",
                 [sys.executable, "-m", "pytest", str(tools_dir)],
-                timeout=300,
+                timeout=600,
             )
         )
     else:

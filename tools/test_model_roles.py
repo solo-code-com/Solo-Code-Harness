@@ -36,7 +36,7 @@ def _catalog_ids() -> set[str]:
     """Every `<provider>/<model>` id the declared model catalogs can resolve."""
     ids: set[str] = set()
     for prefix, models in (
-        ("commandcode", opencode_engine._PROVIDER_MODELS),
+        ("opencode-go", opencode_engine._PROVIDER_MODELS),
         ("openrouter", opencode_engine._OPENROUTER_MODELS),
     ):
         for key, entry in models.items():

@@ -251,7 +251,7 @@ Lịch sử đầy đủ + lý do từng quyết định: `.kilo/memory/MEMORY.m
 (bản đã nén ra khỏi MEMORY.md để giữ dưới ngưỡng `memory_gate`). Các mốc
 lớn kể từ v3.3.0:
 
-- **2026-10-20**: catalog **104 model / 4 provider** (commandcode 94, freemodel 3, deepseek 2,
+- **2026-10-20**: catalog **105 model / 4 provider** (opencode-go 95, freemodel 3, deepseek 2,
   openrouter 5); thêm `minimax/minimax-m3.1-flash`, bản `:free` của nó và `reflection/beam:free`,
   bỏ id đã chết `stealth/cat-jam:free`. Jev decision model (`typesafe/jev`) chỉ phục vụ trên
   `POST /provider/v1/systemone` và không nằm trong `/models`; `tools/jev_decide.py` gọi nó, và
@@ -260,7 +260,7 @@ lớn kể từ v3.3.0:
 - **v4.4.0 / v4.3.1** (2026-10-16): SPEC khai **pipeline 4 vai trò** (§0.2) + quy tắc
   fallback; sửa danh sách engine (OpenCode là engine chính, thêm Codex); chuyển
   sandbox/control-plane/GUI thành **ngoại lệ có điều kiện** kèm giới hạn đã đo; catalog
-  **80 model / 4 provider** (commandcode 70, freemodel 3, deepseek 2, openrouter 5) gồm
+  **80 model / 4 provider** (opencode-go 70, freemodel 3, deepseek 2, openrouter 5) gồm
   `typesafe/jev-router` (model tên Jev); `.harness.lock`
   regenerate được (`deploy.py --root-lock`) với `[shared_files]` phủ đủ 127 đường dẫn
   được track (con số do generator sinh ra — regenerate lại rồi đọc, đừng đoán).

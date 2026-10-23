@@ -258,7 +258,7 @@ created: 2026-07-24
   profiles: `gateway` (default, FreeModel/third-party via `--bare`),
   `native` (full mode, prefer API key or `apiKeyHelper` if present), and
   `kilo` (full-mode alias for IDE-integrated Kilo workflows). This keeps the
-  current Claude gateway path stable, avoids touching `COMMANDCODE_*`/`DEEPSEEK_*`, and makes Kilo-specific IDE integrations opt-in
+  current Claude gateway path stable, avoids touching `OPENCODE_GO_*`/`DEEPSEEK_*`, and makes Kilo-specific IDE integrations opt-in
   instead of overloading one implicit runtime path.   `gateway` still restores
   `CLAUDE.md` discovery with `--add-dir .`, but hooks/auto-memory remain a
   documented degraded mode under `--bare`.
@@ -274,8 +274,8 @@ created: 2026-07-24
   `mcp-builder/scripts/evaluation.py` copy -> -3 S/BLE findings). Also:
   AGENTS.md + `harness-boundaries.md` corrected — `.opencode/` is a
   first-class engine (v4.2.0) that was only briefly removed, not current; and
-  the `commandcode` model provider is a documented GLOBAL dependency (global
-  OpenCode plugin) rather than declared in-repo.
+  the `opencode-go` model provider is a documented GLOBAL dependency (OpenCode's
+  global config) rather than declared in-repo.
 - [decision] 2026-09-10: OpenCode skill invocation is gated from the source
   flag. OpenCode ignores Claude's `disable-model-invocation` frontmatter and
   has no user-only skill invocation, so
@@ -526,11 +526,11 @@ from the first commit.
 ## 2026-10-07 — OpenCode v2 provider routes (moved out of MEMORY.md)
 
 - [decision] Step 5 Preview model routes (2026-10-06): four OpenCode v2 providers --
-  `commandcode`, `freemodel`, `deepseek` (official), `openrouter` -- 31 models total.
-  `_SMALL_MODEL` moved to `commandcode/deepseek-v4.1-flash`. Ids were verified live:
+  `opencode-go`, `freemodel`, `deepseek` (official), `openrouter` -- 31 models total.
+  `_SMALL_MODEL` moved to `opencode-go/deepseek-v4.1-flash`. Ids were verified live:
   the official DeepSeek API names V4.1 Flash **`deepseek-flash`** (reported name
   "DeepSeek-V4.1-Flash", ctx 1,048,576); the id `deepseek-v4.1-flash` exists on
-  CommandCode (84 models) and OpenRouter (465 models). OpenRouter's endpoint is a
+  OpenCode Go (95 models) and OpenRouter (465 models). OpenRouter's endpoint is a
   fixed public constant; only `OPENROUTER_API_KEY` is secret. `Space Bunny Alpha` is
   absent from every catalog and was dropped. A new orchestrator agent `jev` routes
   between DeepSeek V4.1 Flash, Gemini/Antigravity, and OpenCode CLI.
@@ -652,16 +652,17 @@ Two fixes came out of the real run:
   `https://api.deepseek.com/anthropic`. The base URL is no longer taken from
   `.env`; it passes through only from the process environment.
 
-## CommandCode model ids and consumers (moved out of MEMORY.md, 2026-10-16)
+## OpenCode Go model ids and consumers (moved out of MEMORY.md, 2026-10-16)
 
-Verify ids against `GET {COMMANDCODE_BASE_URL}/models`, never from memory: the catalog
-drifts and the old `api-providers.md` advertised nine ids that no longer resolve. Each
-CommandCode consumer declares models separately, so a new model needs one entry in
-`tools/opencode_engine.py` `_PROVIDER_MODELS` (OpenCode), `.vscode/settings.json`
-(Copilot), and `~/.config/kilo/kilo.jsonc` (Kilo). Kilo refs use the full upstream id
-(`commandcode/deepseek/deepseek-v4-pro`) while OpenCode refs use the harness key
-(`commandcode/deepseek-v4-pro`) — both correct for their dialect. `context_length` comes
-from the response, not the file. (2026-09-28)
+Verify ids against the provider's own catalog, never from memory: the catalog drifts and
+the old `api-providers.md` advertised nine ids that no longer resolve. The `opencode-go`
+catalog (`_PROVIDER_MODELS`, 95 ids) is configured globally by OpenCode, not declared
+in-repo. Each consumer declares models separately: `tools/check_model_catalog.py` resolves
+role ids against `tools/opencode_engine.py` `_PROVIDER_MODELS`, `.vscode/settings.json`
+carries the Copilot ids, and `~/.config/kilo/kilo.jsonc` carries the Kilo ids. Kilo refs
+use the full upstream id (`opencode-go/deepseek/deepseek-v4-pro`) while OpenCode refs use
+the harness key (`opencode-go/deepseek-v4-pro`) — both correct for their dialect.
+`context_length` comes from the response, not the file. (2026-09-28)
 
 ## Antigravity headless permission behavior (moved out of MEMORY.md, 2026-10-16)
 
@@ -1024,9 +1025,9 @@ inside WSL to use its bwrap-based sandbox packages, which are inert on Windows.
 
 ### 2026-10-16 - The /v1 stripping bug, and a note that accused projects of carrying harness debris
 
-`env_file.NORMALIZE_BASE_URLS` stripped a trailing `/v1` from `COMMANDCODE_BASE_URL`, but the
-generated provider config uses that variable verbatim (`"baseURL": "${COMMANDCODE_BASE_URL}"`) while
-it appends `/v1` only for `OPENAI_BASE_URL`. Every commandcode call through the OpenCode delegate
+`env_file.NORMALIZE_BASE_URLS` stripped a trailing `/v1` from `OPENCODE_GO_BASE_URL`, but the
+generated provider config uses that variable verbatim (`"baseURL": "${OPENCODE_GO_BASE_URL}"`) while
+it appends `/v1` only for `OPENAI_BASE_URL`. Every opencode-go call through the OpenCode delegate
 therefore had the wrong endpoint. The A/B used one call: before the fix the CLI returned its unknown
 error, after it answered in 8.2 seconds. The guard is derived from ground truth rather than from
 memory - `tools/test_env_file.py` reads every templated `baseURL`, works out which variables the

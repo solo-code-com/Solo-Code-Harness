@@ -46,7 +46,7 @@ PROBE_TIMEOUT = 10
 #: The Kilo health check polls with backoff, so 2 s is already several attempts.
 SERVER_PROBE_TIMEOUT = 2
 #: The provider `tools/model_api.py` uses for its default model.
-MODEL_API_PROVIDER = "commandcode"
+MODEL_API_PROVIDER = "deepseek"
 #: Column width for the free-text state cell; a long version line must not break the table.
 STATE_WIDTH = 40
 

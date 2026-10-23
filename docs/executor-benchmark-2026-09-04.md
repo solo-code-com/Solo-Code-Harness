@@ -59,7 +59,7 @@ GLM-5:          48,035 tokens        ← 293x bloat!
 ```
 
 **Hypothesis:**
-- GLM/Qwen load excessive guardrail context via CommandCode
+- GLM/Qwen load excessive guardrail context via opencode-go
 - Possible inefficient tokenizer for Chinese model integration
 - No prompt caching optimization
 
@@ -73,12 +73,12 @@ GLM-5:           Minimal cache usage
 
 ### 3. Provider Markup
 
-All tests via **CommandCode provider** - may include markup pricing.
+All tests via **opencode-go provider** - may include markup pricing.
 
 **Alternative providers tested:**
 - ❌ OpenRouter: "User not found" (auth error)
 - ❌ ZenMux: "Balance must be > 0" (prepaid required)
-- ✅ CommandCode: Only working provider
+- ✅ opencode-go: Only working provider
 
 ---
 
@@ -114,7 +114,7 @@ All models **FAILED** - task too complex for all executors tested.
 
 ## Provider Comparison
 
-### CommandCode (✅ Working)
+### opencode-go (✅ Working)
 - GLM-5: $0.023/task
 - GLM-5.1: $0.034/task
 - Qwen 3.6 Plus: $0.013/task
@@ -133,7 +133,7 @@ All models **FAILED** - task too complex for all executors tested.
 ### DeepSeek Direct (⚠️ Not Tested)
 - `deepseek/deepseek-v4-pro`
 - `deepseek/deepseek-v4-flash`
-- May have lower pricing (no CommandCode markup)
+- May have lower pricing (no opencode-go markup)
 
 ---
 
@@ -172,7 +172,7 @@ Total: $0.324/month ⭐
 
 ### Reality
 - GLM/Qwen are **newer models** (not budget models)
-- CommandCode pricing reflects their premium positioning
+- opencode-go pricing reflects their premium positioning
 - Token efficiency matters more than base model cost
 
 ### Lesson Learned
@@ -187,7 +187,7 @@ Total: $0.324/month ⭐
 ## Alternative Strategies to Reduce Cost
 
 ### Option 1: DeepSeek Direct API ⭐
-**Bypass CommandCode markup:**
+**Bypass opencode-go markup:**
 ```python
 # Use deepseek/deepseek-v4-pro directly
 # May save 20-30% on markup
@@ -243,7 +243,7 @@ Monitor GLM/Qwen pricing - may drop as competition increases.
 
 1. ✅ **Do nothing** - current setup is optimal
 2. 🔍 **Future research:**
-   - Test DeepSeek direct API pricing (bypass CommandCode)
+   - Test DeepSeek direct API pricing (bypass opencode-go)
    - Monitor GLM/Qwen price drops
    - Evaluate free tier quality (`opencode/deepseek-v4-flash-free`)
 3. 📊 **Track actual usage:**
@@ -261,7 +261,7 @@ Monitor GLM/Qwen pricing - may drop as competition increases.
 python tools/benchmark_executors.py --models glm-5 qwen3.7-max deepseek-v4-pro
 
 # Single task test
-python tools/opencode_delegate.py "task" --model commandcode/glm-5
+python tools/opencode_delegate.py "task" --model opencode-go/glm-5
 ```
 
 ### Log Files
@@ -283,7 +283,7 @@ python tools/opencode_delegate.py "task" --model commandcode/glm-5
 In fact, they are **28-74x more expensive** due to:
 - Massive token inefficiency (17-293x input bloat)
 - Poor cache utilization
-- Possible CommandCode markup
+- Possible opencode-go markup
 
 **DeepSeek V4 Pro remains the best value** for complex executor tasks at $0.000312/task.
 

@@ -23,7 +23,7 @@ Fences, because a model with tools is a model with your shell:
 Usage:
     python tools/model_api.py "explain the diff" --include src/app.py
     python tools/model_api.py --prompt-file brief.md --tools read,command --allow-program python
-    python tools/model_api.py - --model commandcode/deepseek/deepseek-v4.1-flash-fast < prompt.txt
+    python tools/model_api.py - --model deepseek/deepseek-flash < prompt.txt
 """
 
 from __future__ import annotations
@@ -44,9 +44,8 @@ sys.path.insert(0, str(TOOLS_DIR))
 import env_file  # noqa: E402
 
 ROOT = TOOLS_DIR.parent
-#: The vendor-prefixed id: this endpoint rejects the harness's short key form with
-#: `unsupported_model` (measured 2026-10-16), so the full upstream id is what goes on the wire.
-DEFAULT_MODEL = "commandcode/deepseek/deepseek-v4.1-flash"
+#: provider/model for the direct DeepSeek provider declared in tools/env_file.py.
+DEFAULT_MODEL = "deepseek/deepseek-flash"
 USAGE_LOG = ROOT / ".solocode" / "model-api-usage.jsonl"
 MAX_TOOL_OUTPUT = 4000
 
