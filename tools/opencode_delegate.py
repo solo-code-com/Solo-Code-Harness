@@ -54,6 +54,7 @@ ORCHESTRATOR_AGENT = "jev"
 # exposes models such as opencode/mimo-v2.6-flash-free (verified 2026-09-27).
 FREE_MODEL = "opencode/mimo-v2.6-flash-free"
 
+ROOT = Path(__file__).resolve().parent.parent
 USAGE_LOG = Path(".solocode/opencode-usage.jsonl")
 USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
 
@@ -161,6 +162,63 @@ def _make_streams_encoding_safe() -> None:
             continue
         with contextlib.suppress(ValueError, OSError):
             reconfigure(encoding="utf-8", errors="replace")
+
+
+def _snapshot(root: Path) -> dict[str, str] | None:
+    """Hash a workspace tree, or None when there is nothing to read there.
+
+    An empty but readable tree returns {}; only a root that cannot be read is
+    "no snapshot". That distinction keeps a run which creates a file in an
+    otherwise empty workspace visible to the scope report.
+    """
+    try:
+        if not root.is_dir():
+            return None
+        return _load_sibling("workspace_snapshot").snapshot_workspace(root)
+    except OSError:
+        return None
+
+
+def _report_scope(
+    before: dict[str, str] | None, directory: str, result: dict[str, Any]
+) -> None:
+    """Report paths the run changed outside --directory; never changes the exit code.
+
+    Report only. These workers are allowed to write, so a run that also touched a
+    file above its target still succeeded: the line tells the orchestrator what to
+    inspect, it is not a fence around the write. Never raises: any failure from
+    either snapshot or from the reporting is swallowed, and the after-snapshot is
+    skipped entirely when the run reported an error or no before-snapshot was taken.
+    """
+    if result.get("error") or before is None:
+        return
+    try:
+        try:
+            prefix = Path(directory).resolve().relative_to(ROOT).as_posix()
+        except ValueError:
+            # The target is outside the repository root, so nothing changed is inside.
+            prefix = ""
+        snapshot = _load_sibling("workspace_snapshot")
+        after = _snapshot(ROOT)
+        if after is None:
+            return
+        changed = snapshot.changed_workspace_paths(before, after)
+        outside = snapshot.paths_outside_directory(changed, prefix)
+        if not outside:
+            return
+        shown = outside[:10]
+        listed = ", ".join(shown)
+        if len(outside) > len(shown):
+            listed += f", ... (+{len(outside) - len(shown)} more)"
+        # A newline in the target path must not split the one-line report.
+        shown_directory = directory.replace("\r", " ").replace("\n", " ")
+        _stderr(
+            f"scope: {len(outside)} path(s) changed outside "
+            f"--directory {shown_directory}: {listed}"
+        )
+    except Exception as exc:  # noqa: BLE001 - report only, never fatal
+        _stderr(f"scope: report unavailable ({type(exc).__name__})")
+        return
 
 
 # npm/bun installs put a `.cmd`/`.bat` shim on PATH. Its `%*` expansion mangles
@@ -512,6 +570,10 @@ def main(argv: list[str] | None = None) -> int:
     run_id = uuid.uuid4().hex
     log_start(model or f"agent:{args.agent}", len(prompt), run_id)
     start = time.monotonic()
+    try:
+        before = _snapshot(ROOT)
+    except Exception:  # noqa: BLE001 - report only, never fatal
+        before = None
     result = run_opencode_cli(
         prompt=prompt,
         model=model,
@@ -524,6 +586,7 @@ def main(argv: list[str] | None = None) -> int:
     elapsed = time.monotonic() - start
 
     log_usage(model or f"agent:{args.agent}", len(prompt), elapsed, result, run_id)
+    _report_scope(before, args.directory, result)
 
     # ── Output ──
     if result.get("error"):
