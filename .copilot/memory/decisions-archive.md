@@ -374,12 +374,12 @@ created: 2026-07-24
   the only intentional breaking change. A V1 default export
   (`export default function(){ return { config, auth } }`) raises
   `PluginModule.LoadError: Plugin must export a default definition with an id and
-  an effect or setup function`. Verified on `commandcode-go-opencode-provider@0.4.0`
+  an effect or setup function`. Verified on provider plugin v0.4.0
   under `@opencode/cli@2.0.18`: it can never load, which is why the harness
   retired it. Log lives at `~/.local/share/opencode/log/opencode.log`
   (grep `failed to load plugin`). The global `~/.config/opencode/opencode.jsonc`
   was migrated to V2-native `providers` (freemodel) with the plugin entry and its
-  empty `commandcode` stub removed.
+  empty provider stub removed.
 
 - [decision] 2026-09-28: `opencode.json` keeps `$schema: https://opencode.ai/config.json`
   even though that published schema is still V1-shaped (`agent`/`provider`/

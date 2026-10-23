@@ -7,15 +7,15 @@ status: completed
 
 # Executor Benchmark Report — 2026-09-04
 
-**Thực hiện bởi:** Claude Code (Orchestrator)  
-**Mục tiêu:** Tìm model thay thế rẻ hơn DeepSeek V4 Pro cho executor tasks  
+**Thực hiện bởi:** Claude Code (Orchestrator)
+**Mục tiêu:** Tìm model thay thế rẻ hơn DeepSeek V4 Pro cho executor tasks
 **Kết quả:** ❌ Không tìm thấy alternative rẻ hơn
 
 ---
 
 ## Tóm tắt kết quả
 
-### Models tested via CommandCode provider:
+### Models tested via opencode-go provider:
 1. **DeepSeek V4 Pro** (baseline): $0.000312/task ⭐ **CHEAPEST**
 2. **DeepSeek V4 Flash**: $0.000327/task (1.05x, acceptable cho simple tasks)
 3. **Qwen 3.7 Max**: $0.008885/task (**28.5x đắt hơn Pro**)
@@ -118,7 +118,7 @@ git commit -m "feat(opencode): add executor benchmark tool + fix lints"
 - Documentation consistency
 
 **Priority 4 (LOW):** Consider future alternatives
-- Test DeepSeek direct API (bypass CommandCode markup)
+- Test DeepSeek direct API (bypass opencode-go markup)
 - Monitor GLM/Qwen price drops
 - Evaluate free tier models
 

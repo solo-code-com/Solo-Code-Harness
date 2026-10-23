@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-// Structural validation of the three provider profiles. They are Cordis patches,
+// Structural validation of the two provider profiles. They are Cordis patches,
 // so a full check needs the DSH kernel; these assertions catch the mistakes that
 // do not — a missing profile, a profile that never names its key environment
 // variable, one that forgets to install the plugins, or one that carries a
@@ -14,12 +14,11 @@ const here = dirname(fileURLToPath(import.meta.url))
 const profilesDir = join(here, '..', '..', '..', 'profiles')
 
 const EXPECTED = [
-  'commandcode.cordis.patch.yml',
   'direct-deepseek.cordis.patch.yml',
   'openrouter-deepseek.cordis.patch.yml',
 ]
 
-test('the three provider profiles are present', () => {
+test('the two provider profiles are present', () => {
   const found = readdirSync(profilesDir)
     .filter((name) => name.endsWith('.cordis.patch.yml'))
     .sort()
