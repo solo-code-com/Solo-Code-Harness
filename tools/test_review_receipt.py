@@ -59,6 +59,7 @@ RECEIPT_FIELDS = {
     "tree_hash",
     "reviewer",
     "model",
+    "rationale",
     "recorded_at",
     "changed_files",
     "changed_lines",
@@ -317,6 +318,7 @@ def test_receipt_json_has_exactly_the_documented_fields(tmp_path: Path) -> None:
     assert len(stored["tree_hash"]) == 64
     assert stored["reviewer"] == "codex"
     assert stored["model"] == "gpt-6.1-sol"
+    assert stored["rationale"] == ""
     assert stored["changed_files"] == 2
     assert stored["changed_lines"] == 6
     assert stored["tool_version"] == tool.TOOL_VERSION
@@ -595,6 +597,98 @@ def test_policy_with_a_bom_loads(tmp_path: Path) -> None:
     policy_path.write_bytes(b"\xef\xbb\xbf" + json.dumps(POLICY).encode("utf-8"))
 
     assert tool.load_policy(root) == POLICY
+
+
+# --- rationale ---------------------------------------------------------------
+
+RATIONALE_POLICY = dict(POLICY, require_rationale=True)
+
+
+def test_record_with_rationale_stores_it(tmp_path: Path) -> None:
+    """The rationale is stored verbatim beside the tree it explains."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+
+    path, receipt = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, rationale="contract change, tests cover it"
+    )
+
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["rationale"] == "contract change, tests cover it"
+    assert receipt["rationale"] == "contract change, tests cover it"
+
+
+def test_cli_record_accepts_rationale_flag(tmp_path: Path) -> None:
+    """`record --rationale` is the CLI path a requiring policy needs."""
+    tool = _load_tool()
+    root = _repo(tmp_path, RATIONALE_POLICY)
+    _over_threshold(root)
+
+    assert (
+        tool.main(
+            [
+                "record",
+                "--reviewer",
+                "codex",
+                "--model",
+                "gpt-6.1-sol",
+                "--rationale",
+                "reviewed end to end",
+            ],
+            root=root,
+        )
+        == 0
+    )
+    assert tool.main(["verify"], root=root) == 0
+
+
+def test_empty_rationale_passes_when_policy_does_not_require_it(
+    tmp_path: Path,
+) -> None:
+    """Default policy keeps today's behaviour: no rationale is needed."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+    tool.record_receipt("codex", "gpt-6.1-sol", root)
+
+    assert tool.main(["verify"], root=root) == 0
+
+
+def test_required_rationale_missing_exits_1(tmp_path: Path, capsys) -> None:
+    """Policy true + empty rationale is UNVERIFIED, naming the flag to use."""
+    tool = _load_tool()
+    root = _repo(tmp_path, RATIONALE_POLICY)
+    _over_threshold(root)
+    tool.record_receipt("codex", "gpt-6.1-sol", root)
+
+    assert tool.main(["verify"], root=root) == 1
+    assert "--rationale" in capsys.readouterr().out
+
+
+def test_required_rationale_present_exits_0(tmp_path: Path) -> None:
+    tool = _load_tool()
+    root = _repo(tmp_path, RATIONALE_POLICY)
+    _over_threshold(root)
+    tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, rationale="reviewed the diff end to end"
+    )
+
+    assert tool.main(["verify"], root=root) == 0
+
+
+def test_old_receipt_without_rationale_key_is_tolerated(tmp_path: Path) -> None:
+    """A receipt written before the field existed is missing, not corrupt."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+    path, _ = tool.record_receipt("codex", "gpt-6.1-sol", root)
+
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    stored.pop("rationale")
+    path.write_text(json.dumps(stored, indent=2) + "\n", encoding="utf-8")
+
+    assert tool.main(["verify"], root=root) == 0
 
 
 if __name__ == "__main__":

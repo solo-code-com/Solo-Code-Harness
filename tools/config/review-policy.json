@@ -2,5 +2,6 @@
   "_comment": "The numbers come from the advisory log at the time of writing and are a starting point, not a law. At the previous 2 files and 30 lines, 11 of 18 recorded runs would have been blocked, which is 61 percent and too often to mean anything; at 5 and 120 the same data gives 5 of 18, about 28 percent, which matches a change wide enough that the author cannot check it alone. See tools/review_receipt.py.",
   "min_changed_files": 5,
   "min_changed_lines": 120,
+  "require_rationale": false,
   "receipt_dir": ".solocode/reviews"
 }

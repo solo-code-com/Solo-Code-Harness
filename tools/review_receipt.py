@@ -18,6 +18,13 @@ step happened in a cooperative workflow, never as an authorization control. A
 receipt carries no repository identity either, so two repositories sharing one
 receipt_dir share receipts.
 
+A receipt also records an optional `rationale` - why the tree was
+approved - and `tools/config/review-policy.json` can make it mandatory
+with `require_rationale`. When it is required, a receipt with an empty
+rationale is treated as missing, so the gate asks for the reasoning and
+not only the paperwork. The rationale is metadata about the review,
+never part of the tree: the hash inputs are unchanged.
+
 Change set
 ----------
 Three reads against the index, so only staged changes count - in a pre-commit
@@ -51,7 +58,7 @@ rate of a future blocking hook is a measured number, not a guess. `stats`
 summarizes that log.
 
 Usage:
-    python tools/review_receipt.py record --reviewer codex --model gpt-6.1-sol
+    python tools/review_receipt.py record --reviewer codex --model gpt-6.1-sol --rationale "why"
     python tools/review_receipt.py verify
     python tools/review_receipt.py verify --json
     python tools/review_receipt.py verify --advisory
@@ -207,6 +214,12 @@ def load_policy(root: Path = ROOT) -> dict[str, object]:
                 f"review policy {key} must be a non-negative integer ({path})"
             )
 
+    require_rationale = payload.get("require_rationale", False)
+    if not isinstance(require_rationale, bool):
+        raise ReceiptError(
+            f"review policy require_rationale must be a boolean ({path})"
+        )
+
     receipt_dir = payload.get("receipt_dir")
     if not isinstance(receipt_dir, str) or not receipt_dir.strip():
         raise ReceiptError(
@@ -279,9 +292,17 @@ def _read_receipt(path: Path, tree_hash: str) -> dict[str, object] | None:
 
 
 def record_receipt(
-    reviewer: str, model: str, root: Path = ROOT, git: str = GIT
+    reviewer: str,
+    model: str,
+    root: Path = ROOT,
+    git: str = GIT,
+    rationale: str = "",
 ) -> tuple[Path, dict[str, object]]:
-    """Write a receipt for the current change set and return (path, receipt)."""
+    """Write a receipt for the current change set and return (path, receipt).
+
+    `rationale` records why the tree was approved. It is metadata about
+    the review, never part of the tree: the hash inputs stay untouched.
+    """
     policy = load_policy(root)
     change = compute_change_set(root, git)
     tree_hash = str(change["tree_hash"])
@@ -291,6 +312,7 @@ def record_receipt(
         "tree_hash": tree_hash,
         "reviewer": reviewer,
         "model": model,
+        "rationale": rationale,
         "recorded_at": (
             datetime.now(timezone.utc)
             .replace(microsecond=0)
@@ -364,11 +386,25 @@ def verify(root: Path = ROOT, git: str = GIT) -> dict[str, object]:
             )
         return result
 
+    rationale = stored.get("rationale")
+    if policy.get("require_rationale") is True and not (
+        isinstance(rationale, str) and rationale.strip()
+    ):
+        result["exit_code"] = 1
+        result["reason"] = (
+            f"review required: {measured} - receipt for tree {tree_hash} "
+            "has no rationale; re-run `python tools/review_receipt.py "
+            "record --rationale TEXT` to record why the tree was approved"
+        )
+        return result
+
     result["receipt"] = str(path)
     result["reason"] = (
         f"review recorded for tree {tree_hash} by {stored.get('reviewer')} / "
         f"{stored.get('model')} at {stored.get('recorded_at')}"
     )
+    if isinstance(rationale, str) and rationale.strip():
+        result["reason"] += f" - rationale: {rationale}"
     return result
 
 
@@ -499,6 +535,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--model", required=True, help="declarative model label, e.g. gpt-6.1-sol"
     )
     record.add_argument(
+        "--rationale",
+        default="",
+        help="why this tree was approved (stored with the receipt)",
+    )
+    record.add_argument(
         "--json",
         action="store_true",
         help="print the receipt as JSON instead of its path",
@@ -529,7 +570,9 @@ def main(argv: list[str] | None = None, root: Path = ROOT, git: str = GIT) -> in
 
     try:
         if args.command == "record":
-            path, receipt = record_receipt(args.reviewer, args.model, root, git)
+            path, receipt = record_receipt(
+                args.reviewer, args.model, root, git, args.rationale
+            )
             print(json.dumps(receipt, indent=2) if args.json else path)
             return 0
         if args.command == "stats":

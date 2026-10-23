@@ -1442,3 +1442,141 @@ def test_check_instruction_caps_counts_memory_characters(tmp_path):
     assert len(issues) == 1, issues
     assert "8,001" in issues[0]
     assert "characters" in issues[0]
+
+
+# ─── check_script_syntax ────────────────────────────────────────────────────
+
+
+def test_check_script_syntax_detects_a_broken_script(tmp_path):
+    """A file the parser rejects is one issue naming that file."""
+    _write(tmp_path / "tools" / "broken.py", "def (:\n")
+
+    issues = garden.check_script_syntax(tmp_path)
+
+    assert len(issues) == 1, issues
+    assert "tools/broken.py" in issues[0]
+
+
+def test_check_script_syntax_clean_tree_is_silent(tmp_path):
+    """Every scanned directory is covered; valid scripts produce no issue."""
+    _write(tmp_path / "tools" / "fine.py", "x = 1\n")
+    _write(tmp_path / ".github" / "scripts" / "fine.py", "y = 2\n")
+    _write(tmp_path / ".claude" / "hooks" / "fine.py", "z = 3\n")
+    _write(tmp_path / ".kilo" / "hooks" / "fine.py", "w = 4\n")
+
+    assert garden.check_script_syntax(tmp_path) == []
+
+
+def test_check_script_syntax_tolerates_absent_directories(tmp_path):
+    """A deployed target without every engine carries no script to parse."""
+    assert garden.check_script_syntax(tmp_path) == []
+
+
+def test_check_script_syntax_reports_an_unreadable_script(tmp_path, monkeypatch):
+    """A file that exists but cannot be read is drift, never a silent skip."""
+    script = tmp_path / "tools" / "locked.py"
+    _write(script, "x = 1\n")
+    real_read_text = Path.read_text
+
+    def _deny(self, *args, **kwargs):
+        if self == script:
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", _deny)
+
+    issues = garden.check_script_syntax(tmp_path)
+
+    assert len(issues) == 1, issues
+    assert "tools/locked.py" in issues[0]
+
+
+def test_live_repo_scripts_all_parse():
+    assert garden.check_script_syntax(root=garden.ROOT) == []
+
+
+# ─── check_hook_references ──────────────────────────────────────────────────
+
+
+def _hooks_fixture(tmp_path, payload, scripts=()):
+    """Write .kilo/hooks/hooks.json plus the script files it may point at."""
+    for name in scripts:
+        _write(tmp_path / name, "// hook\n")
+    _write(
+        tmp_path / ".kilo" / "hooks" / "hooks.json",
+        json.dumps(payload, indent=2),
+    )
+    return tmp_path
+
+
+def test_check_hook_references_detects_a_missing_script(tmp_path):
+    root = _hooks_fixture(
+        tmp_path,
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {"id": "pre:gate", "hook": "node .kilo/hooks/pre-tool-use/gate.js"}
+                ]
+            }
+        },
+    )
+
+    issues = garden.check_hook_references(root)
+
+    assert len(issues) == 1, issues
+    assert ".kilo/hooks/pre-tool-use/gate.js" in issues[0]
+
+
+def test_check_hook_references_clean_when_scripts_exist(tmp_path):
+    root = _hooks_fixture(
+        tmp_path,
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {"id": "pre:gate", "hook": "node .kilo/hooks/pre-tool-use/gate.js"}
+                ]
+            }
+        },
+        scripts=(".kilo/hooks/pre-tool-use/gate.js",),
+    )
+
+    assert garden.check_hook_references(root) == []
+
+
+def test_check_hook_references_detects_a_duplicate_id(tmp_path):
+    root = _hooks_fixture(
+        tmp_path,
+        {
+            "hooks": {
+                "PreToolUse": [{"id": "pre:gate", "hook": "node .kilo/hooks/a.js"}],
+                "PostToolUse": [{"id": "pre:gate", "hook": "node .kilo/hooks/a.js"}],
+            }
+        },
+        scripts=(".kilo/hooks/a.js",),
+    )
+
+    issues = garden.check_hook_references(root)
+
+    assert len(issues) == 1, issues
+    assert "Duplicate hook id" in issues[0]
+
+
+def test_check_hook_references_malformed_json_is_one_issue(tmp_path):
+    """A malformed file is one reported issue, never an exception."""
+    _write(tmp_path / ".kilo" / "hooks" / "hooks.json", "{not json")
+
+    issues = garden.check_hook_references(tmp_path)
+
+    assert len(issues) == 1, issues
+    assert "hooks.json" in issues[0]
+
+
+def test_check_hook_references_missing_file_is_one_issue(tmp_path):
+    issues = garden.check_hook_references(tmp_path)
+
+    assert len(issues) == 1, issues
+    assert "hooks.json" in issues[0]
+
+
+def test_live_repo_hook_references_resolve():
+    assert garden.check_hook_references(root=garden.ROOT) == []

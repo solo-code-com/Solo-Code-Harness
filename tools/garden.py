@@ -1971,6 +1971,103 @@ def check_no_symlinks(root: Path = ROOT) -> list[str]:
     return issues
 
 
+# Directories whose Python scripts no gate parses today: checklist.py only
+# compiles .claude/hooks/guard.py, so a syntax error anywhere else waits for
+# the one test that imports the file -- or for the run itself.
+_SYNTAX_SCAN_DIRS: tuple[str, ...] = (
+    "tools",
+    ".github/scripts",
+    ".claude/hooks",
+    ".kilo/hooks",
+)
+
+# `node .kilo/hooks/pre-tool-use/gate-guard.js` -> the script token.
+_HOOK_SCRIPT_TOKEN = re.compile(r"[A-Za-z0-9_./\\-]+\.(?:js|py)\b")
+
+
+def check_script_syntax(root: Path = ROOT) -> list[str]:
+    """Parse every Python script under the gate directories; report failures.
+
+    An absent directory is fine -- a deployed target need not carry every
+    engine's hooks -- but a file that exists and cannot be read is an issue:
+    skipping it silently would report a clean tree while the script is
+    unusable.
+    """
+    issues: list[str] = []
+    for rel_dir in _SYNTAX_SCAN_DIRS:
+        base = root / rel_dir
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*.py")):
+            rel = path.relative_to(root).as_posix()
+            try:
+                # utf-8-sig mirrors load_policy: a BOM is platform noise, not
+                # a syntax error.
+                text = path.read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeDecodeError) as exc:
+                issues.append(f"Cannot read {rel} for syntax check: {exc}")
+                continue
+            try:
+                ast.parse(text, filename=str(path))
+            except SyntaxError as exc:
+                issues.append(f"Syntax error in {rel}: {exc.msg} (line {exc.lineno})")
+    return issues
+
+
+def check_hook_references(root: Path = ROOT) -> list[str]:
+    """Check every hooks.json command names a script that exists, once each.
+
+    A `hook` command pointing at a removed script only fails at runtime, in
+    the middle of a session -- the worst moment to discover it. Duplicate ids
+    are reported too: the profiles select hooks by id, so a duplicate makes
+    one entry unreachable without any error. A missing or malformed
+    hooks.json is one issue, never a traceback.
+    """
+    path = root / ".kilo" / "hooks" / "hooks.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        return ["hooks.json missing: .kilo/hooks/hooks.json"]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return [f"hooks.json unreadable (.kilo/hooks/hooks.json): {exc}"]
+
+    if not isinstance(payload, dict) or not isinstance(payload.get("hooks"), dict):
+        return ["hooks.json malformed: no `hooks` object in .kilo/hooks/hooks.json"]
+
+    issues: list[str] = []
+    seen: set[str] = set()
+    for event, entries in payload["hooks"].items():
+        if not isinstance(entries, list):
+            issues.append(f"hooks.json malformed: hooks.{event} is not a list")
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                issues.append(
+                    f"hooks.json malformed: hooks.{event} has a non-object entry"
+                )
+                continue
+            hook_id = entry.get("id")
+            label = hook_id if isinstance(hook_id, str) and hook_id else "<no id>"
+            if isinstance(hook_id, str) and hook_id in seen:
+                issues.append(f"Duplicate hook id in hooks.json: {hook_id}")
+            if isinstance(hook_id, str):
+                seen.add(hook_id)
+            command = entry.get("hook")
+            if not isinstance(command, str):
+                issues.append(
+                    f"hooks.json malformed: hooks.{event} entry {label} has no "
+                    "`hook` command string"
+                )
+                continue
+            for token in _HOOK_SCRIPT_TOKEN.findall(command):
+                if not (root / token).is_file():
+                    issues.append(
+                        f"hooks.json references a missing script: {token} "
+                        f"(hooks.{event} {label})"
+                    )
+    return issues
+
+
 def main() -> int:
     kilo = ROOT / ".kilo"
 
@@ -2062,6 +2159,28 @@ def main() -> int:
         all_issues.extend(fingerprint_issues)
     else:
         print("[OK] Harness content fingerprint")
+
+    # Script syntax - every Python script under the gate dirs must parse.
+    print("\n--- Script Syntax ---")
+    syntax_issues = check_script_syntax(ROOT)
+    if syntax_issues:
+        print("[DRIFT] Scripts that fail to parse:")
+        for i in syntax_issues:
+            print(f"  {i}")
+        all_issues.extend(syntax_issues)
+    else:
+        print("[OK] Script syntax")
+
+    # Hook references - does every hooks.json command name a real script?
+    print("\n--- Hook References ---")
+    hook_ref_issues = check_hook_references(ROOT)
+    if hook_ref_issues:
+        print("[DRIFT] hooks.json references that do not resolve:")
+        for i in hook_ref_issues:
+            print(f"  {i}")
+        all_issues.extend(hook_ref_issues)
+    else:
+        print("[OK] Hook references")
 
     # Document counts checks
     print("\n--- Document Counts ---")
