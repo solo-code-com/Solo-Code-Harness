@@ -22,6 +22,7 @@ Protocol:
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -594,6 +595,35 @@ _PIPE_INTO_SHELL = re.compile(
     re.I,
 )
 
+# A destructive payload can arrive BASE64-ENCODED, so the text the guard sees
+# never names the command: `echo cm0gLXJmIC90bXAveA== | base64 -d | sh` wipes
+# /tmp. The decoder is only recognised where its INPUT is visible -- a blob a
+# printing command pipes into it, a `.b64` file it is handed, or a herestring --
+# and the decoded text is only inspected, never run. A command that merely NAMES
+# a decoder (`rg "echo cm0g | base64 -d" .`) is search data and is blanked by
+# the mask before this reads it; a blob that decodes to binary or non-UTF-8 text
+# is ignored, because a binary blob is not a shell script and an over-block
+# teaches people to switch the guard off.
+_B64_DECODER = (
+    r"(?:base64\s+(?:-d|--decode|-decode)\b"
+    r"|openssl\s+(?:enc|base64)\s+(?:-d|--decode|-decode)(?:\s+-base64)?)"
+)
+# A quoted blob (the common spelling) or a bare one. Base64 is its own alphabet,
+# so nothing else can be mistaken for a blob.
+_B64_BLOB = r"(?:'[^']*'|\"[^\"]*\"|[A-Za-z0-9+/=\s_-]+)"
+# Only a file that NAMES itself base64 is read: an arbitrary path would make the
+# guard read files a command only mentions.
+_B64_FILE = r"(?P<file>[^\s|;&'\"]+\.b64(?:\.txt)?)"
+_B64_PRINTED = re.compile(
+    rf"(?:^|[;&|\n])\s*(?:echo|printf)\s+(?P<blob>{_B64_BLOB})\s*\|\s*{_B64_DECODER}",
+    re.I,
+)
+_B64_CAT_FILE = re.compile(
+    rf"(?:^|[;&|\n])\s*cat\s+{_B64_FILE}\s*\|\s*{_B64_DECODER}", re.I
+)
+_B64_ARG_FILE = re.compile(rf"{_B64_DECODER}\s+{_B64_FILE}", re.I)
+_B64_HERESTRING = re.compile(rf"{_B64_DECODER}\s*<<<\s*(?P<blob>{_B64_BLOB})", re.I)
+
 #: Bound on the recursion into embedded payloads, so a pathological nesting
 #: cannot walk forever.
 MAX_PAYLOAD_DEPTH = 4
@@ -616,15 +646,77 @@ def quoted_spans(text: str) -> list[str]:
     return spans
 
 
+def decode_base64_payloads(command: str) -> list[str]:
+    """Decode the base64 blobs a MASKED command feeds to a base64 decoder.
+
+    Catches: a blob `echo`/`printf` prints into `base64 -d` or
+    `openssl enc -d -base64`; the contents of a `.b64`/`.b64.txt` file that is
+    piped through `cat ... | base64 -d` or given to `base64 -d <file>`; and a
+    herestring blob (`base64 -d <<< ...`). Must NOT fire on a command that
+    merely names a decoder -- quoted search data is blanked by the mask before
+    this runs -- nor on a blob that does not decode to printable UTF-8 text.
+
+    Returns the decoded strings, de-duplicated, at most five per command. The
+    caller re-scans them with the block patterns; nothing is ever executed.
+    """
+    blobs: list[str] = []
+    for match in _B64_PRINTED.finditer(command):
+        blobs.append(match.group("blob"))
+    for match in _B64_HERESTRING.finditer(command):
+        blobs.append(match.group("blob"))
+    for pattern in (_B64_CAT_FILE, _B64_ARG_FILE):
+        for match in pattern.finditer(command):
+            try:
+                blobs.append(
+                    Path(match.group("file")).read_text(
+                        encoding="utf-8", errors="ignore"
+                    )
+                )
+            except OSError:
+                # A missing or unreadable file cannot be decoded, and the name
+                # alone is not evidence of a hidden command.
+                continue
+
+    decoded: list[str] = []
+    for blob in blobs:
+        cleaned = re.sub(r"[\s'\"]", "", blob)
+        if not cleaned:
+            continue
+        # An obfuscator drops the padding: `cm0gLXJmIC90bXAveA` is the shape a
+        # strict b64decode rejects, so repair it before either decode.
+        padded = cleaned + "=" * (-len(cleaned) % 4)
+        try:
+            raw = base64.b64decode(padded, validate=True)
+        except ValueError:
+            # Strict decoding rejects both a missing padding and a foreign
+            # character; the lenient URL-safe decode reads the same blob.
+            try:
+                raw = base64.urlsafe_b64decode(padded)
+            except (ValueError, TypeError):
+                continue
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if not text or not all(ch.isprintable() or ch in "\n\r\t" for ch in text):
+            continue
+        if text not in decoded:
+            decoded.append(text)
+        if len(decoded) >= 5:
+            break
+    return decoded
+
+
 def executable_payloads(masked: str) -> list[str]:
     """Command text a masked command runs without naming it.
 
-    Three shapes, all read from the MASKED command so the data-vs-command
+    Four shapes, all read from the MASKED command so the data-vs-command
     decision is made once, by the mask, and no rule can read quoted search data
-    as a script: a quoted `eval` argument, an unquoted `eval` argument run, and
-    the input side of a pipeline that reaches a shell. The pipeline input
-    contributes its quoted spans AND its unquoted argument run, because the
-    shell runs whatever the input PRINTS, quoted or not.
+    as a script: a quoted `eval` argument, an unquoted `eval` argument run, the
+    input side of a pipeline that reaches a shell, and the text a base64 blob
+    decodes to when the pipeline decodes instead of printing. The pipeline
+    input contributes its quoted spans AND its unquoted argument run, because
+    the shell runs whatever the input PRINTS, quoted or not.
     """
     payloads: list[str] = []
     for match in _EVAL_ARGUMENT.finditer(masked):
@@ -654,6 +746,10 @@ def executable_payloads(masked: str) -> list[str]:
         words = input_side.split()
         if len(words) > 1:
             payloads.append(" ".join(words[1:]))
+    # A decoded blob is a script exactly when the decoder's output reaches a
+    # shell -- but the decoded text is inspected for the block patterns either
+    # way, and the caller bounds it by MAX_PAYLOAD_DEPTH. It is not executed.
+    payloads.extend(decode_base64_payloads(masked))
     return payloads
 
 
@@ -1110,6 +1206,15 @@ def main() -> int:
             deny(
                 f"possible secret '{secret}' in command. Use environment variables instead."
             )
+        # A secret can arrive base64-encoded too (`echo <b64> | base64 -d`), so
+        # the decoded text is checked on the same path. `python -c` itself is
+        # still allowed: only text that really decodes is inspected.
+        for decoded in decode_base64_payloads(mask_separator_quotes(command)):
+            secret = find_secret(decoded)
+            if secret:
+                deny(
+                    f"possible secret '{secret}' in command. Use environment variables instead."
+                )
         return 0
 
     if tool in ("Edit", "Write", "MultiEdit"):

@@ -11,6 +11,7 @@ Usage:
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import os
@@ -991,3 +992,65 @@ def test_executor_mode_denial_names_the_delegation_command(tmp_path):
     )
     assert "opencode_delegate.py" in proc.stderr
     assert ".solocode/executor-mode" in proc.stderr
+
+
+# ── Base64-obfuscated payloads ───────────────────────────────────────────
+# A destructive command can arrive encoded, so the text the guard sees never
+# names it: `echo cm0gLXJmIC90bXAveA== | base64 -d | sh` wipes /tmp. The guard
+# decodes the blob and runs the decoded text through the same block patterns.
+# The UNPADDED spelling is the measured gap: it is the shape an obfuscator
+# writes, and a strict b64decode drops it with "Incorrect padding".
+
+_B64_WIPE = base64.b64encode(b"rm -rf /tmp/x").decode("ascii")
+_B64_WIPE_UNPADDED = _B64_WIPE.rstrip("=")
+
+BASE64_BLOCKED_COMMANDS = [
+    f"echo {_B64_WIPE} | base64 -d | sh",
+    f"echo {_B64_WIPE_UNPADDED} | base64 -d | sh",
+    f"printf '{_B64_WIPE}' | base64 -d | bash",
+    f"base64 -d <<< {_B64_WIPE} | sh",
+]
+
+
+@pytest.mark.parametrize("command", BASE64_BLOCKED_COMMANDS)
+def test_base64_obfuscated_command_blocked(command):
+    assert _run_guard({"tool_name": "Bash", "tool_input": {"command": command}}) == 2
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["cat payload.b64 | base64 -d | sh", "base64 -d payload.b64 | sh"],
+)
+def test_base64_file_payload_blocked(tmp_path, monkeypatch, command):
+    """The blob may live in a `.b64` file rather than on the command line."""
+    (tmp_path / "payload.b64").write_text(_B64_WIPE + "\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert _run_guard({"tool_name": "Bash", "tool_input": {"command": command}}) == 2
+
+
+def test_base64_harmless_payload_allowed():
+    """Decoding is not blocking: a blob that says `echo hello` is harmless."""
+    blob = base64.b64encode(b"echo hello").decode("ascii")
+    command = f"echo {blob} | base64 -d"
+    assert _run_guard({"tool_name": "Bash", "tool_input": {"command": command}}) == 0
+
+
+def test_invalid_base64_allowed():
+    """A malformed blob is ignored, not raised: an over-block is a failure."""
+    command = "echo 'this is not base64!' | base64 -d | sh"
+    assert _run_guard({"tool_name": "Bash", "tool_input": {"command": command}}) == 0
+
+
+def test_base64_encoded_secret_blocked():
+    """The secret path decodes too: an encoded key is still a leaked key."""
+    blob = base64.b64encode(b"ANTHROPIC_API_KEY=sk-ant-api03-" + b"A" * 40).decode(
+        "ascii"
+    )
+    command = f"echo {blob} | base64 -d"
+    assert _run_guard({"tool_name": "Bash", "tool_input": {"command": command}}) == 2
+
+
+def test_python_c_still_allowed_after_base64_detection():
+    """`python -c` is exempt by design; only text that really decodes is read."""
+    command = 'python -c "import os; print(os.getcwd())"'
+    assert _run_guard({"tool_name": "Bash", "tool_input": {"command": command}}) == 0
