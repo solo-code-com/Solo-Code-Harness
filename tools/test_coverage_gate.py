@@ -879,3 +879,68 @@ def test_check_test_counts_notes_an_unconfigured_platform_without_failing():
     assert len(notes) == 1
     assert "[NOTE] test-count enforcement is not configured" in notes[0]
     assert "--update" in notes[0]
+
+
+def test_check_ratchet_flags_test_file_collapsed_to_zero():
+    """A test file whose bodies were deleted still runs but collapses to 0%.
+
+    The count check catches a deleted test function; this catches a file whose
+    bodies were emptied, which still collects and still appears in the run.
+    """
+    budget = {sys.platform: {"tools/test_session_registry.py": 100.0}}
+    current = {"tools/test_session_registry.py": 0.0}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "tools/test_session_registry.py: 100.0% -> 0.0%" in violations[0]
+    assert "below the 20% test-file floor" in violations[0]
+
+
+def test_check_ratchet_flags_test_file_below_the_floor():
+    """15% is under the floor even though it is not zero: the bodies are gone."""
+    budget = {sys.platform: {"tools/test_session_registry.py": 91.19}}
+    current = {"tools/test_session_registry.py": 15.0}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "tools/test_session_registry.py: 91.2% -> 15.0%" in violations[0]
+    assert "test bodies were deleted, not skipped" in violations[0]
+
+
+def test_check_ratchet_accepts_test_file_above_the_floor():
+    """50% is the platform-skip swing the test-file exclusion still forgives."""
+    budget = {sys.platform: {"tools/test_session_registry.py": 100.0}}
+    current = {"tools/test_session_registry.py": 50.0}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is True
+    assert violations == []
+
+
+def test_check_ratchet_still_flags_production_collapse_to_zero():
+    """The floor is test-file only: a production module keeps the 1.0 rule."""
+    budget = {sys.platform: {"tools/session_registry.py": 90.0}}
+    current = {"tools/session_registry.py": 0.0}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "tools/session_registry.py: 90.0% -> 0.0%" in violations[0]
+    assert "test-file floor" not in violations[0]
+
+
+def test_test_file_floor_does_not_touch_exempt_files():
+    """RATCHET_EXEMPT is wider than the floor: an exempt file is never floored."""
+    budget = {sys.platform: {"tools/test_e2e.py": 89.53}}
+    current = {"tools/test_e2e.py": 0.0}
+
+    passed, violations = coverage_gate.check_ratchet(budget, current)
+
+    assert passed is True
+    assert violations == []

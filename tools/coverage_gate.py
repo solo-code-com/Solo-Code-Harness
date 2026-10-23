@@ -78,6 +78,13 @@ RATCHET_EXEMPT = {"tools/test_e2e.py"}
 # note instead, so it stays visible without failing the gate.
 COVERAGE_TOLERANCE = 1.0
 
+# Percentage below which a test file's coverage has collapsed rather than skipped.
+# A test file's percentage swings with platform skips, so it cannot use the 1.0
+# production tolerance; but a fall to ~0% is not a skip - it is a deleted test
+# body, which still collects the same number of tests and still appears in the
+# run. 20 points absorbs a real platform gap while still catching total loss.
+TEST_FILE_COVERAGE_FLOOR = 20.0
+
 
 def is_test_file(path: str) -> bool:
     """A `test_` basename marks a test file, whatever directory holds it."""
@@ -360,6 +367,7 @@ def check_ratchet(
     platforms: dict[str, dict[str, float]],
     current: dict[str, float],
     notes: list[str] | None = None,
+    test_files: set[str] | None = None,
 ) -> tuple[bool, list[str]]:
     """Check if coverage decreased for any file on the current platform.
 
@@ -371,6 +379,12 @@ def check_ratchet(
 
     A drop within COVERAGE_TOLERANCE is appended to `notes`, not `violations`:
     subprocess-driven files are noisy, but the drop must stay visible.
+
+    Test files keep their own rule: they are never compared against the production
+    tolerance, because their percentage tracks platform skips. `test_files` names
+    the ones to floor-check (derived from the budget's `test_` basenames when None);
+    only a fall from above TEST_FILE_COVERAGE_FLOOR to below it fails, and only
+    when the file ran - an absent file is the clearer message above.
 
     Returns:
         (passed, violations) where violations lists files with decreased coverage
@@ -436,6 +450,31 @@ def check_ratchet(
                     f"  {file_path}: {old_coverage:.1f}% -> {new_coverage:.1f}% "
                     f"(-{diff:.1f}%)"
                 )
+
+    # A test file whose bodies were deleted still collects and still appears in the
+    # run, so it never reaches the "did not run at all" message. Its percentage
+    # collapses instead, which is the only signal left - the count check catches a
+    # deleted function, this catches emptied bodies.
+    test_paths = (
+        test_files
+        if test_files is not None
+        else {path for path in budget if is_test_file(path)}
+    )
+    for file_path in sorted(test_paths):
+        # The live-API exemption covers the floor too: its percentage tracks the
+        # provider, not the suite, so it is never floored.
+        if file_path in RATCHET_EXEMPT or file_path not in budget:
+            continue
+        if file_path not in current:
+            continue
+        old_coverage = budget[file_path]
+        new_coverage = current[file_path]
+        if new_coverage < TEST_FILE_COVERAGE_FLOOR < old_coverage:
+            violations.append(
+                f"  {file_path}: {old_coverage:.1f}% -> {new_coverage:.1f}% "
+                f"(below the {TEST_FILE_COVERAGE_FLOOR:.0f}% test-file floor) - "
+                "test bodies were deleted, not skipped"
+            )
 
     return len(violations) == 0, violations
 
@@ -722,7 +761,10 @@ def main() -> int:
         return 1
 
     notes: list[str] = []
-    passed, violations = check_ratchet(platforms, current, notes)
+    tracked_test_files = {
+        path for path in platforms[sys.platform] if is_test_file(path)
+    }
+    passed, violations = check_ratchet(platforms, current, notes, tracked_test_files)
 
     recorded_test_counts = test_counts.get(sys.platform)
     collected_test_counts = collect_test_counts()
