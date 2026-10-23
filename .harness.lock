@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-10-23T03:29:24Z"
+generated_at = "2026-10-23T03:36:08Z"
 mode = "root"
-content_fingerprint = "sha256:3b776ab8b548268dd9cec1dc128fb9b78e1b3a276f23676fe402cc6b36a26dd3"
+content_fingerprint = "sha256:3db924ad8200eb23648bb2a1a495bb2b4e741c2a49d55ead48e4cb79df9ce991"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -207,8 +207,10 @@ paths = [
     "tools/test_text_hygiene.py",
     "tools/test_validate_schemas.py",
     "tools/test_win_sandbox.py",
+    "tools/test_worker_preflight.py",
     "tools/validate_schemas.py",
     "tools/win_sandbox.py",
+    "tools/worker_preflight.py",
     "tools/wsl_sandbox.sh",
 ]
 
