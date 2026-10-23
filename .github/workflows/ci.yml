@@ -106,6 +106,15 @@ jobs:
           exit $rc
         shell: bash
 
+      # Temporary: removed once the re-captured baseline is committed.
+      - name: Coverage baseline (force re-capture)
+        if: always()
+        shell: bash
+        run: |
+          python tools/coverage_gate.py --force-capture | while IFS= read -r line; do
+            [ -n "$line" ] && echo "::notice::$line"
+          done
+
       - name: Coverage baseline capture
         if: always()
         shell: bash

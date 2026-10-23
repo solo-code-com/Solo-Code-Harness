@@ -567,6 +567,51 @@ def test_capture_prints_nothing_when_platform_has_a_baseline(
     assert capsys.readouterr().out == ""
 
 
+def test_force_capture_emits_baseline_even_when_platform_has_one(
+    tmp_path, monkeypatch, capsys
+):
+    """A stale committed baseline must be re-measurable without deleting it.
+
+    The linux baseline was captured before the code changed, so the ratchet failed
+    and the plain --capture stayed silent because a baseline was present. Both
+    spellings of the force flag re-emit the measured section.
+    """
+    bfile = tmp_path / "budget.json"
+    bfile.write_text(
+        json.dumps(
+            {
+                "platforms": {sys.platform: {"tools/a.py": 90.0}},
+                "test_counts": {sys.platform: {"tools/test_a.py": 4}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    real_load = coverage_gate.load_budget
+    real_load_counts = coverage_gate.load_test_counts
+
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(
+        coverage_gate, "load_test_counts", lambda *a, **k: real_load_counts(bfile)
+    )
+    monkeypatch.setattr(coverage_gate, "run_coverage", lambda: {"tools/a.py": 55.0})
+    # Counts are already recorded, so a force re-capture must not collect again.
+    monkeypatch.setattr(
+        coverage_gate,
+        "collect_test_counts",
+        lambda: pytest.fail("a recorded test-count section must not be collected"),
+    )
+
+    expected = [f'COVERAGE_BASELINE {sys.platform} 1/1 {{"tools/a.py":55.0}}']
+    for argv in (
+        ["coverage_gate.py", "--force-capture"],
+        ["coverage_gate.py", "--capture", "--force"],
+    ):
+        monkeypatch.setattr(sys, "argv", argv)
+
+        assert coverage_gate.main() == 0
+        assert capsys.readouterr().out.splitlines() == expected
+
+
 def test_check_ratchet_ignores_drop_in_test_file():
     """A test file's coverage measures which tests ran here, not production code.
 

@@ -49,6 +49,7 @@ Usage:
     python tools/coverage_gate.py --update    # rewrite this platform's section
     python tools/coverage_gate.py --report    # show current coverage vs budget
     python tools/coverage_gate.py --capture   # emit a baseline when this platform has none
+    python tools/coverage_gate.py --force-capture  # re-emit the baseline even when one exists
 """
 
 from __future__ import annotations
@@ -617,7 +618,14 @@ def main() -> int:
 
         return 0
 
-    if "--capture" in sys.argv:
+    # `--force-capture` (or `--capture --force`) re-measures a platform that already
+    # has a baseline. The committed baseline goes stale when the code it was measured
+    # against changes: the ratchet then fails, and the plain --capture stays silent
+    # because a baseline is present, so the new numbers never reach the log.
+    force_capture = "--force-capture" in sys.argv or (
+        "--capture" in sys.argv and "--force" in sys.argv
+    )
+    if "--capture" in sys.argv or force_capture:
         try:
             platforms = load_budget()
             recorded_counts = load_test_counts()
@@ -632,10 +640,10 @@ def main() -> int:
         has_baseline = sys.platform in platforms
         has_counts = recorded_counts.get(sys.platform) is not None
 
-        if has_baseline and has_counts:
+        if has_baseline and has_counts and not force_capture:
             return 0
 
-        if not has_baseline:
+        if force_capture or not has_baseline:
             try:
                 current = run_coverage()
             except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
