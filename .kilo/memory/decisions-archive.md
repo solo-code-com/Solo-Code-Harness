@@ -1320,3 +1320,12 @@ daemon on the Windows side at all.
   (`1c93b47`), và coverage ratchet skip khi bản runtime không có `test_*.py`. Còn mở: 8 finding XSS
   thật trong code dự án đích (scanner chưa có cơ chế allowlist), 10 shell-quoting gaps của guard,
   Docker/WSL chưa xong (5 volume chưa backup).
+
+- [decision] Model ids are verified against the provider's own catalog, never from
+  memory. The `opencode-go` catalog (95 ids in `_PROVIDER_MODELS`, `tools/opencode_engine.py`)
+  is configured globally by OpenCode, not declared in `.opencode/opencode.json`. Each
+  consumer declares models separately: OpenCode uses the harness key
+  `opencode-go/deepseek-v4-pro`, `.vscode/settings.json` (Copilot), and
+  `~/.config/kilo/kilo.jsonc` (Kilo uses the full upstream id
+  `opencode-go/deepseek/deepseek-v4-pro`). `context_length` comes from the response, not
+  the file. (2026-09-28; catalog 105 model on 2026-10-23)

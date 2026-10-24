@@ -79,14 +79,6 @@ High-signal context loaded at session start. Detailed history belongs in
   của PowerShell trên file UTF-8 không BOM đếm sai (8182 vs 7671) — đo bằng python.
 
 ## Decisions
-- [decision] Model ids are verified against the provider's own catalog, never from
-  memory. The `opencode-go` catalog (95 ids in `_PROVIDER_MODELS`, `tools/opencode_engine.py`)
-  is configured globally by OpenCode, not declared in `.opencode/opencode.json`. Each
-  consumer declares models separately: OpenCode uses the harness key
-  `opencode-go/deepseek-v4-pro`, `.vscode/settings.json` (Copilot), and
-  `~/.config/kilo/kilo.jsonc` (Kilo uses the full upstream id
-  `opencode-go/deepseek/deepseek-v4-pro`). `context_length` comes from the response, not
-  the file. (2026-09-28; catalog 105 model on 2026-10-23)
 - [decision] Pipeline 4 vai trò (2026-10-16): Jev (agent trên **model JEV**
   `openrouter/jev-router`) điều phối; **Codex** ra đề bài + **verify** (`gpt-6.1-sol`,
   effort `medium`, đổi bằng `--model`/`--effort`); **DeepSeek V4.1 Flash** (OpenCode CLI,
@@ -118,3 +110,10 @@ High-signal context loaded at session start. Detailed history belongs in
   legitimate. A lock with no `mode` is treated as root. A target lock declares only the
   files deploy actually shipped. `failure_ledger --sweep` reports per-project fingerprint
   match.
+
+- [measurement] WSL fence (2026-10-24, B4 pha 1): `tools/wsl_sandbox.sh` **fail-open** nếu
+  gọi ngoài `unshare -Urm` - chỉ cảnh báo stderr, exit 0. Gọi đúng: chặn `/mnt/c` và
+  `$HOME`, `/tmp` riêng, DNS+HTTPS sống, ghi workspace thấy từ Windows; fence 0.14s khi
+  WSL ấm (cold ~14s), worker+tool 2.71s so với 2.54s không fence. Blocker: `cmd.exe`,
+  `opencode`, `kilo` không có trong fence (binary Windows, `/mnt/c` bị overlay); chỉ có
+  `python3`/`node` - nên B4 là "cài worker Linux trong WSL", không phải "đổi sandbox".
