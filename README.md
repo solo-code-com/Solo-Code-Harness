@@ -204,6 +204,7 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | Prose budget | `make prose` | Long sentences, semicolons and em dashes may not grow past their recorded baseline |
 | Ruff pin | `make lint-pin` | Runs the ruff version the commit hook pins, so make check and a commit cannot disagree |
 | Gate probe | `python tools/gate_probe.py` | REPORT, never blocks: which gate catches which known defect, with caught, missed and no-gate outcomes |
+| Worker stats | `python tools/worker_stats.py` | REPORT, never blocks: per worker/model success rate, median latency, cost and tokens from `.solocode/*-usage.jsonl` |
 | Review receipt | `python tools/review_receipt.py verify` | A staged change over 5 files and 120 lines needs a receipt recorded after /review; the gate blocks, the advisory hook above only measures |
 
 ## Slash Commands (Kilo + Claude Code)
@@ -546,6 +547,7 @@ cần đổi harness.
 | Prose budget | `make prose` | Câu dài, dấu chấm phẩy và em dash không được tăng quá baseline đã ghi |
 | Ruff pin | `make lint-pin` | Chạy đúng bản ruff mà commit hook pin, để make check và commit không nói khác nhau |
 | Gate probe | `python tools/gate_probe.py` | BÁO CÁO, không chặn: gate nào bắt được defect nào, với kết quả caught, missed, no-gate |
+| Worker stats | `python tools/worker_stats.py` | BÁO CÁO, không chặn: tỉ lệ thành công, median độ trễ, chi phí và token theo worker/model từ `.solocode/*-usage.jsonl` |
 | Review receipt | `python tools/review_receipt.py verify` | Thay đổi đã stage vượt 5 file và 120 dòng cần receipt ghi sau /review; cổng này chặn, còn hook advisory bên trên chỉ đo |
 
 ## Slash Commands (Kilo + Claude Code)

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Guard Hook Test Suite - validates safety patterns"""
 
+import base64
+import io
+import json
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / ".claude" / "hooks"))
 import guard
@@ -380,6 +385,95 @@ def test_mask_pairs_quotes_escape_aware():
         guard.find_destructive(r'''bash -c "echo C:\"; rm -rf / && echo "done"''')
         is not None
     )
+
+
+def test_base64_printed_form():
+    """guard.py 663-664: a blob `echo` prints is piped into the decoder."""
+    assert guard.decode_base64_payloads("echo cm0gLXJmIC90bXAveA== | base64 -d") == [
+        "rm -rf /tmp/x"
+    ]
+
+
+def test_base64_herestring_form():
+    """guard.py 665-666: a herestring blob is decoded the same way."""
+    assert guard.decode_base64_payloads("base64 -d <<< cm0gLXJmIC90bXAveA==") == [
+        "rm -rf /tmp/x"
+    ]
+
+
+def test_base64_file_forms(tmp_path, monkeypatch):
+    """guard.py 667-678: a `.b64` file is read, a missing one is skipped."""
+    (tmp_path / "payload.b64").write_text("cm0gLXJmIC90bXAveA==", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert guard.decode_base64_payloads("cat payload.b64 | base64 -d") == [
+        "rm -rf /tmp/x"
+    ]
+    assert guard.decode_base64_payloads("base64 -d payload.b64") == ["rm -rf /tmp/x"]
+    # A missing file cannot be decoded, and the name alone is not evidence.
+    assert guard.decode_base64_payloads("cat missing.b64 | base64 -d") == []
+
+
+def test_base64_padding_repair_and_urlsafe_fallback():
+    """guard.py 682-696: an empty, unpadded, URL-safe or undecodable blob."""
+    # A blob that cleans to empty contributes no payload.
+    assert guard.decode_base64_payloads("echo '' | base64 -d") == []
+    # The obfuscator's shape: padding dropped, repaired before either decode.
+    assert guard.decode_base64_payloads("echo cm0gLXJmIC90bXAveA | base64 -d") == [
+        "rm -rf /tmp/x"
+    ]
+    # `-` is outside the strict alphabet, so the URL-safe fallback reads it.
+    assert guard.decode_base64_payloads("echo QUI- | base64 -d") == ["AB>"]
+    # Neither decoder accepts it: no payload, and no exception.
+    assert guard.decode_base64_payloads("echo A | base64 -d") == []
+
+
+def test_base64_ignores_binary_and_non_printable():
+    """guard.py 697-702: binary and control characters are not shell text."""
+    # bytes ff fe fd, not UTF-8: the decode is dropped.
+    assert guard.decode_base64_payloads("echo //79 | base64 -d") == []
+    # bytes 00 01 02 decode, but they are not printable text.
+    assert guard.decode_base64_payloads("echo AAEC | base64 -d") == []
+
+
+def test_base64_dedupes_and_caps_payloads():
+    """guard.py 703-706: one copy of a repeated blob, five distinct at most."""
+    assert guard.decode_base64_payloads(
+        "echo cm0gLXJmIC90bXAveA== | base64 -d; echo cm0gLXJmIC90bXAveA== | base64 -d"
+    ) == ["rm -rf /tmp/x"]
+    six = "; ".join(
+        f"echo {base64.b64encode(f'echo {n}'.encode()).decode()} | base64 -d"
+        for n in range(1, 7)
+    )
+    assert len(guard.decode_base64_payloads(six)) == 5
+
+
+def test_base64_payload_reaches_the_block_patterns():
+    """guard.py 752: a decoded blob is re-scanned as command text."""
+    assert (
+        guard.find_destructive("echo cm0gLXJmIC90bXAveA== | base64 -d | sh") is not None
+    )
+
+
+def test_main_denies_a_base64_encoded_secret(monkeypatch):
+    """guard.py 1212-1217: the secret path decodes the blob and denies."""
+    blob = base64.b64encode(b"ANTHROPIC_API_KEY=sk-ant-api03-abcdefghijklmnop").decode()
+    payload = json.dumps(
+        {"tool_name": "Bash", "tool_input": {"command": f"echo {blob} | base64 -d"}}
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
+    with pytest.raises(SystemExit) as exc:
+        guard.main()
+    assert exc.value.code == 2
+
+
+def test_main_allows_a_harmless_base64_payload(monkeypatch):
+    """guard.py 1218: a blob that decodes to harmless text returns 0."""
+    blob = base64.b64encode(b"echo hello").decode()
+    payload = json.dumps(
+        {"tool_name": "Bash", "tool_input": {"command": f"echo {blob} | base64 -d"}}
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(payload))
+    assert guard.main() == 0
 
 
 def run_self_test():
