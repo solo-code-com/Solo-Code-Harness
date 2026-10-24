@@ -111,9 +111,11 @@ High-signal context loaded at session start. Detailed history belongs in
   files deploy actually shipped. `failure_ledger --sweep` reports per-project fingerprint
   match.
 
-- [measurement] WSL fence (2026-10-24, B4 pha 1): `tools/wsl_sandbox.sh` **fail-open** nếu
-  gọi ngoài `unshare -Urm` - chỉ cảnh báo stderr, exit 0. Gọi đúng: chặn `/mnt/c` và
-  `$HOME`, `/tmp` riêng, DNS+HTTPS sống, ghi workspace thấy từ Windows; fence 0.14s khi
-  WSL ấm (cold ~14s), worker+tool 2.71s so với 2.54s không fence. Blocker: `cmd.exe`,
-  `opencode`, `kilo` không có trong fence (binary Windows, `/mnt/c` bị overlay); chỉ có
-  `python3`/`node` - nên B4 là "cài worker Linux trong WSL", không phải "đổi sandbox".
+- [measurement] WSL fence (2026-10-24/25, B4 pha 1+1c): `tools/wsl_sandbox.sh` **fail-open**
+  nếu gọi ngoài `unshare -Urm` (đã sửa: exit 69, có `WSL_SANDBOX_ALLOW_DEGRADED=1`).
+  Gọi đúng: chặn `/mnt/c` và `$HOME` (touch lẫn mkdir), `/tmp` riêng, DNS+HTTPS sống, ghi
+  workspace thấy từ Windows; fence 0.14s ấm (cold ~14s), worker+tool 2.71s vs 2.54s.
+  Blocker 1: `cmd.exe`/`opencode`/`kilo` bản Windows không chạy được trong fence.
+  Blocker 2: WSL có `@opencode/cli@2.1.4`, `@kilocode/cli@7.8.17`, node 22/npm 10, nhưng
+  `$HOME` read-only nên auth/session mặc định không ghi được, và env không tự qua WSL
+  (`WSLENV` mới qua). Lối đi: cài ngoài fence + `HOME`/XDG trỏ vào workspace + `WSLENV`.
