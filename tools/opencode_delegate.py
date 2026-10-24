@@ -50,9 +50,12 @@ DEFAULT_MODEL = "opencode-go/beam-free"
 # `edit: deny`, so the deny only holds once the flag is gone (measured 2026-10-16:
 # a write landed with the jev agent selected and --auto in play).
 ORCHESTRATOR_AGENT = "jev"
-# OpenCode v2 dropped `opencode/deepseek-v4-flash-free`; the free tier now
-# exposes models such as opencode/mimo-v2.6-flash-free (verified 2026-09-27).
-FREE_MODEL = "opencode/mimo-v2.6-flash-free"
+# The free tier must be a model that answers: `opencode/mimo-v2.6-flash-free`
+# returned "Error: Unknown error" on 2026-10-24 while `opencode-go/beam-free`
+# answered the same prompt in 9.1s at cost 0.0000 in the usage log, and the
+# documented free-tier worker default was already beam-free
+# (.kilo/instruction/api-providers.md).
+FREE_MODEL = "opencode-go/beam-free"
 
 ROOT = Path(__file__).resolve().parent.parent
 USAGE_LOG = Path(".solocode/opencode-usage.jsonl")
