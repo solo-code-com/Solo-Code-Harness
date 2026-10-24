@@ -120,10 +120,12 @@
       "tools/test_validate_schemas.py": 100.0,
       "tools/test_win_sandbox.py": 51.77,
       "tools/test_worker_preflight.py": 100.0,
+      "tools/test_worker_stats.py": 100.0,
       "tools/test_workspace_snapshot.py": 98.48,
       "tools/validate_schemas.py": 67.47,
       "tools/win_sandbox.py": 40.42,
       "tools/worker_preflight.py": 82.29,
+      "tools/worker_stats.py": 93.82,
       "tools/workspace_snapshot.py": 90.91
     },
     "win32": {
@@ -247,10 +249,12 @@
       "tools/test_validate_schemas.py": 100.0,
       "tools/test_win_sandbox.py": 100.0,
       "tools/test_worker_preflight.py": 100.0,
+      "tools/test_worker_stats.py": 100.0,
       "tools/test_workspace_snapshot.py": 98.48,
       "tools/validate_schemas.py": 67.47,
       "tools/win_sandbox.py": 83.33,
       "tools/worker_preflight.py": 82.29,
+      "tools/worker_stats.py": 93.82,
       "tools/workspace_snapshot.py": 90.91
     }
   },
@@ -316,7 +320,8 @@
       "tools/test_subagent_seam.py": 5,
       "tools/test_text_hygiene.py": 10,
       "tools/test_validate_schemas.py": 21,
-      "tools/test_win_sandbox.py": 40
+      "tools/test_win_sandbox.py": 40,
+      "tools/test_worker_stats.py": 15
     },
     "win32": {
       "tools/test_agent_scope.py": 24,
@@ -381,6 +386,7 @@
       "tools/test_validate_schemas.py": 21,
       "tools/test_win_sandbox.py": 40,
       "tools/test_worker_preflight.py": 7,
+      "tools/test_worker_stats.py": 15,
       "tools/test_workspace_snapshot.py": 9
     }
   }
