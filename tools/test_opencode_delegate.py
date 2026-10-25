@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -635,3 +636,306 @@ def test_main_keeps_the_scope_report_on_one_line(monkeypatch, tmp_path, capsys):
         "escaped.md"
     )
     assert any(expected in line for line in capsys.readouterr().err.splitlines())
+
+
+# ── WSL sandbox ──────────────────────────────────────────────────────────────
+
+
+def test_wsl_path_maps_a_drive_letter_to_mnt():
+    assert opencode_delegate.wsl_path(Path(r"F:\x\y")) == "/mnt/f/x/y"
+
+
+def test_wsl_path_rejects_a_drive_less_path():
+    with pytest.raises(ValueError):
+        opencode_delegate.wsl_path(Path("/x/y"))
+
+
+def test_build_wsl_argv_fences_the_same_inner_argv(monkeypatch, tmp_path):
+    """The fence path adds the namespace and HOME plumbing, not a different command."""
+    captured: dict = {}
+
+    def fake_popen(cmd, **_kwargs):
+        captured["cmd"] = cmd
+        return _FakeProc()
+
+    monkeypatch.setattr(opencode_delegate.subprocess, "Popen", fake_popen)
+    opencode_delegate.run_opencode_cli(
+        prompt="do x",
+        model="deepseek/deepseek-flash",
+        directory=str(tmp_path),
+        opencode_binary="/bin/opencode",
+        agent="solo-code-engineer",
+        session="ses_1",
+    )
+    win_argv = captured["cmd"]
+
+    wsl_argv = opencode_delegate.build_wsl_argv(
+        "do x",
+        "deepseek/deepseek-flash",
+        str(tmp_path),
+        "/bin/opencode",
+        agent="solo-code-engineer",
+        session="ses_1",
+        repo_root=tmp_path,
+    )
+
+    assert wsl_argv[:2] == ["wsl", "-e"]
+    for flag in ("--user", "--map-root-user", "--mount", "--pid", "--fork"):
+        assert flag in wsl_argv
+    assert opencode_delegate.wsl_path(tmp_path / "tools" / "wsl_sandbox.sh") in wsl_argv
+    repo_at = wsl_argv.index(opencode_delegate.wsl_path(tmp_path))
+    assert wsl_argv[repo_at + 1] == "."  # --directory default is the repo itself
+    assert wsl_argv.count("--") == 2
+    # Same inner command as the win path, binary included: no drift between them.
+    assert wsl_argv[-len(win_argv) :] == win_argv
+    assert wsl_argv[-len(win_argv) + 1 :] == win_argv[1:]
+
+    script = wsl_argv[wsl_argv.index("-c") + 1]
+    assert "export HOME=/tmp/work/.solocode/sandbox-home" in script
+    assert script.index("export HOME") < script.index("mkdir -p")
+    assert 'XDG_CONFIG_HOME="$HOME/.config"' in script
+
+
+def test_sandbox_defaults_to_win(monkeypatch, tmp_path):
+    seen: dict = {}
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    def fake_run(**kwargs):
+        seen.update(kwargs)
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    assert opencode_delegate.main(["x", "--no-guardrail"]) == 0
+    assert seen["sandbox"] == "win"
+
+
+def test_sandbox_wsl_refuses_the_orchestrator_agent(capsys):
+    assert opencode_delegate.main(["--sandbox", "wsl", "--agent", "jev", "x"]) == 2
+    err = capsys.readouterr().err
+    assert "orchestrator" in err
+    assert "Windows" in err
+
+
+def _reach_the_wsl_wrapper(monkeypatch, tmp_path):
+    """main() in wsl mode without a real WSL install or a repo-local usage log."""
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        opencode_delegate,
+        "resolve_wsl_binary",
+        lambda explicit: "/home/u/.local/bin/opencode",
+    )
+
+
+def test_wsl_substitutes_the_default_model(monkeypatch, tmp_path):
+    seen: dict = {}
+    _reach_the_wsl_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        opencode_delegate, "resolve_model", lambda **kw: opencode_delegate.DEFAULT_MODEL
+    )
+
+    def fake_run(**kwargs):
+        seen.update(kwargs)
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    assert opencode_delegate.main(["--sandbox", "wsl", "x", "--no-guardrail"]) == 0
+    assert seen["model"] == opencode_delegate.WSL_DEFAULT_MODEL
+    assert seen["sandbox"] == "wsl"
+
+
+def test_wsl_keeps_an_explicit_model(monkeypatch, tmp_path):
+    seen: dict = {}
+    _reach_the_wsl_wrapper(monkeypatch, tmp_path)
+    # resolve_model is stubbed repo-wide by the helper; this stub keeps `--model`.
+    monkeypatch.setattr(opencode_delegate, "resolve_model", lambda **kw: kw["model"])
+
+    def fake_run(**kwargs):
+        seen.update(kwargs)
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    argv = ["--sandbox", "wsl", "--model", "deepseek/deepseek-flash"]
+    assert opencode_delegate.main([*argv, "x", "--no-guardrail"]) == 0
+    assert seen["model"] == "deepseek/deepseek-flash"
+
+
+def test_wsl_env_carries_the_keys():
+    base = {"DEEPSEEK_API_KEY": "k", "HOME": "/x"}
+    env = opencode_delegate.wsl_env(base)
+
+    assert env["WSLENV"] == "DEEPSEEK_API_KEY"
+    assert "HOME" not in env["WSLENV"].split(":")
+    # The env is a copy: the fence must not alias the caller's environ.
+    env["WSLENV"] = "mutated"
+    assert "WSLENV" not in base
+
+
+def test_wsl_env_appends_to_an_existing_entry():
+    base = {"WSLENV": "FOO", "ANTHROPIC_API_KEY": "a"}
+    assert opencode_delegate.wsl_env(base)["WSLENV"] == "FOO:ANTHROPIC_API_KEY"
+
+    already = {"WSLENV": "ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY": "a"}
+    assert opencode_delegate.wsl_env(already)["WSLENV"] == "ANTHROPIC_API_KEY"
+
+
+def test_wsl_env_without_keys_adds_nothing():
+    assert "WSLENV" not in opencode_delegate.wsl_env({"HOME": "/x"})
+
+
+def test_wsl_query_returns_none_on_a_nonzero_exit(monkeypatch):
+    monkeypatch.setattr(
+        opencode_delegate.subprocess,
+        "run",
+        lambda *_a, **_k: subprocess.CompletedProcess(
+            args=["wsl"], returncode=1, stdout="x"
+        ),
+    )
+
+    assert opencode_delegate._wsl_query(["wsl", "-e", "true"]) is None
+
+
+def test_wsl_query_returns_none_when_wsl_is_missing(monkeypatch):
+    def missing(*_a, **_k):
+        raise OSError("wsl is not installed")
+
+    monkeypatch.setattr(opencode_delegate.subprocess, "run", missing)
+
+    assert opencode_delegate._wsl_query(["wsl", "-e", "true"]) is None
+
+
+def test_resolve_wsl_binary_prefers_an_explicit_path(monkeypatch):
+    def unprobed(_cmd):
+        raise AssertionError("an explicit path must not be probed")
+
+    monkeypatch.setattr(opencode_delegate, "_wsl_query", unprobed)
+
+    assert opencode_delegate.resolve_wsl_binary("/opt/opencode") == "/opt/opencode"
+
+
+def test_resolve_wsl_binary_reports_a_missing_home(monkeypatch):
+    monkeypatch.setattr(opencode_delegate, "_wsl_query", lambda _cmd: None)
+
+    assert opencode_delegate.resolve_wsl_binary(None) is None
+
+
+def test_resolve_wsl_binary_reports_an_uninstalled_cli(monkeypatch):
+    def probe(cmd):
+        return "/home/u" if "test" not in cmd else None
+
+    monkeypatch.setattr(opencode_delegate, "_wsl_query", probe)
+
+    # Only a path the `test -x` probe proved may come back.
+    assert opencode_delegate.resolve_wsl_binary(None) is None
+
+
+def test_wsl_query_returns_the_stdout_on_success(monkeypatch):
+    monkeypatch.setattr(
+        opencode_delegate.subprocess,
+        "run",
+        lambda *_a, **_k: subprocess.CompletedProcess(
+            args=["wsl"], returncode=0, stdout="/home/u"
+        ),
+    )
+
+    assert opencode_delegate._wsl_query(["wsl", "-e", "true"]) == "/home/u"
+
+
+def test_resolve_wsl_binary_returns_the_verified_path(monkeypatch):
+    def probe(cmd):
+        return "/home/u" if "test" not in cmd else ""
+
+    monkeypatch.setattr(opencode_delegate, "_wsl_query", probe)
+
+    assert opencode_delegate.resolve_wsl_binary(None) == "/home/u/.local/bin/opencode"
+
+
+def test_build_wsl_argv_falls_back_to_repo_root(tmp_path):
+    argv = opencode_delegate.build_wsl_argv(
+        "x", "m", str(tmp_path), "/bin/opencode", repo_root=ROOT
+    )
+
+    repo_at = argv.index(opencode_delegate.wsl_path(ROOT))
+    assert argv[repo_at + 1] == "."
+
+
+def test_run_wsl_builds_the_fence_and_passes_keys_through_env(monkeypatch):
+    captured: dict = {}
+    prompt = "PROMPT_SENTINEL"
+
+    def fake_popen(cmd, **kwargs):
+        captured.update(cmd=cmd, cwd=kwargs["cwd"], env=kwargs["env"])
+        return _FakeProc(stdout='{"type":"text","part":{"text":"PONG"}}')
+
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+    monkeypatch.setattr(opencode_delegate.subprocess, "Popen", fake_popen)
+
+    result = opencode_delegate.run_opencode_cli(
+        prompt, "m", ".", "/linux/opencode", 5, sandbox="wsl"
+    )
+
+    cmd = captured["cmd"]
+    assert cmd[0] == "wsl"
+    assert "unshare" in cmd
+    assert "--map-root-user" in cmd
+    assert opencode_delegate.wsl_path(ROOT / "tools" / "wsl_sandbox.sh") in cmd
+    assert "run" in cmd
+    assert "--standalone" in cmd
+    assert captured["cwd"] == str(opencode_delegate.ROOT)
+    assert "DEEPSEEK_API_KEY" in captured["env"]["WSLENV"]
+    assert cmd.count(prompt) == 1
+    # The key value crosses through env only: never as an argv element.
+    assert os.environ["DEEPSEEK_API_KEY"] not in cmd
+    assert result["text"] == "PONG"
+
+
+def test_main_wsl_returns_1_when_the_linux_cli_is_absent(monkeypatch):
+    monkeypatch.setattr(opencode_delegate, "resolve_wsl_binary", lambda _explicit: None)
+
+    assert opencode_delegate.main(["--sandbox", "wsl", "x"]) == 1
+
+
+def test_main_returns_1_when_no_windows_binary_exists(monkeypatch, capsys):
+    monkeypatch.setattr(opencode_delegate, "find_opencode_binary", lambda: None)
+
+    assert opencode_delegate.main(["x"]) == 1
+    assert "not found" in capsys.readouterr().err
+
+
+def _wsl_available() -> bool:
+    try:
+        proc = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+            ["wsl", "-e", "true"], capture_output=True, timeout=60
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
+
+
+@pytest.mark.skipif(
+    not os.environ.get("DEEPSEEK_API_KEY") or not _wsl_available(),
+    reason="needs DEEPSEEK_API_KEY and a working WSL distro",
+)
+def test_wsl_sandbox_runs_a_brief_through_the_fence():
+    """One live call: the fence wraps a real answer, end to end."""
+    proc = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+        [
+            sys.executable,
+            "tools/opencode_delegate.py",
+            "--sandbox",
+            "wsl",
+            "--model",
+            "deepseek/deepseek-flash",
+            "Reply with exactly: WSL_WRAPPER_OK",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=300,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "WSL_WRAPPER_OK" in proc.stdout

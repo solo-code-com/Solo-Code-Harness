@@ -34,6 +34,7 @@ import argparse
 import contextlib
 import importlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -56,6 +57,24 @@ ORCHESTRATOR_AGENT = "jev"
 # documented free-tier worker default was already beam-free
 # (.kilo/instruction/api-providers.md).
 FREE_MODEL = "opencode-go/beam-free"
+# The `opencode-go/*` plan is not authenticated inside WSL, so the key-based
+# deepseek model is the verified default there (8.5s warm).
+WSL_DEFAULT_MODEL = "deepseek/deepseek-flash"
+# Under the fence /tmp is a private tmpfs and the workspace is bind-mounted at
+# /tmp/work, so HOME has to live inside the workspace: the real WSL $HOME is
+# remounted read-only there.
+SANDBOX_HOME_REL = Path(".solocode") / "sandbox-home"
+# The only values that cross into WSL, through WSLENV -- never through argv,
+# which the session registry records.
+WSL_KEY_VARS = (
+    "DEEPSEEK_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "OPENROUTER_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_BASE_URL",
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 USAGE_LOG = Path(".solocode/opencode-usage.jsonl")
@@ -340,6 +359,149 @@ def parse_json_events(output: str) -> dict[str, Any]:
     return result
 
 
+def wsl_path(path: Path) -> str:
+    """Map a Windows path to the path WSL sees (`F:\\a\\b` -> `/mnt/f/a/b`)."""
+    raw = str(path).replace("\\", "/")
+    drive, sep, rest = raw.partition(":")
+    if not sep or len(drive) != 1 or not drive.isalpha():
+        raise ValueError(f"not a drive-qualified Windows path: {path}")
+    return f"/mnt/{drive.lower()}/{rest.lstrip('/')}"
+
+
+def wsl_env(base: dict[str, str]) -> dict[str, str]:
+    """The env for `wsl`, with WSLENV carrying the API keys across the boundary."""
+    env = dict(base)
+    names = [name for name in WSL_KEY_VARS if name in base]
+    existing = [part for part in env.get("WSLENV", "").split(":") if part]
+    for name in names:
+        if name not in existing:
+            existing.append(name)
+    if existing:
+        env["WSLENV"] = ":".join(existing)
+    return env
+
+
+def _wsl_query(cmd: list[str]) -> str | None:
+    """Run a one-shot `wsl` probe, returning its stdout or None when it fails."""
+    try:
+        proc = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        _stderr(f"WSL unavailable: {exc}")
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+def resolve_wsl_binary(explicit: str | None) -> str | None:
+    """The Linux opencode path inside WSL, or None when it is not installed there.
+
+    An explicit `--opencode-bin` wins unchecked: the caller named the path. The
+    default is the per-user npm prefix, where a working install lives.
+    """
+    if explicit:
+        return explicit
+    home = _wsl_query(["wsl", "-e", "sh", "-c", 'printf %s "$HOME"'])
+    if not home:
+        _stderr("WSL: could not read $HOME")
+        return None
+    binary = f"{home.strip()}/.local/bin/opencode"
+    if _wsl_query(["wsl", "-e", "test", "-x", binary]) is None:
+        _stderr(
+            "install @opencode/cli inside WSL: npm i -g --prefix ~/.local @opencode/cli"
+        )
+        return None
+    return binary
+
+
+def _inner_argv(
+    prompt: str,
+    model: str | None,
+    *,
+    agent: str | None = None,
+    session: str | None = None,
+) -> list[str]:
+    """The `opencode run ...` arguments minus the binary: both sandbox paths share them."""
+    argv = [
+        "run",
+        prompt,
+        "--format",
+        "json",
+        "--standalone",  # private server -- do not touch the shared user server
+    ]
+    if agent != ORCHESTRATOR_AGENT:
+        # Workers need unattended writes; the orchestrator must not have them.
+        argv.append("--auto")
+    if model:  # the orchestrator's model is passed explicitly; v2.0.32 ignores an agent's own model
+        argv += ["--model", model]
+    if agent:  # e.g. the `jev` orchestrator agent
+        argv += ["--agent", agent]
+    if session:  # continue (or create) a session, for a conversation
+        argv += ["--session", session]
+    return argv
+
+
+def build_wsl_argv(
+    prompt: str,
+    model: str | None,
+    directory: str,
+    opencode_binary: str,
+    *,
+    agent: str | None = None,
+    session: str | None = None,
+    repo_root: Path,
+) -> list[str]:
+    """The `wsl` argv that runs the same inner `opencode run` inside the fence.
+
+    HOME and the XDG directories are exported inside the `sh -c` script rather
+    than the outer env: the outer HOME is the Windows-shaped one and is
+    read-only inside the fence.
+    """
+    repo_root = Path(repo_root).resolve()
+    try:
+        rel = Path(directory).resolve().relative_to(repo_root).as_posix() or "."
+    except ValueError:
+        rel = "."
+    script = (
+        f"export HOME=/tmp/work/{SANDBOX_HOME_REL.as_posix()}; "
+        'mkdir -p "$HOME/.config" "$HOME/.local/share" "$HOME/.cache" || exit 69; '
+        'export XDG_CONFIG_HOME="$HOME/.config"; '
+        'export XDG_DATA_HOME="$HOME/.local/share"; '
+        'export XDG_CACHE_HOME="$HOME/.cache"; '
+        'exec "$@"'
+    )
+    inner = [opencode_binary, *_inner_argv(prompt, model, agent=agent, session=session)]
+    return [
+        "wsl",
+        "-e",
+        "unshare",
+        "--user",
+        "--map-root-user",
+        "--mount",
+        "--pid",
+        "--fork",
+        "--",
+        "sh",
+        wsl_path(repo_root / "tools" / "wsl_sandbox.sh"),
+        wsl_path(repo_root),
+        rel,
+        "--",
+        "sh",
+        "-c",
+        script,
+        # $0 for the script above, which execs "$@" -- the inner argv.
+        "fence",
+        *inner,
+    ]
+
+
 def run_opencode_cli(
     prompt: str,
     model: str,
@@ -349,25 +511,30 @@ def run_opencode_cli(
     *,
     agent: str | None = None,
     session: str | None = None,
+    sandbox: str = "win",
 ) -> dict[str, Any]:
     """Run opencode CLI, return parsed JSON events."""
-    cmd = [
-        opencode_binary,
-        "run",
-        prompt,
-        "--format",
-        "json",
-        "--standalone",  # private server — do not touch the shared user server
-    ]
-    if agent != ORCHESTRATOR_AGENT:
-        # Workers need unattended writes; the orchestrator must not have them.
-        cmd.append("--auto")
-    if model:  # the orchestrator's model is passed explicitly; v2.0.32 ignores an agent's own model
-        cmd += ["--model", model]
-    if agent:  # e.g. the `jev` orchestrator agent
-        cmd += ["--agent", agent]
-    if session:  # continue (or create) a session, for a conversation
-        cmd += ["--session", session]
+    env = None
+    cwd = directory
+    if sandbox == "wsl":
+        cmd = build_wsl_argv(
+            prompt,
+            model,
+            directory,
+            opencode_binary,
+            agent=agent,
+            session=session,
+            repo_root=ROOT,
+        )
+        # The fence sets the real cwd; this one only keeps `wsl` itself repo-local.
+        # Keys cross through WSLENV, never through this argv.
+        cwd = str(ROOT)
+        env = wsl_env(os.environ)
+    else:
+        cmd = [
+            opencode_binary,
+            *_inner_argv(prompt, model, agent=agent, session=session),
+        ]
 
     # Built from what the argv actually got: the orchestrator runs without --auto.
     running = "Running: opencode run ..."
@@ -377,6 +544,8 @@ def run_opencode_cli(
     running += " --format json"
     if agent != ORCHESTRATOR_AGENT:
         running += " --auto"
+    if sandbox == "wsl":
+        running += " [sandbox=wsl]"
     _stderr(running)
 
     registry = _load_sibling("session_registry")
@@ -388,7 +557,8 @@ def run_opencode_cli(
             text=True,
             encoding="utf-8",
             errors="replace",
-            cwd=directory,
+            cwd=cwd,
+            env=env,
         )
     except Exception as exc:  # no pid exists yet, so there is no session to record
         _stderr(f"opencode CLI failed: {exc}")
@@ -469,6 +639,7 @@ def log_usage(
     elapsed: float,
     result: dict[str, Any],
     run_id: str,
+    sandbox: str = "win",
 ) -> None:
     """Log delegation call to .solocode/opencode-usage.jsonl for auditing."""
     try:
@@ -484,6 +655,7 @@ def log_usage(
             "error": result.get("error"),
             "phase": "finish",
             "run_id": run_id,
+            "sandbox": sandbox,
         }
         with USAGE_LOG.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry) + "\n")
@@ -542,14 +714,36 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--session", default=None, help="Session id to continue or create"
     )
+    parser.add_argument(
+        "--sandbox",
+        choices=("win", "wsl"),
+        default="win",
+        help="Where the worker runs: the Windows namespace (default: win) or the "
+        "WSL namespace fence (wsl). The jev orchestrator cannot run under wsl: its "
+        "auth lives in the Windows OpenCode service.",
+    )
 
     args = parser.parse_args(argv)
 
+    if args.sandbox == "wsl" and args.agent == ORCHESTRATOR_AGENT:
+        _stderr(
+            "sandbox=wsl cannot run the orchestrator agent: its auth lives in the "
+            "Windows OpenCode service, outside the fence"
+        )
+        return 2
+
     # ── Find OpenCode binary ──
-    opencode_binary = args.opencode_bin or find_opencode_binary()
-    if not opencode_binary:
-        _stderr("OpenCode binary not found. Install from https://opencode.ai/install")
-        return 1
+    if args.sandbox == "wsl":
+        opencode_binary = resolve_wsl_binary(args.opencode_bin)
+        if not opencode_binary:
+            return 1
+    else:
+        opencode_binary = args.opencode_bin or find_opencode_binary()
+        if not opencode_binary:
+            _stderr(
+                "OpenCode binary not found. Install from https://opencode.ai/install"
+            )
+            return 1
 
     _stderr(f"Using OpenCode binary: {opencode_binary}")
 
@@ -561,6 +755,15 @@ def main(argv: list[str] | None = None) -> int:
     # outage is one line in `.env`, not a code edit.
     _load_project_env()
     model = resolve_model(free=args.free, model=args.model, agent=args.agent)
+    if (
+        args.sandbox == "wsl"
+        and args.model is None
+        and model in (DEFAULT_MODEL, FREE_MODEL)
+    ):
+        # The Windows defaults are not authenticated inside WSL; the key-based
+        # deepseek model is the verified default there.
+        _stderr(f"sandbox=wsl: {model} is Windows-only; using {WSL_DEFAULT_MODEL}")
+        model = WSL_DEFAULT_MODEL
 
     # ── Prepend guardrail unless disabled ──
     prompt = args.prompt
@@ -585,10 +788,18 @@ def main(argv: list[str] | None = None) -> int:
         timeout_s=args.timeout,
         agent=args.agent,
         session=args.session,
+        sandbox=args.sandbox,
     )
     elapsed = time.monotonic() - start
 
-    log_usage(model or f"agent:{args.agent}", len(prompt), elapsed, result, run_id)
+    log_usage(
+        model or f"agent:{args.agent}",
+        len(prompt),
+        elapsed,
+        result,
+        run_id,
+        sandbox=args.sandbox,
+    )
     _report_scope(before, args.directory, result)
 
     # ── Output ──
