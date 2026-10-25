@@ -120,7 +120,7 @@ Work is routed through four roles, declared in `.kilo/agents/jev.md`:
 |---|---|---|
 | **Jev** — routes only | agent on `openrouter/jev-router` | `edit: deny`; the wrapper launches it without `--auto` so the deny binds |
 | **Codex** — briefs and verification | `gpt-6.1-sol`, effort `medium` | `--model` / `--effort` override; launched by `codex-env.ps1` |
-| **DeepSeek V4.1 Flash** — implementation | OpenCode CLI (`tools/opencode_delegate.py`) or the direct API arm (`tools/model_api.py`) | one-shot: 2.3 s trivial, 22 s one file; 503 above ~38 K-token prompts |
+| **DeepSeek V4.1 Flash** — implementation | OpenCode CLI (`tools/opencode_delegate.py`) or the direct API arm (`tools/model_api.py`) | one-shot: 2.3 s trivial, 22 s one file; 503 above ~38 K-token prompts; `--sandbox wsl` runs the same brief inside the namespace fence (8.5 s warm) |
 | **Gemini 3.8 Flash** — fast and broad work | Antigravity CLI, tiers `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | independent review, repo-wide survey |
 
 Architecture, product and security judgment is not delegated: workers are context-blind.
@@ -137,6 +137,18 @@ Workers that need to run code in a loop can be fenced with `tools/wsl_sandbox.sh
 every Windows drive overlaid with its own tmpfs, and `/home` + `/root` read-only. `/mnt/wsl*` stays
 visible on purpose — hiding it kills DNS. The Windows ACL restricted-token path was measured and
 rejected: it breaks TLS (`SEC_E_NO_CREDENTIALS`), so no worker that calls an API can run inside it.
+
+The fence is now selectable instead of mandatory: `tools/opencode_delegate.py` accepts
+`--sandbox {win,wsl}` (default `win`). In `wsl` mode the worker runs inside
+`tools/wsl_sandbox.sh` with HOME and the XDG directories redirected to `.solocode/sandbox-home`
+inside the workspace. Keys are carried by `WSLENV`, and the default model switches from
+`opencode-go/beam-free` to `deepseek/deepseek-flash`, because the Go plan is not authenticated
+in WSL. The fence fails closed: a missing mount or an unshare-less invocation exits 69 instead
+of running unfenced. Measured on this machine: 8.5 s warm / 16.7 s cold for a one-shot brief,
+56.5 s for a one-file task. State and output land only inside the workspace. What still cannot
+run inside the fence: the Windows binaries (`opencode.exe`, `kilo.exe`, `cmd.exe`). Interop is
+gone once `/mnt/*` is overlaid, so the Linux builds must be installed first
+(`npm i -g --prefix ~/.local @opencode/cli`, verified v2.1.4).
 
 Measured: two commands inside the fence in 10.9 s (pytest 9.1.1, ruff 0.17.1), writes outside the
 workspace refused, TLS 200. Agreed but not built: a docker fence (daemon not running) and dsh
@@ -485,7 +497,7 @@ Việc được định tuyến qua 4 vai trò, khai ở `.kilo/agents/jev.md`:
 |---|---|---|
 | **Jev** — chỉ định tuyến | agent trên `openrouter/jev-router` | `edit: deny`; wrapper chạy không `--auto` để deny có hiệu lực |
 | **Codex** — ra đề bài + thẩm định | `gpt-6.1-sol`, effort `medium` | đổi bằng `--model` / `--effort`; chạy qua `codex-env.ps1` |
-| **DeepSeek V4.1 Flash** — code | OpenCode CLI (`tools/opencode_delegate.py`) hoặc arm API trực tiếp (`tools/model_api.py`) | one-shot: 2,3 s việc nhỏ, 22 s một file; 503 khi prompt trên ~38K token |
+| **DeepSeek V4.1 Flash** — code | OpenCode CLI (`tools/opencode_delegate.py`) hoặc arm API trực tiếp (`tools/model_api.py`) | one-shot: 2,3 s việc nhỏ, 22 s một file; 503 khi prompt trên ~38K token; `--sandbox wsl` chạy cùng brief trong fence namespace (8.5 s khi WSL ấm) |
 | **Gemini 3.8 Flash** — việc nhanh, rộng | Antigravity CLI, tier `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | review độc lập, khảo sát toàn repo |
 
 Quyết định kiến trúc, sản phẩm, bảo mật không được giao: worker không có lịch sử hội thoại.
@@ -502,6 +514,17 @@ Worker cần chạy vòng lặp có thể bị quây bằng `tools/wsl_sandbox.s
 Windows phủ tmpfs riêng, `/home` + `/root` chỉ đọc. `/mnt/wsl*` cố ý để lộ — che nó là chết DNS.
 Đường restricted-token bằng ACL Windows đã đo và loại: nó phá TLS (`SEC_E_NO_CREDENTIALS`), nên
 worker gọi API không chạy trong đó được.
+
+Fence giờ chọn được thay vì bắt buộc: `tools/opencode_delegate.py` nhận `--sandbox {win,wsl}`
+(mặc định `win`). Ở chế độ `wsl`, worker chạy trong `tools/wsl_sandbox.sh` với HOME và các
+thư mục XDG chuyển vào `.solocode/sandbox-home` trong workspace. Key đi qua `WSLENV`, và model
+mặc định đổi từ `opencode-go/beam-free` sang `deepseek/deepseek-flash`, vì gói Go không xác
+thực được trong WSL. Fence fail closed: thiếu mount hoặc chạy không có unshare thì thoát mã 69
+thay vì chạy không quây. Đo trên máy này: 8,5 s khi WSL ấm / 16,7 s khi nguội cho brief
+one-shot, 56,5 s cho task một file. State và output chỉ ghi trong workspace. Thứ vẫn không chạy
+được trong fence: các binary Windows (`opencode.exe`, `kilo.exe`, `cmd.exe`). Interop mất khi
+`/mnt/*` bị phủ, nên phải cài bản Linux trước (`npm i -g --prefix ~/.local @opencode/cli`,
+đã kiểm v2.1.4).
 
 Đã đo: hai lệnh trong fence hết 10,9 s (pytest 9.1.1, ruff 0.17.1), ghi ra ngoài workspace bị từ
 chối, TLS 200. Chưa làm: fence docker (daemon chưa chạy) và chạy dsh trong WSL để dùng sandbox
