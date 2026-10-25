@@ -650,6 +650,10 @@ def test_wsl_path_rejects_a_drive_less_path():
         opencode_delegate.wsl_path(Path("/x/y"))
 
 
+def test_fence_path_keeps_a_posix_path_unchanged():
+    assert opencode_delegate._fence_path(Path("/home/u/repo")) == "/home/u/repo"
+
+
 def test_build_wsl_argv_fences_the_same_inner_argv(monkeypatch, tmp_path):
     """The fence path adds the namespace and HOME plumbing, not a different command."""
     captured: dict = {}
@@ -682,8 +686,10 @@ def test_build_wsl_argv_fences_the_same_inner_argv(monkeypatch, tmp_path):
     assert wsl_argv[:2] == ["wsl", "-e"]
     for flag in ("--user", "--map-root-user", "--mount", "--pid", "--fork"):
         assert flag in wsl_argv
-    assert opencode_delegate.wsl_path(tmp_path / "tools" / "wsl_sandbox.sh") in wsl_argv
-    repo_at = wsl_argv.index(opencode_delegate.wsl_path(tmp_path))
+    assert (
+        opencode_delegate._fence_path(tmp_path / "tools" / "wsl_sandbox.sh") in wsl_argv
+    )
+    repo_at = wsl_argv.index(opencode_delegate._fence_path(tmp_path))
     assert wsl_argv[repo_at + 1] == "."  # --directory default is the repo itself
     assert wsl_argv.count("--") == 2
     # Same inner command as the win path, binary included: no drift between them.
@@ -857,7 +863,7 @@ def test_build_wsl_argv_falls_back_to_repo_root(tmp_path):
         "x", "m", str(tmp_path), "/bin/opencode", repo_root=ROOT
     )
 
-    repo_at = argv.index(opencode_delegate.wsl_path(ROOT))
+    repo_at = argv.index(opencode_delegate._fence_path(ROOT))
     assert argv[repo_at + 1] == "."
 
 
@@ -880,7 +886,7 @@ def test_run_wsl_builds_the_fence_and_passes_keys_through_env(monkeypatch):
     assert cmd[0] == "wsl"
     assert "unshare" in cmd
     assert "--map-root-user" in cmd
-    assert opencode_delegate.wsl_path(ROOT / "tools" / "wsl_sandbox.sh") in cmd
+    assert opencode_delegate._fence_path(ROOT / "tools" / "wsl_sandbox.sh") in cmd
     assert "run" in cmd
     assert "--standalone" in cmd
     assert captured["cwd"] == str(opencode_delegate.ROOT)

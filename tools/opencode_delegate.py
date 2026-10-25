@@ -368,6 +368,19 @@ def wsl_path(path: Path) -> str:
     return f"/mnt/{drive.lower()}/{rest.lstrip('/')}"
 
 
+def _fence_path(path: Path) -> str:
+    """A path as the fence sees it: /mnt/<drive>/... on Windows, unchanged on POSIX.
+
+    The wrapper may itself run inside WSL, where the checkout has no drive
+    letter. `wsl_path` keeps its strict contract; this is the tolerant
+    wrapper `build_wsl_argv` uses.
+    """
+    try:
+        return wsl_path(path)
+    except ValueError:
+        return Path(path).as_posix()
+
+
 def wsl_env(base: dict[str, str]) -> dict[str, str]:
     """The env for `wsl`, with WSLENV carrying the API keys across the boundary."""
     env = dict(base)
@@ -489,8 +502,8 @@ def build_wsl_argv(
         "--fork",
         "--",
         "sh",
-        wsl_path(repo_root / "tools" / "wsl_sandbox.sh"),
-        wsl_path(repo_root),
+        _fence_path(repo_root / "tools" / "wsl_sandbox.sh"),
+        _fence_path(repo_root),
         rel,
         "--",
         "sh",
