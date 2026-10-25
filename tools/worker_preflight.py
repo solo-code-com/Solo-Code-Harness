@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Worker preflight - which of the harness's workers can run right now.
 
-The repo has six ways to run a worker (opencode, kilo, codex, antigravity, model_api, dsh)
+The repo has seven ways to run a worker (opencode, kilo, codex, antigravity, model_api, dsh)
 and no single command that says which of them is usable. In practice a session finds out one
 at a time, by watching a delegate fail: the Kilo arm timed out in ~40% of runs and Codex
 returned empty replies, and both facts were discovered by trial.
@@ -148,6 +148,55 @@ def check_dsh() -> dict[str, object]:
     return _row("dsh", True, f"checkout found; pnpm {pnpm}", "ready")
 
 
+def check_wsl_sandbox() -> dict[str, object]:
+    """WSL namespace fence: WSL itself, unshare inside it, and the Linux
+    opencode binary the fence runs. `--sandbox wsl` cannot work without all
+    three, so this row exists to say which one is missing before a delegate
+    tries it.
+    """
+    if not (shutil.which("wsl") or shutil.which("wsl.exe")):
+        return _row("wsl-sandbox", False, "WSL not available", "unusable")
+    try:
+        ready = subprocess.run(  # noqa: S603,S607 - fixed argv, no shell
+            ["wsl", "-e", "sh", "-c", "command -v unshare >/dev/null 2>&1"],  # noqa: S607 - wsl resolved on PATH
+            capture_output=True,
+            text=True,
+            timeout=PROBE_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return _row("wsl-sandbox", False, "WSL probe failed", "unusable")
+    if ready.returncode != 0:
+        return _row("wsl-sandbox", True, "WSL up; unshare missing", "unusable")
+    home = subprocess.run(  # noqa: S603,S607 - fixed argv, no shell
+        ["wsl", "-e", "sh", "-c", 'printf %s "$HOME"'],  # noqa: S607 - wsl resolved on PATH
+        capture_output=True,
+        text=True,
+        timeout=PROBE_TIMEOUT,
+    )
+    if home.returncode != 0 or not (home.stdout or "").strip():
+        return _row("wsl-sandbox", True, "unshare ok; home unreadable", "unusable")
+    binary = home.stdout.strip() + "/.local/bin/opencode"
+    installed = subprocess.run(  # noqa: S603,S607 - fixed argv, no shell
+        ["wsl", "-e", "test", "-x", binary],  # noqa: S607 - wsl resolved on PATH
+        capture_output=True,
+        text=True,
+        timeout=PROBE_TIMEOUT,
+    )
+    if installed.returncode != 0:
+        return _row(
+            "wsl-sandbox", True, "unshare ok; opencode not installed", "unusable"
+        )
+    version = subprocess.run(  # noqa: S603,S607 - fixed argv, no shell
+        ["wsl", "-e", binary, "--version"],  # noqa: S607 - wsl resolved on PATH
+        capture_output=True,
+        text=True,
+        timeout=PROBE_TIMEOUT,
+    )
+    line = (version.stdout or "").strip() or (version.stderr or "").strip()
+    line = line.splitlines()[0].strip() if line else "opencode present"
+    return _row("wsl-sandbox", True, f"unshare ok; {line}", "ready")
+
+
 #: Order is the routing table's order, so the output reads like the docs.
 WORKERS = (
     check_opencode,
@@ -156,6 +205,7 @@ WORKERS = (
     check_antigravity,
     check_model_api,
     check_dsh,
+    check_wsl_sandbox,
 )
 
 

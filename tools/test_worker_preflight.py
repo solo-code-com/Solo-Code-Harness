@@ -17,13 +17,13 @@ from tools import worker_preflight as preflight
 
 
 def _which(name: str) -> str | None:
-    """Fake PATH: codex and pnpm present, nothing else."""
-    return {"codex": "/fake/codex", "pnpm": "/fake/pnpm"}.get(name)
+    """Fake PATH: codex, pnpm and wsl present, nothing else."""
+    return {"codex": "/fake/codex", "pnpm": "/fake/pnpm", "wsl": "/fake/wsl"}.get(name)
 
 
 @pytest.fixture
 def all_ready(monkeypatch):
-    """Six ready workers with every external dependency replaced."""
+    """Seven ready workers with every external dependency replaced."""
     monkeypatch.setattr(
         preflight.opencode_delegate,
         "find_opencode_binary",
@@ -49,6 +49,13 @@ def all_ready(monkeypatch):
     monkeypatch.setattr(preflight.shutil, "which", _which)
     monkeypatch.setattr(preflight, "probe_version", lambda binary: (True, "1.2.3"))
 
+    class _WslProbe:
+        returncode = 0
+        stdout = "/home/fake"
+        stderr = ""
+
+    monkeypatch.setattr(preflight.subprocess, "run", lambda *a, **k: _WslProbe())
+
 
 def _row_line(output: str, worker: str) -> str:
     return next(line for line in output.splitlines() if line.startswith(worker))
@@ -57,7 +64,7 @@ def _row_line(output: str, worker: str) -> str:
 def test_all_ready_exits_zero(all_ready, capsys):
     assert preflight.main([]) == 0
     out = capsys.readouterr().out
-    assert "6 ready, 0 unusable" in out
+    assert "7 ready, 0 unusable" in out
     assert "unusable" not in out.replace("0 unusable", "")
 
 
@@ -120,7 +127,7 @@ def test_json_shape(all_ready, capsys):
 
     payload = json.loads(out)
 
-    assert payload["ready"] == 6
+    assert payload["ready"] == 7
     assert payload["unusable"] == 0
     assert [row["worker"] for row in payload["workers"]] == [
         "opencode",
@@ -129,6 +136,7 @@ def test_json_shape(all_ready, capsys):
         "antigravity",
         "model_api",
         "dsh",
+        "wsl-sandbox",
     ]
     for row in payload["workers"]:
         assert set(row) == {"worker", "found", "state", "verdict"}
