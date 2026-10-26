@@ -142,3 +142,128 @@ def test_json_shape(all_ready, capsys):
         assert set(row) == {"worker", "found", "state", "verdict"}
         assert row["verdict"] in {"ready", "unusable"}
         assert isinstance(row["found"], bool)
+
+
+class FakeResult:
+    """The bits of `subprocess.CompletedProcess` the wsl probe reads."""
+
+    def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = ""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _sequence(*results: FakeResult):
+    """Fake `subprocess.run` that answers each call with the next result."""
+    remaining = list(results)
+
+    def run(*args, **kwargs):
+        return remaining.pop(0)
+
+    return run
+
+
+def test_wsl_sandbox_reports_absent_when_wsl_is_missing(monkeypatch):
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: None)
+
+    row = preflight.check_wsl_sandbox()
+
+    assert row["verdict"] == "unusable"
+    assert row["state"] == "WSL not available"
+    assert row["found"] is False
+
+
+def test_wsl_sandbox_reports_a_failed_probe(monkeypatch):
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: "/fake/wsl")
+
+    def boom(*args, **kwargs):
+        raise OSError("wsl exploded")
+
+    monkeypatch.setattr(preflight.subprocess, "run", boom)
+
+    row = preflight.check_wsl_sandbox()
+
+    assert row["verdict"] == "unusable"
+    assert row["state"] == "WSL probe failed"
+
+
+def test_wsl_sandbox_reports_missing_unshare(monkeypatch):
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: "/fake/wsl")
+    monkeypatch.setattr(
+        preflight.subprocess, "run", _sequence(FakeResult(returncode=1))
+    )
+
+    row = preflight.check_wsl_sandbox()
+
+    assert row["verdict"] == "unusable"
+    assert row["state"] == "WSL up; unshare missing"
+
+
+def test_wsl_sandbox_reports_unreadable_home(monkeypatch):
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: "/fake/wsl")
+    monkeypatch.setattr(
+        preflight.subprocess,
+        "run",
+        _sequence(FakeResult(returncode=0), FakeResult(returncode=1, stdout="/home/u")),
+    )
+
+    row = preflight.check_wsl_sandbox()
+
+    assert row["verdict"] == "unusable"
+    assert row["state"] == "unshare ok; home unreadable"
+
+
+def test_wsl_sandbox_reports_missing_cli(monkeypatch):
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: "/fake/wsl")
+    monkeypatch.setattr(
+        preflight.subprocess,
+        "run",
+        _sequence(
+            FakeResult(returncode=0),
+            FakeResult(returncode=0, stdout="/home/u"),
+            FakeResult(returncode=1),
+        ),
+    )
+
+    row = preflight.check_wsl_sandbox()
+
+    assert row["verdict"] == "unusable"
+    assert row["state"] == "unshare ok; opencode not installed"
+
+
+def test_wsl_sandbox_reports_ready_with_a_version(monkeypatch):
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: "/fake/wsl")
+    monkeypatch.setattr(
+        preflight.subprocess,
+        "run",
+        _sequence(
+            FakeResult(returncode=0),
+            FakeResult(returncode=0, stdout="/home/u"),
+            FakeResult(returncode=0),
+            FakeResult(returncode=0, stdout="opencode 2.1.4"),
+        ),
+    )
+
+    row = preflight.check_wsl_sandbox()
+
+    assert row["verdict"] == "ready"
+    assert row["state"] == "unshare ok; opencode 2.1.4"
+
+
+def test_wsl_sandbox_falls_back_to_stderr_for_the_version(monkeypatch):
+    monkeypatch.setattr(preflight.shutil, "which", lambda name: "/fake/wsl")
+    monkeypatch.setattr(
+        preflight.subprocess,
+        "run",
+        _sequence(
+            FakeResult(returncode=0),
+            FakeResult(returncode=0, stdout="/home/u"),
+            FakeResult(returncode=0),
+            FakeResult(returncode=0, stdout="", stderr="opencode 2.1.4\n"),
+        ),
+    )
+
+    row = preflight.check_wsl_sandbox()
+
+    assert row["verdict"] == "ready"
+    assert row["state"] == "unshare ok; opencode 2.1.4"
