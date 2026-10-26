@@ -120,3 +120,29 @@ def test_main_skips_missing_dir():
     result = _run("does/not/exist")
     assert result.returncode == 0
     assert "SKIP" in result.stdout
+
+
+def test_multiline_skipif_with_nested_call_is_allowed(tmp_path):
+    mod = _load()
+    f = tmp_path / "test_x.py"
+    f.write_text(
+        f"import os\nimport pytest\n\n\n@{_BARE_SKIP}if(\n"
+        '    not os.environ.get("KEY") or not flag(),\n'
+        '    reason="needs the key and a flag",\n'
+        ")\n"
+        "def test_a():\n    pass\n",
+        encoding="utf-8",
+    )
+    assert mod.check_file(f) == []
+
+
+def test_multiline_skipif_without_reason_is_a_violation(tmp_path):
+    mod = _load()
+    f = tmp_path / "test_x.py"
+    f.write_text(
+        f"import pytest\n\n\n@{_BARE_SKIP}if(\n    SOME_FLAG,\n)\ndef test_a():\n    pass\n",
+        encoding="utf-8",
+    )
+    violations = mod.check_file(f)
+    assert len(violations) == 1
+    assert "Unconditional skip" in violations[0]
