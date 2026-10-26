@@ -233,3 +233,98 @@ def test_wsl_sandbox_blocks_a_write_outside_the_workspace():
     finally:
         if PROBE_WINDOWS_PATH.exists():
             PROBE_WINDOWS_PATH.unlink()
+
+
+@pytest.mark.skipif(not _WSL or not _WSL_READY, reason="WSL is not available")
+def test_wsl_sandbox_blocks_a_write_to_home():
+    """Inside the fence /home is read-only, so the profile cannot be touched."""
+    probe = (
+        'touch "$HOME/wsl_sandbox_probe.txt" 2>/dev/null'
+        " && echo ESCAPED || echo blocked"
+    )
+    try:
+        proc = subprocess.run(
+            [
+                _WSL,
+                "-e",
+                "unshare",
+                "--user",
+                "--map-root-user",
+                "--mount",
+                "--pid",
+                "--fork",
+                "--",
+                *_sandbox_argv("sh", "-c", probe),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+
+        assert "blocked" in proc.stdout
+        assert "ESCAPED" not in proc.stdout
+    finally:
+        if PROBE_WINDOWS_PATH.exists():
+            PROBE_WINDOWS_PATH.unlink()
+
+
+@pytest.mark.skipif(not _WSL or not _WSL_READY, reason="WSL is not available")
+def test_wsl_sandbox_tmp_is_private():
+    """The fence's private tmpfs must back the temporary directory."""
+    probe = "findmnt -no FSTYPE /tmp 2>/dev/null || echo unknown"
+    try:
+        proc = subprocess.run(
+            [
+                _WSL,
+                "-e",
+                "unshare",
+                "--user",
+                "--map-root-user",
+                "--mount",
+                "--pid",
+                "--fork",
+                "--",
+                *_sandbox_argv("sh", "-c", probe),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+
+        assert proc.stdout.strip() == "tmpfs"
+    finally:
+        if PROBE_WINDOWS_PATH.exists():
+            PROBE_WINDOWS_PATH.unlink()
+
+
+@pytest.mark.skipif(not _WSL or not _WSL_READY, reason="WSL is not available")
+def test_wsl_sandbox_hides_windows_interop():
+    """With /mnt/c overlaid, the Windows interop binaries are unreachable."""
+    probe = "command -v cmd.exe >/dev/null 2>&1 && echo INTEROP || echo interop_hidden"
+    try:
+        proc = subprocess.run(
+            [
+                _WSL,
+                "-e",
+                "unshare",
+                "--user",
+                "--map-root-user",
+                "--mount",
+                "--pid",
+                "--fork",
+                "--",
+                *_sandbox_argv("sh", "-c", probe),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+
+        assert "interop_hidden" in proc.stdout
+        assert "INTEROP" not in proc.stdout
+    finally:
+        if PROBE_WINDOWS_PATH.exists():
+            PROBE_WINDOWS_PATH.unlink()
