@@ -416,8 +416,8 @@ def _wsl_query(cmd: list[str]) -> str | None:
     return proc.stdout
 
 
-def _wsl_ready() -> bool:
-    """True when the WSL fence can run: `wsl`, `unshare`, and a Linux opencode.
+def _wsl_ready_once(timeout: float) -> bool:
+    """True when the WSL fence can run, with one bounded probe pass.
 
     Probes are one-shot and bounded, and any failure -- no `wsl` on PATH, a
     non-zero exit, a timeout -- reads as "not ready" so `--sandbox auto` falls
@@ -431,7 +431,7 @@ def _wsl_ready() -> bool:
         unshare = subprocess.run(  # noqa: S603 -- fixed argv, no shell
             [wsl_bin, "-e", "sh", "-c", "command -v unshare >/dev/null 2>&1"],
             capture_output=True,
-            timeout=10,
+            timeout=timeout,
         )
         if unshare.returncode != 0:
             return False
@@ -441,7 +441,7 @@ def _wsl_ready() -> bool:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=10,
+            timeout=timeout,
         )
         if home.returncode != 0 or not home.stdout.strip():
             return False
@@ -449,12 +449,23 @@ def _wsl_ready() -> bool:
         probe = subprocess.run(  # noqa: S603 -- fixed argv, no shell
             [wsl_bin, "-e", "test", "-x", binary],
             capture_output=True,
-            timeout=10,
+            timeout=timeout,
         )
         return probe.returncode == 0
     except (OSError, subprocess.SubprocessError):
         # TimeoutExpired is a SubprocessError, so a hung probe lands here too.
         return False
+
+
+def _wsl_ready() -> bool:
+    """True when the WSL fence can run, retrying once across a cold start.
+
+    The first probe after boot can exceed the short timeout while WSL starts
+    its VM. A second, longer attempt costs nothing when the fence is simply
+    absent -- the `shutil.which` guard returns before any process starts --
+    and turns a spurious `win` fallback into the intended `wsl` choice.
+    """
+    return _wsl_ready_once(10) or _wsl_ready_once(25)
 
 
 def resolve_wsl_binary(explicit: str | None) -> str | None:

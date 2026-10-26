@@ -768,6 +768,32 @@ def test_wsl_ready_is_false_when_a_probe_times_out(monkeypatch):
     assert opencode_delegate._wsl_ready() is False
 
 
+def test_wsl_ready_retries_after_a_cold_probe(monkeypatch):
+    calls: list[float] = []
+
+    def fake_probe(timeout):
+        calls.append(timeout)
+        return len(calls) == 2
+
+    monkeypatch.setattr(opencode_delegate, "_wsl_ready_once", fake_probe)
+
+    assert opencode_delegate._wsl_ready() is True
+    assert calls == [10, 25]
+
+
+def test_wsl_ready_gives_up_after_two_probes(monkeypatch):
+    calls: list[float] = []
+
+    def fake_probe(timeout):
+        calls.append(timeout)
+        return False
+
+    monkeypatch.setattr(opencode_delegate, "_wsl_ready_once", fake_probe)
+
+    assert opencode_delegate._wsl_ready() is False
+    assert calls == [10, 25]
+
+
 def test_sandbox_auto_resolves_to_win_when_wsl_absent(monkeypatch, tmp_path):
     seen: dict = {}
     _reach_the_wrapper(monkeypatch, tmp_path)
