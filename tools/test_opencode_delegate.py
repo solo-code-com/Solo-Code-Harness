@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -41,6 +42,17 @@ from tools import opencode_delegate  # noqa: E402
 def _registry_into_tmp(tmp_path, monkeypatch):
     """No unit test may write session records into the repo's .solocode/."""
     monkeypatch.setattr(session_registry, "SESSION_DIR", tmp_path)
+
+
+@pytest.fixture(autouse=True)
+def _win_sandbox_unless_a_test_forces_wsl(monkeypatch):
+    """`auto` must not probe the real WSL install unless a test asks it to."""
+    real_which = shutil.which
+    monkeypatch.setattr(
+        opencode_delegate.shutil,
+        "which",
+        lambda name: None if name in ("wsl", "wsl.exe") else real_which(name),
+    )
 
 
 def test_prefer_real_executable_ignores_retired_v1_package(tmp_path):
@@ -702,9 +714,64 @@ def test_build_wsl_argv_fences_the_same_inner_argv(monkeypatch, tmp_path):
     assert 'XDG_CONFIG_HOME="$HOME/.config"' in script
 
 
-def test_sandbox_defaults_to_win(monkeypatch, tmp_path):
+def _stub_wsl_probes(monkeypatch, *, unshare=0, home="/home/u", binary=0):
+    """Answer `_wsl_ready`'s three probes without a real WSL install."""
+
+    def fake_run(cmd, **_kwargs):
+        if cmd[-1] == "command -v unshare >/dev/null 2>&1":
+            return subprocess.CompletedProcess(args=cmd, returncode=unshare)
+        if "printf %s" in cmd[-1]:
+            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=home)
+        return subprocess.CompletedProcess(args=cmd, returncode=binary)
+
+    monkeypatch.setattr(opencode_delegate.shutil, "which", lambda name: "/usr/bin/wsl")
+    monkeypatch.setattr(opencode_delegate.subprocess, "run", fake_run)
+
+
+def test_wsl_ready_is_false_without_wsl(monkeypatch):
+    monkeypatch.setattr(opencode_delegate.shutil, "which", lambda name: None)
+
+    assert opencode_delegate._wsl_ready() is False
+
+
+def test_wsl_ready_is_false_without_unshare(monkeypatch):
+    _stub_wsl_probes(monkeypatch, unshare=1)
+
+    assert opencode_delegate._wsl_ready() is False
+
+
+def test_wsl_ready_is_false_without_a_home(monkeypatch):
+    _stub_wsl_probes(monkeypatch, home="")
+
+    assert opencode_delegate._wsl_ready() is False
+
+
+def test_wsl_ready_is_false_without_a_linux_opencode(monkeypatch):
+    _stub_wsl_probes(monkeypatch, binary=1)
+
+    assert opencode_delegate._wsl_ready() is False
+
+
+def test_wsl_ready_is_true_when_every_probe_answers(monkeypatch):
+    _stub_wsl_probes(monkeypatch)
+
+    assert opencode_delegate._wsl_ready() is True
+
+
+def test_wsl_ready_is_false_when_a_probe_times_out(monkeypatch):
+    def timing_out(*_a, **_k):
+        raise subprocess.TimeoutExpired(cmd="wsl", timeout=10)
+
+    monkeypatch.setattr(opencode_delegate.shutil, "which", lambda name: "/usr/bin/wsl")
+    monkeypatch.setattr(opencode_delegate.subprocess, "run", timing_out)
+
+    assert opencode_delegate._wsl_ready() is False
+
+
+def test_sandbox_auto_resolves_to_win_when_wsl_absent(monkeypatch, tmp_path):
     seen: dict = {}
     _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_wsl_ready", lambda: False)
 
     def fake_run(**kwargs):
         seen.update(kwargs)
@@ -714,6 +781,30 @@ def test_sandbox_defaults_to_win(monkeypatch, tmp_path):
 
     assert opencode_delegate.main(["x", "--no-guardrail"]) == 0
     assert seen["sandbox"] == "win"
+
+
+def test_sandbox_auto_resolves_to_wsl_when_ready(monkeypatch, tmp_path):
+    seen: dict = {}
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_wsl_ready", lambda: True)
+    monkeypatch.setattr(
+        opencode_delegate,
+        "resolve_wsl_binary",
+        lambda explicit: "/home/u/.local/bin/opencode",
+    )
+    monkeypatch.setattr(
+        opencode_delegate, "resolve_model", lambda **kw: opencode_delegate.DEFAULT_MODEL
+    )
+
+    def fake_run(**kwargs):
+        seen.update(kwargs)
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    assert opencode_delegate.main(["x", "--no-guardrail"]) == 0
+    assert seen["sandbox"] == "wsl"
+    assert seen["model"] == opencode_delegate.WSL_DEFAULT_MODEL
 
 
 def test_sandbox_wsl_refuses_the_orchestrator_agent(capsys):

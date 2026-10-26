@@ -76,6 +76,9 @@ WSL_KEY_VARS = (
     "ANTHROPIC_BASE_URL",
 )
 
+# `auto` resolves to wsl only when the fence is usable (see `_wsl_ready`).
+SANDBOX_CHOICES = ("auto", "win", "wsl")
+
 ROOT = Path(__file__).resolve().parent.parent
 USAGE_LOG = Path(".solocode/opencode-usage.jsonl")
 USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -413,6 +416,47 @@ def _wsl_query(cmd: list[str]) -> str | None:
     return proc.stdout
 
 
+def _wsl_ready() -> bool:
+    """True when the WSL fence can run: `wsl`, `unshare`, and a Linux opencode.
+
+    Probes are one-shot and bounded, and any failure -- no `wsl` on PATH, a
+    non-zero exit, a timeout -- reads as "not ready" so `--sandbox auto` falls
+    back to the Windows CLI instead of failing the run.
+    """
+    try:
+        # The resolved path, not the bare name: no PATH surprise between probe and run.
+        wsl_bin = shutil.which("wsl") or shutil.which("wsl.exe")
+        if not wsl_bin:
+            return False
+        unshare = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+            [wsl_bin, "-e", "sh", "-c", "command -v unshare >/dev/null 2>&1"],
+            capture_output=True,
+            timeout=10,
+        )
+        if unshare.returncode != 0:
+            return False
+        home = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+            [wsl_bin, "-e", "sh", "-c", 'printf %s "$HOME"'],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+        if home.returncode != 0 or not home.stdout.strip():
+            return False
+        binary = f"{home.stdout.strip()}/.local/bin/opencode"
+        probe = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+            [wsl_bin, "-e", "test", "-x", binary],
+            capture_output=True,
+            timeout=10,
+        )
+        return probe.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        # TimeoutExpired is a SubprocessError, so a hung probe lands here too.
+        return False
+
+
 def resolve_wsl_binary(explicit: str | None) -> str | None:
     """The Linux opencode path inside WSL, or None when it is not installed there.
 
@@ -729,16 +773,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--sandbox",
-        choices=("win", "wsl"),
-        default="win",
-        help="Where the worker runs: the Windows namespace (default: win) or the "
-        "WSL namespace fence (wsl). The jev orchestrator cannot run under wsl: its "
-        "auth lives in the Windows OpenCode service.",
+        choices=SANDBOX_CHOICES,
+        default="auto",
+        help="Where the worker runs: auto (default) picks wsl when the fence is "
+        "usable, else win; win runs the Windows CLI; wsl forces the WSL namespace "
+        "fence. The jev orchestrator cannot run under wsl: its auth lives in the "
+        "Windows OpenCode service.",
     )
 
     args = parser.parse_args(argv)
 
-    if args.sandbox == "wsl" and args.agent == ORCHESTRATOR_AGENT:
+    sandbox = args.sandbox
+    if sandbox == "auto":
+        sandbox = "wsl" if _wsl_ready() else "win"
+        _stderr(f"sandbox=auto -> {sandbox}")
+
+    if sandbox == "wsl" and args.agent == ORCHESTRATOR_AGENT:
         _stderr(
             "sandbox=wsl cannot run the orchestrator agent: its auth lives in the "
             "Windows OpenCode service, outside the fence"
@@ -746,7 +796,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # ── Find OpenCode binary ──
-    if args.sandbox == "wsl":
+    if sandbox == "wsl":
         opencode_binary = resolve_wsl_binary(args.opencode_bin)
         if not opencode_binary:
             return 1
@@ -768,11 +818,7 @@ def main(argv: list[str] | None = None) -> int:
     # outage is one line in `.env`, not a code edit.
     _load_project_env()
     model = resolve_model(free=args.free, model=args.model, agent=args.agent)
-    if (
-        args.sandbox == "wsl"
-        and args.model is None
-        and model in (DEFAULT_MODEL, FREE_MODEL)
-    ):
+    if sandbox == "wsl" and args.model is None and model in (DEFAULT_MODEL, FREE_MODEL):
         # The Windows defaults are not authenticated inside WSL; the key-based
         # deepseek model is the verified default there.
         _stderr(f"sandbox=wsl: {model} is Windows-only; using {WSL_DEFAULT_MODEL}")
@@ -801,7 +847,7 @@ def main(argv: list[str] | None = None) -> int:
         timeout_s=args.timeout,
         agent=args.agent,
         session=args.session,
-        sandbox=args.sandbox,
+        sandbox=sandbox,
     )
     elapsed = time.monotonic() - start
 
@@ -811,7 +857,7 @@ def main(argv: list[str] | None = None) -> int:
         elapsed,
         result,
         run_id,
-        sandbox=args.sandbox,
+        sandbox=sandbox,
     )
     _report_scope(before, args.directory, result)
 
