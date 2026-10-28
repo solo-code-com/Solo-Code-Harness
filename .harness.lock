@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-10-26T08:05:55Z"
+generated_at = "2026-10-28T04:08:14Z"
 mode = "root"
-content_fingerprint = "sha256:0c106ab720476cb31c0be194f68a938732c8b98648844d783bcb015dc280cd7c"
+content_fingerprint = "sha256:b5769b5c230e054cb900dc61e36aba4e815d756f903028eebb0b83692d0f10b2"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -234,6 +234,9 @@ files = [
     "claude-env.ps1",
     "codex-env.ps1",
     "opencode-env.ps1",
+    "antigravity-env.sh",
+    "codex-env.sh",
+    "opencode-env.sh",
     "init.sh",
     ".env.template",
     "verify.sh",
