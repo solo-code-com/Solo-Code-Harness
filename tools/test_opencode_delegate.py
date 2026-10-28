@@ -1062,3 +1062,61 @@ def test_wsl_sandbox_runs_a_brief_through_the_fence():
     )
     assert proc.returncode == 0, proc.stderr
     assert "WSL_WRAPPER_OK" in proc.stdout
+
+
+def test_looks_like_model_exhausted():
+    """Tightened quota markers match only actual exhaustion/routing failures."""
+    assert opencode_delegate._looks_like_model_exhausted("429 Too Many Requests")
+    assert opencode_delegate._looks_like_model_exhausted("Resource exhausted: quota exceeded")
+    assert opencode_delegate._looks_like_model_exhausted("You have insufficient credits")
+    assert opencode_delegate._looks_like_model_exhausted("provider.no-route: Model unavailable")
+    assert opencode_delegate._looks_like_model_exhausted("Rate limit reached for model")
+
+    # Regular runtime errors must NOT be mistaken for quota exhaustion
+    assert not opencode_delegate._looks_like_model_exhausted("syntax error: unexpected token")
+    assert not opencode_delegate._looks_like_model_exhausted("insufficient arguments supplied to command")
+    assert not opencode_delegate._looks_like_model_exhausted("FileNotFoundError: no such file")
+    assert not opencode_delegate._looks_like_model_exhausted("unknown error: disk full")
+
+
+def test_fallback_chain_rotates_on_quota_error(monkeypatch):
+    """When a model in the DeepSeek chain hits quota error, it rotates to next."""
+    attempted_models: list[str] = []
+
+    def fake_run_opencode_cli(*args, **kwargs):
+        m = kwargs.get("model")
+        attempted_models.append(m)
+        if len(attempted_models) == 1:
+            return {"text": "", "error": "HTTP 429: insufficient credits"}
+        return {"text": "Success from fallback model", "error": None}
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run_opencode_cli)
+    monkeypatch.setattr(opencode_delegate, "find_opencode_binary", lambda: "/bin/opencode")
+
+    code = opencode_delegate.main([
+        "--model", "opencode/deepseek-v4.1-flash-free", "test prompt"
+    ])
+    assert code == 0
+    assert len(attempted_models) == 2
+    assert attempted_models[0] == "opencode/deepseek-v4.1-flash-free"
+    assert attempted_models[1] == "opencode/deepseek-v4.1-flash"
+
+
+def test_fallback_chain_does_not_rotate_on_runtime_error(monkeypatch):
+    """When a model encounters a non-quota error, it fails immediately without rotating."""
+    attempted_models: list[str] = []
+
+    def fake_run_opencode_cli(*args, **kwargs):
+        m = kwargs.get("model")
+        attempted_models.append(m)
+        return {"text": "", "error": "TypeError: null pointer in task execution"}
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run_opencode_cli)
+    monkeypatch.setattr(opencode_delegate, "find_opencode_binary", lambda: "/bin/opencode")
+
+    code = opencode_delegate.main([
+        "--model", "opencode/deepseek-v4.1-flash-free", "test prompt"
+    ])
+    assert code == 2
+    assert len(attempted_models) == 1
+

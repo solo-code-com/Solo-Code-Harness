@@ -1632,7 +1632,7 @@ def check_pattern_counts(root: Path = ROOT) -> list[str]:
 # Codex silently truncates an always-on AGENTS.md at 32,768 bytes, and
 # MEMORY.md documents an 8,000-character gate on its own line 4.
 AGENTS_MD_BYTE_LIMIT = 32_768
-AGENTS_MD_WARN_RATIO = 0.9
+AGENTS_MD_WARN_RATIO = 0.85
 MEMORY_MD_CHAR_LIMIT = 8_000
 
 

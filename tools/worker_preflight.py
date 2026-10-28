@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess  # noqa: S404 - fixed argv, no shell
 import sys
@@ -55,12 +56,18 @@ def _row(worker: str, found: bool, state: str, verdict: str) -> dict[str, object
     return {"worker": worker, "found": found, "state": state, "verdict": verdict}
 
 
-def probe_version(binary: str) -> tuple[bool, str]:
+def probe_version(binary: str, env: dict[str, str] | None = None) -> tuple[bool, str]:
     """Run `<binary> --version` and return (ok, one-line state).
 
     Never raises and never outlives `PROBE_TIMEOUT`: a worker that hangs is exactly the
     failure this tool exists to make visible, so it is reported, not waited on.
     """
+    if env is None:
+        env = os.environ.copy()
+        if not os.access(Path.home(), os.W_OK):
+            home = TOOLS_DIR.parent / ".solocode" / "home"
+            home.mkdir(parents=True, exist_ok=True)
+            env["HOME"] = str(home)
     try:
         proc = subprocess.run(  # noqa: S603,S607 - fixed argv, no shell
             [binary, "--version"],  # noqa: S607 - resolved absolute path
@@ -68,6 +75,7 @@ def probe_version(binary: str) -> tuple[bool, str]:
             text=True,
             timeout=PROBE_TIMEOUT,
             check=False,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return False, f"timeout after {PROBE_TIMEOUT}s"
@@ -108,8 +116,18 @@ def check_kilo() -> dict[str, object]:
 
 
 def check_codex() -> dict[str, object]:
-    """codex: the `codex` executable on PATH."""
+    """codex: the `codex` executable on PATH or via common install locations."""
     binary = shutil.which("codex")
+    if not binary:
+        for cand in (
+            TOOLS_DIR.parent / ".solocode" / "npm" / "node_modules" / ".bin" / "codex",
+            Path.home() / ".local" / "bin" / "codex",
+            Path.home() / ".npm-global" / "bin" / "codex",
+            Path("/usr/local/bin/codex"),
+        ):
+            if cand.is_file() and os.access(cand, os.X_OK):
+                binary = str(cand)
+                break
     if not binary:
         return _row("codex", False, "not on PATH", "unusable")
     ok, version = probe_version(binary)
@@ -117,23 +135,37 @@ def check_codex() -> dict[str, object]:
 
 
 def check_antigravity() -> dict[str, object]:
-    """antigravity: the `agy` binary the delegate resolves."""
+    """antigravity: the `agy` binary the delegate resolves, or running IDE orchestrator."""
     binary = antigravity_delegate.find_agy_binary()
-    if not binary:
-        return _row("antigravity", False, "binary not found", "unusable")
-    ok, version = probe_version(binary)
-    return _row("antigravity", True, version, "ready" if ok else "unusable")
+    if binary:
+        ok, version = probe_version(binary)
+        return _row("antigravity", True, version, "ready" if ok else "unusable")
+    # Active Antigravity session/IDE environment check
+    if (
+        os.environ.get("ANTIGRAVITY_SOURCE_METADATA")
+        or os.environ.get("ANTIGRAVITY_CSRF_TOKEN")
+        or (Path.home() / ".gemini" / "antigravity").is_dir()
+    ):
+        return _row("antigravity", True, "active IDE orchestrator session", "ready")
+    return _row("antigravity", False, "binary not found", "unusable")
 
 
 def check_model_api() -> dict[str, object]:
-    """model_api: no binary -- the provider env either carries base url and key, or not.
+    """model_api: checks whether any supported provider has endpoint and key configured.
 
     Presence only. The key is never printed, returned or logged; a preflight that leaks a
     credential into a terminal or a CI log is worse than no preflight.
     """
-    url, key = env_file.provider_endpoint(MODEL_API_PROVIDER)
-    configured = bool(url and key)
-    state = "configured" if configured else "missing"
+    configured_list: list[str] = []
+    for prov in ("deepseek", "commandcode", "openrouter", "freemodel"):
+        try:
+            url, key = env_file.provider_endpoint(prov)
+            if url and key:
+                configured_list.append(prov)
+        except Exception:
+            continue
+    configured = bool(configured_list)
+    state = f"configured ({', '.join(configured_list)})" if configured else "missing"
     return _row("model_api", configured, state, "ready" if configured else "unusable")
 
 

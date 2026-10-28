@@ -79,6 +79,38 @@ WSL_KEY_VARS = (
 # `auto` resolves to wsl only when the fence is usable (see `_wsl_ready`).
 SANDBOX_CHOICES = ("auto", "win", "wsl")
 
+#: Fallback sequence for DeepSeek V4.1 Flash: prefer opencode free tier first,
+#: fall back to opencode native, then Command Code, then direct DeepSeek API.
+DEEPSEEK_V41_FLASH_CHAIN = [
+    "opencode/deepseek-v4.1-flash-free",
+    "opencode/deepseek-v4.1-flash",
+    "commandcode/deepseek/deepseek-v4.1-flash-fast",
+    "commandcode/deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-flash",
+]
+
+QUOTA_ERROR_MARKERS = (
+    "quota",
+    "rate limit",
+    "ratelimit",
+    "429",
+    "resource exhausted",
+    "resource_exhausted",
+    "insufficient credits",
+    "insufficient_quota",
+    "insufficient balance",
+    "exceeded your current quota",
+    "credit balance is too low",
+    "model unavailable",
+    "provider.no-route",
+)
+
+
+def _looks_like_model_exhausted(error_text: str) -> bool:
+    lowered = error_text.lower()
+    return any(marker in lowered for marker in QUOTA_ERROR_MARKERS)
+
+
 ROOT = Path(__file__).resolve().parent.parent
 USAGE_LOG = Path(".solocode/opencode-usage.jsonl")
 USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -282,11 +314,22 @@ def _prefer_real_executable(binary: str, *, platform: str | None = None) -> str:
 
 
 def find_opencode_binary() -> str | None:
-    """Find OpenCode CLI binary. Check PATH first, then common install locations."""
-    # Check PATH (bypass a Windows npm shim if it wraps a real executable).
+    """Find OpenCode CLI binary. Check workspace and PATH, then common install locations."""
+    # Check bundled workspace install first
+    for ws_cand in (
+        ROOT / ".solocode" / "npm" / "node_modules" / "@opencode" / "cli" / "bin" / "opencode.exe",
+        ROOT / ".solocode" / "npm" / "node_modules" / ".bin" / "opencode",
+    ):
+        if ws_cand.is_file() and os.access(ws_cand, os.X_OK):
+            return str(ws_cand)
+
+    # Check PATH (bypass a Windows npm shim if it wraps a real executable, and skip /mnt/ on Linux).
     opencode_path = shutil.which("opencode")
     if opencode_path:
-        return _prefer_real_executable(opencode_path)
+        if sys.platform != "win32" and opencode_path.startswith("/mnt/"):
+            pass
+        else:
+            return _prefer_real_executable(opencode_path)
 
     # Fall back to the @opencode/cli binary next to the node executable, which
     # covers nvm-windows / nvm global installs whose shim is not on PATH. The
@@ -300,6 +343,17 @@ def find_opencode_binary() -> str | None:
             candidate = cli_dir / name
             if candidate.is_file():
                 return str(candidate)
+
+    # Common POSIX install locations (bundled npm, npm global, ~/.local/bin)
+    for posix_cand in (
+        ROOT / ".solocode" / "npm" / "node_modules" / "@opencode" / "cli" / "bin" / "opencode.exe",
+        ROOT / ".solocode" / "npm" / "node_modules" / ".bin" / "opencode",
+        Path.home() / ".local" / "bin" / "opencode",
+        Path.home() / ".npm-global" / "bin" / "opencode",
+        Path("/usr/local/bin/opencode"),
+    ):
+        if posix_cand.is_file() and os.access(posix_cand, os.X_OK):
+            return str(posix_cand)
 
     return None
 
@@ -499,7 +553,6 @@ def _inner_argv(
     """The `opencode run ...` arguments minus the binary: both sandbox paths share them."""
     argv = [
         "run",
-        prompt,
         "--format",
         "json",
         "--standalone",  # private server -- do not touch the shared user server
@@ -513,6 +566,7 @@ def _inner_argv(
         argv += ["--agent", agent]
     if session:  # continue (or create) a session, for a conversation
         argv += ["--session", session]
+    argv.append(prompt)
     return argv
 
 
@@ -603,6 +657,11 @@ def run_opencode_cli(
             opencode_binary,
             *_inner_argv(prompt, model, agent=agent, session=session),
         ]
+        env = os.environ.copy()
+        if not os.access(Path.home(), os.W_OK):
+            home_dir = ROOT / ".solocode" / "home"
+            home_dir.mkdir(parents=True, exist_ok=True)
+            env["HOME"] = str(home_dir)
 
     # Built from what the argv actually got: the orchestrator runs without --auto.
     running = "Running: opencode run ..."
@@ -796,7 +855,7 @@ def main(argv: list[str] | None = None) -> int:
 
     sandbox = args.sandbox
     if sandbox == "auto":
-        sandbox = "wsl" if _wsl_ready() else "win"
+        sandbox = "wsl" if sys.platform == "win32" and _wsl_ready() else "win"
         _stderr(f"sandbox=auto -> {sandbox}")
 
     if sandbox == "wsl" and args.agent == ORCHESTRATOR_AGENT:
@@ -840,7 +899,23 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_guardrail:
         prompt = GUARDRAIL + prompt
 
-    _stderr(f"model={model}")
+    models_to_try = [model] if model else [None]
+    if model and ("deepseek-v4.1-flash" in model or model in DEEPSEEK_V41_FLASH_CHAIN):
+        if "/" not in model:
+            models_to_try = list(DEEPSEEK_V41_FLASH_CHAIN)
+        else:
+            try_index = (
+                DEEPSEEK_V41_FLASH_CHAIN.index(model)
+                if model in DEEPSEEK_V41_FLASH_CHAIN
+                else -1
+            )
+            models_to_try = [model]
+            if try_index >= 0:
+                models_to_try.extend(DEEPSEEK_V41_FLASH_CHAIN[try_index + 1 :])
+            else:
+                models_to_try.extend(
+                    [m for m in DEEPSEEK_V41_FLASH_CHAIN if m != model]
+                )
 
     # ── Run opencode CLI → parse events → log ──
     run_id = uuid.uuid4().hex
@@ -850,20 +925,37 @@ def main(argv: list[str] | None = None) -> int:
         before = _snapshot(ROOT)
     except Exception:  # noqa: BLE001 - report only, never fatal
         before = None
-    result = run_opencode_cli(
-        prompt=prompt,
-        model=model,
-        directory=args.directory,
-        opencode_binary=opencode_binary,
-        timeout_s=args.timeout,
-        agent=args.agent,
-        session=args.session,
-        sandbox=sandbox,
-    )
+
+    result: dict[str, Any] = {}
+    used_model = model
+    for idx, candidate_model in enumerate(models_to_try):
+        used_model = candidate_model
+        _stderr(f"model={used_model}")
+        result = run_opencode_cli(
+            prompt=prompt,
+            model=used_model or "",
+            directory=args.directory,
+            opencode_binary=opencode_binary,
+            timeout_s=args.timeout,
+            agent=args.agent,
+            session=args.session,
+            sandbox=sandbox,
+        )
+        if not result.get("error"):
+            break
+        error_msg = str(result.get("error"))
+        if not _looks_like_model_exhausted(error_msg) or idx + 1 >= len(models_to_try):
+            break
+        next_model = models_to_try[idx + 1]
+        _stderr(
+            f"[opencode_delegate] Model {used_model} exhausted/failed ({error_msg[:80]}), "
+            f"falling back to {next_model}..."
+        )
+
     elapsed = time.monotonic() - start
 
     log_usage(
-        model or f"agent:{args.agent}",
+        used_model or f"agent:{args.agent}",
         len(prompt),
         elapsed,
         result,

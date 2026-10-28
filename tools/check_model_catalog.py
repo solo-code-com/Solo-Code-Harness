@@ -59,6 +59,13 @@ PROVIDERS: dict[str, tuple[str | None, str, str, dict, bool]] = {
         engine._OPENROUTER_MODELS,
         True,
     ),
+    "commandcode": (
+        "COMMANDCODE_BASE_URL",
+        "/models",
+        "COMMANDCODE_API_KEY",
+        engine._COMMANDCODE_MODELS,
+        True,
+    ),
 }
 
 #: Advertised by a provider but known dead; counted as informational, not drift.
@@ -138,7 +145,9 @@ def resolve(provider: str) -> tuple[str, str]:
     import os
 
     base_ref, _path, key_env, _catalog, _curated = PROVIDERS[provider]
-    base = base_ref if base_ref.startswith("http") else RAW_ENV.get(base_ref, "")
+    base = base_ref if (base_ref and base_ref.startswith("http")) else RAW_ENV.get(base_ref or "", "")
+    if not base and base_ref == "COMMANDCODE_BASE_URL":
+        base = "https://api.commandcode.ai/provider/v1"
     key = RAW_ENV.get(key_env, "") or os.environ.get(key_env, "")
     return base, key
 
@@ -251,6 +260,8 @@ def main(argv: list[str] | None = None) -> int:
             # raw, not normalised: the launcher strips `/v1` because the config appends it,
             # while these paths already carry it.
             base = raw.get(base_ref or "", "")
+            if not base and base_ref == "COMMANDCODE_BASE_URL":
+                base = "https://api.commandcode.ai/provider/v1"
         key = raw.get(key_env, "") or os.environ.get(key_env, "")
         row = {
             "provider": provider,

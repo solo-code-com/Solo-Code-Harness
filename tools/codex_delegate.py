@@ -165,22 +165,36 @@ def build_plan(
     own scratch dir, where the brief and the final message live).
     """
     sandbox = "workspace-write" if allow_write else "read-only"
-    argv = [
-        powershell,
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        str(root / "codex-env.ps1"),
-        "exec",
-        "--ephemeral",
-        "-s",
-        sandbox,
-        "-C",
-        str(root),
-        "-o",
-        str(out_file),
-    ]
+    if powershell == "bash" or powershell.endswith("sh"):
+        argv = [
+            powershell,
+            str(root / "codex-env.sh"),
+            "exec",
+            "--ephemeral",
+            "-s",
+            sandbox,
+            "-C",
+            str(root),
+            "-o",
+            str(out_file),
+        ]
+    else:
+        argv = [
+            powershell,
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(root / "codex-env.ps1"),
+            "exec",
+            "--ephemeral",
+            "-s",
+            sandbox,
+            "-C",
+            str(root),
+            "-o",
+            str(out_file),
+        ]
     if model:
         argv += ["-m", model]
     if effort:
@@ -369,17 +383,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="print the result as JSON")
     args = parser.parse_args(argv)
 
-    if sys.platform != "win32":
+    launcher_sh = ROOT / "codex-env.sh"
+    if sys.platform != "win32" and not launcher_sh.is_file():
         print(
             "ERROR: codex-env.ps1 is Windows-only; no POSIX launcher is wired.",
             file=sys.stderr,
         )
         return 1
-    if not LAUNCHER.is_file():
+    powershell = _find_powershell()
+    bash = shutil.which("bash") or shutil.which("sh")
+    use_sh = sys.platform != "win32" and not powershell and launcher_sh.is_file() and bash
+
+    if not use_sh and not LAUNCHER.is_file():
         print(f"ERROR: {LAUNCHER} not found.", file=sys.stderr)
         return 1
-    powershell = _find_powershell()
-    if not powershell:
+    if not powershell and not use_sh:
         print("ERROR: powershell/pwsh not found on PATH.", file=sys.stderr)
         return 1
 
@@ -437,7 +455,7 @@ def main(argv: list[str] | None = None) -> int:
         allow_write=args.allow_write,
         brief_file=brief_file,
         out_file=out_file,
-        powershell=powershell,
+        powershell=bash if use_sh else powershell,
         confine=args.confine,
         confine_temp=tmp,
         confine_also_write=confine_roots,

@@ -107,19 +107,33 @@ def _looks_like_quota_error(text: str) -> bool:
 
 
 def find_agy_binary() -> str | None:
-    """Find agy.exe through PATH, then its standard Windows install location."""
+    """Find agy binary through PATH, then standard Windows/POSIX install locations."""
     on_path = shutil.which("agy")
     if on_path:
         return on_path
 
+    # Standard Windows install locations
     local_app_data = os.environ.get("LOCALAPPDATA")
     if local_app_data:
         candidate = Path(local_app_data) / "agy" / "bin" / "agy.exe"
         if candidate.is_file():
             return str(candidate)
 
-    candidate = Path.home() / "AppData" / "Local" / "agy" / "bin" / "agy.exe"
-    return str(candidate) if candidate.is_file() else None
+    win_cand = Path.home() / "AppData" / "Local" / "agy" / "bin" / "agy.exe"
+    if win_cand.is_file():
+        return str(win_cand)
+
+    # Standard POSIX install locations
+    for posix_cand in (
+        Path.home() / ".local" / "bin" / "agy",
+        Path.home() / ".gemini" / "antigravity" / "bin" / "agy",
+        Path("/usr/local/bin/agy"),
+        Path.home() / ".npm-global" / "bin" / "agy",
+    ):
+        if posix_cand.is_file() and os.access(posix_cand, os.X_OK):
+            return str(posix_cand)
+
+    return None
 
 
 def parse_ndjson_events(output: str) -> dict[str, Any]:

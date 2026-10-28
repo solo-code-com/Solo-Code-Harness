@@ -283,107 +283,29 @@ run the real gates, and mutation-test any new check they write.
 
 Full decision guide: `.kilo/skill/gemini-delegation/SKILL.md`.
 
-### Delegating to Antigravity CLI
+### Antigravity as Orchestrator & CLI Worker Delegation
 
-Use the wrapper for normal headless work:
+Antigravity acts as primary Orchestrator maintaining global context, task decomposition, and diff verification. Three headless workers are available:
 
-```powershell
-# Read-only, generation only: no permission-skipping flag is sent.
-python tools/antigravity_delegate.py "<task>" --model gemini-3.8-flash-medium
+1. **OpenCode CLI (Primary Narrow Executor)**:
+   ```bash
+   python3 tools/opencode_delegate.py "<task>" --model opencode/deepseek-v4.1-flash-free
+   ```
+2. **Codex CLI (Independent Verification)**:
+   ```bash
+   python3 tools/codex_delegate.py "<brief>" --model gpt-6.1-sol --effort medium
+   ```
+3. **Antigravity CLI (Headless Read-Heavy / Survey)**:
+   ```bash
+   python tools/antigravity_delegate.py "<task>" --allow-tools --model gemini-3.8-flash-medium
+   # Writes require explicit directory fence: --allow-dir src --auto-approve
+   ```
+4. **Antigravity GUI Handoff (Visual Verification)**:
+   File-based handoff via `.gemini/antigravity/handoff/inbox/<slug>-plan.md`.
 
-# Read-only WITH tool use (greps, tests, git status) but still no write scope.
-python tools/antigravity_delegate.py "<audit>" --allow-tools --model gemini-3.8-flash-medium
-
-# Write: explicit scope and opt-in auto approval are both required.
-python tools/antigravity_delegate.py "<task>" --allow-dir src --auto-approve --model gemini-3.8-flash-high
-```
-
-**Headless tool permissions.** A plain read-only run cannot prompt for the
-`command` permission, so a task that needs `run_command` is auto-denied. agy
-still reports `status: SUCCESS` in that case, so the wrapper now inspects
-`denied_actions` and per-tool errors and exits **5** (empty output exits **2**; a
-suspected exhausted quota exits **6** — see the auth note below) instead of
-returning a silent empty success. Pass `--allow-tools` to auto-approve
-read/execute tools
-without a write scope; it does not take a directory lock and does not run the
-scope audit. `--allow-tools` cannot be combined with `--auto-approve`,
-`--allow-dir`, or `--no-guardrail`.
-
-**Pick the model by task complexity.** Gemini 3.8 Flash ships three reasoning
-levels as distinct model ids; all three draw the same account quota, so the
-cheapest one that fits the task is the right one:
-
-| Task complexity | Model id | Example |
-|---|---|---|
-| Mechanical, single-file, low reasoning | `gemini-3.8-flash-low` | Rename a symbol, reformat a table |
-| Default multi-file work | `gemini-3.8-flash-medium` | Summarize 10 files, apply a scoped refactor |
-| Hard reasoning, design-adjacent | `gemini-3.8-flash-high` | Independent design review, subtle bug hunt |
-
-**Account quota and rotation.** `agy` keeps a token profile in the OS keyring
-(Windows Credential Manager) and has **no per-run account flag**. Switch account
-with `/logout` in the CLI then sign in again; check remaining quota with
-`/usage`. Resume an interrupted task with `--conversation <id>` (the wrapper
-prints the id) or `--continue-latest`. For unattended runs, a Gemini API key is
-the documented headless alternative (`modelProvider: "gemini"` + `GEMINI_API_KEY`
-in `~/.gemini/antigravity-cli/settings.json`); least-privilege command allowlists
-go in the same file under `permissions.allow`. Rotation is serial, so do not
-queue unattended long batches across a quota boundary. Details:
-`.kilo/skill/gemini-delegation/SKILL.md`.
-
-The orchestrator must still inspect `git diff` and run the relevant tests,
-security scan, and checklist. Never use `--no-guardrail` with `--auto-approve`.
-The post-run scope check audits `--target-dir` only: it cannot see writes outside
-that directory and cannot undo a write. `--auto-approve` still passes
-`--dangerously-skip-permissions` to `agy.exe`, so `--allow-dir` is the fence, not
-a sandbox.
-
-**Maximize Antigravity CLI use.** Route all read-heavy, broad, or independent
-tasks to it — reading >5 files, repo-wide surveys, independent review, and
-read-only gate runs (`--allow-tools`). This cannot be hard-enforced: no hook
-blocks a direct multi-file read, so it stays a routing policy plus the
-session-start reminder, not a gate.
-
-### Delegating to Antigravity GUI (manual fallback)
-
-Use this path when GUI or visual verification is required. A human
-must relay the task to the Antigravity IDE manually.
-To minimize copy-paste, use the file-based handoff protocol instead of
-pasting plan/result text through chat:
-
-1. Write the plan to `.gemini/antigravity/handoff/inbox/<slug>-plan.md`
-   (see `.gemini/antigravity/handoff/README.md` for the exact format).
-2. Tell the user the one line to relay: *"Open Antigravity, tell Gemini to
-   read `.gemini/antigravity/handoff/inbox/<slug>-plan.md` and write its
-   report to `.gemini/antigravity/handoff/outbox/<slug>-report.md`."*
-3. `.claude/hooks/session_start.py` auto-detects new `outbox/*-report.md`
-   files at the next session start and announces them — no need to ask the
-   user to paste the result back.
-
-**Writing the brief** — four rules, each from an observed failure:
-
-1. **Fence the scope, and predict the red gate.** If a correct result will
-   make a check fail, say so explicitly ("that failure is the expected,
-   correct outcome") — otherwise Gemini helpfully fixes what it was told
-   only to detect.
-2. **Demand evidence, not confidence.** A "Confident? Y/N" column came back
-   22-for-22 "Yes", including on a wrong finding. Use `| Claim | Command run
-   | Output |` and add: *"Do not write a claim you did not run a command for."*
-3. **Name every writable path, including the brief itself.** The handoff
-   README permits editing `status:`; a brief saying "touch nothing but the
-   report" contradicts it. Say *"Do NOT edit this file. Leave `status:
-   pending`."*
-4. **Give the measurement, never the answer.** `ls .kilo/skill | wc -l`, not
-   "there are 51". A brief that leaks the expected number cannot detect that
-   the number changed.
-
-**Before delegating a write**: take a `tools/shared_state.py` lock for the
-files in scope — Gemini edits the same working tree concurrently, and
-`acquire_lock()` returns `False` on a cross-engine conflict.
-
-For headless writes, do not bypass the wrapper's directory lock or guardrail.
-Use `agy.exe --print --output-format stream-json` through
-`tools/antigravity_delegate.py`. Full guide:
-`.kilo/skill/gemini-delegation/SKILL.md`.
+**Verification Protocol (Mandatory):**
+The orchestrator never blindly trusts worker summaries. Always re-run commands, run verification gates (`garden.py`, `checklist.py`), and inspect `git diff`.
+Full reference: `.gemini/antigravity/orchestrators/cli-worker-delegation.md` and `.kilo/skill/gemini-delegation/SKILL.md`.
 
 ## Git Commit Convention
 

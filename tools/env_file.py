@@ -115,6 +115,12 @@ PROVIDERS: dict[str, dict[str, str]] = {
         "models_path": "/models",
         "chat_path": "/chat/completions",
     },
+    "commandcode": {
+        "base_env": "COMMANDCODE_BASE_URL",
+        "key_env": "COMMANDCODE_API_KEY",
+        "models_path": "/models",
+        "chat_path": "/chat/completions",
+    },
 }
 
 
@@ -131,6 +137,8 @@ def provider_endpoint(provider: str, kind: str = "chat") -> tuple[str, str]:
     base = spec["base_env"]
     if not base.startswith("http"):
         base = parse_env_file(env_path).get(base, "") or os.environ.get(base, "")
+        if not base and spec["base_env"] == "COMMANDCODE_BASE_URL":
+            base = "https://api.commandcode.ai/provider/v1"
     key = os.environ.get(spec["key_env"], "") or parse_env_file(env_path).get(
         spec["key_env"], ""
     )

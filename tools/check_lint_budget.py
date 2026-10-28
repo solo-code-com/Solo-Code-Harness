@@ -85,6 +85,12 @@ def main() -> int:
         print(raw or "(no findings)")
         return 0
 
+    import shutil
+
+    if shutil.which("ruff") is None:
+        print("[SKIP] lint budget: ruff not installed on PATH")
+        return 0
+
     try:
         budget = load_budget()
     except (OSError, json.JSONDecodeError, ValueError) as exc:

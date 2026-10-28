@@ -1329,3 +1329,14 @@ daemon on the Windows side at all.
   `~/.config/kilo/kilo.jsonc` (Kilo uses the full upstream id
   `opencode-go/deepseek/deepseek-v4-pro`). `context_length` comes from the response, not
   the file. (2026-09-28; catalog 105 model on 2026-10-23)
+
+- [decision] Sua cac loi im lang (2026-10-20): 3 agent thieu `description` nen
+  SPEC 7.1 nay duoc enforce; `boundary_audit` bat `--strict` va sua bug bo qua
+  theo path tuyet doi (repo duoi thu muc ten build/dist/venv lam ca audit cam);
+  gate `test_hook_exit_claims.py` moi bat 2 claim sai that (`quality-gate.js`,
+  `hookify-engine.js`); xoa 3 claim bypass khong ton tai. Kilo: 327/350 loi chi
+  vi server chet -> them preflight exit 7 va co `--ensure-server`; bo `requests`
+  (dependency pip duy nhat trong `tools/`). Antigravity nay ghi
+  `.solocode/antigravity-usage.jsonl`; `failure_ledger.py` moi gop moi nguon van
+  hanh va co `--sweep` da du an.
+

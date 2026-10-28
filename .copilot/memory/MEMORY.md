@@ -93,15 +93,12 @@ High-signal context loaded at session start. Detailed history belongs in
   `tools/test_env_file.py` suy luật **từ chính** `.opencode/opencode.json`, nên thêm provider có template
   `/v1` là test đỏ ngay. Ghi chú: launcher xuất **mọi** key `.env` bằng vòng lặp chung nên nó và
   `env_file.py` đã ngang nhau — audit chỉ grep `$env:NAME =` sẽ báo thiếu biến oan.
-- [decision] Sua cac loi im lang (2026-10-20): 3 agent thieu `description` nen
-  SPEC 7.1 nay duoc enforce; `boundary_audit` bat `--strict` va sua bug bo qua
-  theo path tuyet doi (repo duoi thu muc ten build/dist/venv lam ca audit cam);
-  gate `test_hook_exit_claims.py` moi bat 2 claim sai that (`quality-gate.js`,
-  `hookify-engine.js`); xoa 3 claim bypass khong ton tai. Kilo: 327/350 loi chi
-  vi server chet -> them preflight exit 7 va co `--ensure-server`; bo `requests`
-  (dependency pip duy nhat trong `tools/`). Antigravity nay ghi
-  `.solocode/antigravity-usage.jsonl`; `failure_ledger.py` moi gop moi nguon van
-  hanh va co `--sweep` da du an.
+- [decision] Khoi phuc Command Code provider (2026-10-27): tich hop provider `commandcode`
+  vao OpenCode v2 (`.opencode/opencode.json`), `tools/env_file.py`, `tools/model_api.py`,
+  va `tools/check_model_catalog.py`. Endpoint OpenAI-compatible `https://api.commandcode.ai/provider/v1`,
+  xac thuc qua `COMMANDCODE_API_KEY`. Da probe live thanh cong 94 model, do latency thuc te
+  cho `deepseek/deepseek-v4.1-flash` (3.6s), `deepseek-v4-pro` (2.8s), `deepseek-v4.1-flash-fast` (2.5s).
+  Luu y: model Claude yeu cau `/messages` (Anthropic format), khong goi qua `/chat/completions`.
 - Harness content fingerprint (2026-10-21): .harness.lock records `content_fingerprint`,
   a sha256 over the sorted (path, content) pairs of [shared_files], BOM stripped and
   CRLF->LF. A `[harness] mode` is recorded too. `root` is enforced: a harness edit

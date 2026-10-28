@@ -661,6 +661,37 @@ _OPENROUTER_MODELS: dict[str, dict[str, Any]] = {
     },
 }
 
+# Command Code provider (https://commandcode.ai). OpenAI-compatible multi-model
+# gateway fed by COMMANDCODE_API_KEY + COMMANDCODE_BASE_URL from .env.
+# Primary default executor is DeepSeek V4.1 Flash, with frontier and decision models.
+_COMMANDCODE_MODELS: dict[str, dict[str, Any]] = {
+    "deepseek-v4.1-flash": {
+        "modelID": "deepseek/deepseek-v4.1-flash",
+        "name": "DeepSeek V4.1 Flash (Command Code)",
+        "limit": {"context": 1048576, "output": 384000},
+    },
+    "deepseek-v4-pro": {
+        "modelID": "deepseek/deepseek-v4-pro",
+        "name": "DeepSeek V4 Pro (Command Code)",
+        "limit": {"context": 1048576, "output": 384000},
+    },
+    "deepseek-v4.1-flash-fast": {
+        "modelID": "deepseek/deepseek-v4.1-flash-fast",
+        "name": "DeepSeek V4.1 Flash Fast (Command Code)",
+        "limit": {"context": 1048576, "output": 384000},
+    },
+    "claude-sonnet-5.5": {
+        "modelID": "claude-sonnet-5-5",
+        "name": "Claude Sonnet 5.5 (Command Code)",
+        "limit": {"context": 1000000, "output": 131072},
+    },
+    "gpt-6.1-sol": {
+        "modelID": "gpt-6.1-sol",
+        "name": "GPT-6.1 Sol (Command Code)",
+        "limit": {"context": 1050000, "output": 128000},
+    },
+}
+
 # The Jev agent runs on the model named Jev: TypeSafe's `typesafe/jev-router` on
 # OpenRouter, which picks a model and reasoning effort per request (verified live
 # 2026-10-15 -- it answered and reported routing to deepseek/deepseek-v4.1-flash).
@@ -1133,6 +1164,15 @@ def generate_opencode_json(
                 "package": "@opencode/ai/providers/openai-compatible",
                 "settings": {"baseURL": _OPENROUTER_BASE_URL},
                 "models": _OPENROUTER_MODELS,
+            },
+            "commandcode": {
+                "name": "Command Code",
+                # OpenAI-compatible multi-model gateway. Base URL and API key come from .env
+                # via opencode-env.ps1 (template ships https://api.commandcode.ai/provider/v1).
+                "env": ["COMMANDCODE_API_KEY"],
+                "package": "@opencode/ai/providers/openai-compatible",
+                "settings": {"baseURL": "${COMMANDCODE_BASE_URL}"},
+                "models": _COMMANDCODE_MODELS,
             },
         },
     }

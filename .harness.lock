@@ -13,7 +13,7 @@ version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
 generated_at = "2026-10-26T08:05:55Z"
 mode = "root"
-content_fingerprint = "sha256:8a8ccb0b4ea859521f883dd0ec4b80275a08e652ff1d843936a35923d8129014"
+content_fingerprint = "sha256:0c106ab720476cb31c0be194f68a938732c8b98648844d783bcb015dc280cd7c"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
