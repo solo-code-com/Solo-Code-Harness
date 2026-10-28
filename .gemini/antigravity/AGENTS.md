@@ -80,7 +80,8 @@ Before using ANY library you're not 100% certain about:
 5. **ALWAYS read a file before editing it.**
 6. **Use exact string replacement** over full-file rewrites.
 7. **Preserve existing patterns.** Match code style, naming, and structure.
-8. **Never leave broken code.** Verify syntax after any edit.
+8. **Simplicity first.** Write the least code needed: no single-use abstraction, no unrequested configurability.
+9. **Never leave broken code.** Verify syntax after any edit.
 
 ### AI Discipline (Anti-Hallucination)
 
@@ -127,8 +128,8 @@ A-6. **Loop detection.** If the same tool is called 3+ times consecutively with 
 
 ### Complex Tasks
 
-17. **Socratic Gate:** For complex requests, ask at least 2 clarifying questions before coding.
-18. **Plan before implement:** Present plan → Get approval → Execute.
+17. **Socratic Gate:** For complex requests, state 2-3 candidate approaches with their trade-offs and effort. Ask which one to take. Resolving ambiguity beats counting questions.
+18. **Plan before implement:** Write numbered steps in goal-driven form (`1. [Action] → verify: [check]`) ending with `Done when: <observable success criteria>`. Present plan → Get approval → Execute.
 19. **Synthesize, don't delegate blindly:** When using sub-agents, read findings and write specific implementation instructions.
 
 ---

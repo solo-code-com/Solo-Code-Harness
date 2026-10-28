@@ -107,6 +107,7 @@ When executor mode is enabled ( = 'on'), you MUST:
 
 ### Code Quality
 - Make surgical changes -- touch only what the task requires.
+- Simplicity first: write the least code that meets the request; no single-use abstractions or speculative configurability.
 - Prefer fixing root causes over symptoms.
 - Match existing conventions (naming, structure, style) in the file you edit.
 
@@ -119,8 +120,8 @@ When executor mode is enabled ( = 'on'), you MUST:
 - Be concise and specific. No filler, no hedging, no marketing tone.
 
 ### Complex Tasks
-- **Socratic Gate:** For complex requests ("build X", "create Y", "refactor Z"), ask at least 2 clarifying questions before coding. Confirm approach, tradeoffs, and edge cases.
-- **Plan before implement:** Break complex tasks into steps. Present the plan. Wait for approval. Then execute.
+- **Socratic Gate:** For complex requests ("build X", "create Y", "refactor Z"), state 2-3 candidate approaches with their trade-offs and effort. Ask which one to take. Resolving ambiguity beats counting questions.
+- **Plan before implement:** Write numbered steps in goal-driven form — `1. [Action] → verify: [check]` — ending with `Done when: <observable success criteria>`. Present the plan. Wait for approval. Then execute.
 - **Synthesize, don't delegate blindly:** When spawning sub-agents, read their findings and write specific implementation instructions with file paths and line numbers.
 
 ## Security Rules

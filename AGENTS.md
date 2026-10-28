@@ -76,6 +76,7 @@ Before using ANY library you're not 100% certain about:
 - **Don't refactor things that aren't broken** — Refactoring is a separate task
 - **Match existing style** — Consistency within a file beats your preference
 - **Clean up only your own mess** — Remove only what YOUR changes made unused
+- **Simplicity first** — Write the least code that meets the request: no abstraction for single-use code, no configurability nobody asked for
 - **Every changed line should trace to the user's request** — If you can't explain why a line changed, don't change it
 
 ---
@@ -147,8 +148,8 @@ Auto-loaded skills: `code-review-expert`, `file-editor-pro`, `git-workflow-maste
 
 ### Complex Tasks
 
-17. **Socratic Gate:** For complex requests ("build X", "create Y", "refactor Z"), ask at least 2 clarifying questions before coding. Confirm approach, tradeoffs, and edge cases.
-18. **Plan before implement:** Break complex tasks into steps. Present the plan. Wait for approval. Then execute.
+17. **Socratic Gate:** For complex requests ("build X", "create Y", "refactor Z"), state 2-3 candidate approaches with their trade-offs and effort. Ask which one to take. Resolving ambiguity beats counting questions.
+18. **Plan before implement:** Write numbered steps in goal-driven form — `1. [Action] → verify: [check]` — ending with `Done when: <observable success criteria>`. Present the plan. Wait for approval. Then execute.
 19. **Synthesize, don't delegate blindly:** When spawning sub-agents (Task tool), read their findings and write specific implementation instructions with file paths and line numbers.
 
 ---

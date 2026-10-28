@@ -28,6 +28,9 @@ IMPLEMENTATION PLAN
 ===================
 Goal: <summary>
 Files: <N> to change
-Steps: 1. ... 2. ...
+Steps (Goal-Driven):
+1. [Action] → verify: [check]
+2. [Action] → verify: [check]
+Done when: <observable success criteria>
 Risks: <risk> → <mitigation>
 ```

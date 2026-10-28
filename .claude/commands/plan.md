@@ -9,7 +9,7 @@ Generate a detailed implementation plan before writing any code. Forces thinking
 ## Behavior
 1. **Analyze requirements** — What exactly needs to be built?
 2. **Identify affected files** — List specific files that will be created/modified
-3. **Break down into tasks** — Ordered, actionable steps
+3. **Break down into tasks** — Ordered steps, each paired with the check that proves it
 4. **Flag risks** — What could go wrong? Dependencies? Edge cases?
 5. **Estimate effort** — Per task
 
@@ -23,10 +23,12 @@ Generate a detailed implementation plan before writing any code. Forces thinking
 | src/... | CREATE | ... |
 | src/... | MODIFY | ... |
 
-### Tasks
-1. [ ] Task 1 — description
-2. [ ] Task 2 — description
-3. [ ] Task 3 — description
+### Tasks (Goal-Driven)
+1. [ ] [Step] — description → verify: [command or observable check]
+2. [ ] [Step] — description → verify: [command or observable check]
+3. [ ] [Step] — description → verify: [command or observable check]
+
+**Done when:** <observable success criteria>
 
 ### Risks
 - Risk 1: ... (mitigation)
