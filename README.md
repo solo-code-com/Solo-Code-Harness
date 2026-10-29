@@ -2,7 +2,7 @@
 
 AI coding agent harness — rules, skills, hooks, and verification gates for disciplined Solo-Code engineering.
 
-Engine support: **Kilo Code** (`.kilo/`, source of truth — all other engine artifacts are generated from or kept in parity with it), **Claude Code** (`.claude/` + `CLAUDE.md`, orchestrator, generated from `.kilo/`), **OpenCode** (`.opencode/` + `opencode.json`, generated from `.kilo/`, reintroduced in v4.2.0 as a primary engine and worker CLI), **GitHub Copilot** (`.copilot/`, manually kept in parity with `.kilo/`), **Gemini/Antigravity** (`.gemini/`), **Codex CLI** (`.codex/` + `codex-env.ps1`).
+Engine support: **Kilo Code** (`.kilo/`, source of truth — all other engine artifacts are generated from or kept in parity with it), **Claude Code** (`.claude/` + `CLAUDE.md`, orchestrator, generated from `.kilo/`), **OpenCode** (`.opencode/` + `opencode.json`, generated from `.kilo/`, reintroduced in v4.2.0 as a primary engine and worker CLI), **GitHub Copilot** (`.copilot/`, manually kept in parity with `.kilo/`), **Gemini/Antigravity** (`.gemini/`), **Codex CLI** (`.codex/` + `codex-env.ps1` / `codex-env.sh`), and POSIX environment launchers (`antigravity-env.sh`, `opencode-env.sh`, `codex-env.sh`).
 
 > **v4.2.0:** OpenCode engine reintroduced as a first-class primary agent engine (removed in v4.0.0 as a 100%-parity mirror with no unique capability, then brought back once OpenCode v1.18+'s stable native format made near-identity regeneration from `.kilo/` cheap). Full history in `.kilo/memory/MEMORY.md` → "Decisions".
 
@@ -15,6 +15,11 @@ Engine support: **Kilo Code** (`.kilo/`, source of truth — all other engine ar
 ```bash
 # Launch Claude Code (orchestrator) — see claude-env.ps1
 ./claude-env.ps1
+
+# POSIX environment launchers (Linux/WSL)
+./antigravity-env.sh   # Antigravity CLI environment
+./opencode-env.sh      # OpenCode CLI worker environment
+./codex-env.sh         # Codex CLI worker environment
 
 # Regenerate the Claude engine from .kilo/ source
 python tools/generate_harness.py --harness claude
@@ -97,7 +102,7 @@ python tools/deploy.py
 | `.copilot/` | GitHub Copilot: agents (15), skills (53), commands (15), instruction (10), memory (4). Manually kept in parity with `.kilo/`; checked (not generated) by `tools/garden.py`. |
 | `.kilo/` | **Source of truth** — Kilo Code: agents (15), skills (53), commands (15, incl. `ship`), hooks, memory, instruction. Edit here first. |
 | `.gemini/` | Gemini/Antigravity: agents (15), skills (53), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
-| `.codex/` | Codex CLI integration: README, session tracking, verified write guard (`tools/codex_guard.py`), and launcher `codex-env.ps1`. |
+| `.codex/` | Codex CLI integration: README, session tracking, verified write guard (`tools/codex_guard.py`), and launchers `codex-env.ps1` / `codex-env.sh`. |
 | `.github/` | Shared scripts: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py`, `security-allowlist.txt` + `copilot-instructions.md`, `prompts/` |
 | `tools/` | Generator (`generate_harness.py`, `claude_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` (runtime dep of Claude session hooks) |
 | `.vscode/` | VS Code settings + MCP config for Copilot |
@@ -129,6 +134,14 @@ Architecture, product and security judgment is not delegated: workers are contex
 one error invisible in its own summary — a wrong finding marked "Confident: Yes", two false
 positives reported as "unsure about: nothing". Their evidence is reliable; their self-assessment is
 not, so the orchestrator re-runs the commands and the real gates before trusting a change.
+
+## Core Operating Discipline
+
+- **Surgical Changes**: Touch only what the request asks for. Match existing conventions; clean up only orphaned code created by your own edits.
+- **Simplicity First**: Write the minimum code that solves the problem. No single-use abstractions, no speculative configurability, and no error handling for impossible scenarios.
+- **Upgraded Socratic Gate**: For complex or ambiguous requests, state 2-3 candidate approaches with estimated effort and trade-offs. Ask the user to choose; resolving ambiguity beats counting questions.
+- **Goal-Driven Execution**: Break implementation plans into verifiable steps formatted as `1. [Action] → verify: [check]`, ending with an observable `Done when:` criterion.
+- **Anti-Hallucination**: Verify library existence before use (A-1..A-6), never invent function signatures or paths, and always re-verify claims with real command output.
 
 ## Confinement (WSL sandbox)
 
@@ -383,7 +396,7 @@ Full guide: `.kilo/skill/gemini-delegation/SKILL.md`.
 
 Bộ harness (dây cương) cho AI coding agent — rules, skills, hooks và verification gates dành cho kỹ thuật Solo-Code có kỷ luật.
 
-Hỗ trợ engine: **Kilo Code** (`.kilo/`, nguồn gốc — mọi engine khác được sinh ra từ đây hoặc giữ song song), **Claude Code** (`.claude/` + `CLAUDE.md`, điều phối, sinh từ `.kilo/`), **OpenCode** (`.opencode/` + `opencode.json`, sinh từ `.kilo/`, tái bổ sung ở v4.2.0 làm engine chính và worker CLI), **GitHub Copilot** (`.copilot/`, giữ song song thủ công với `.kilo/`), **Gemini/Antigravity** (`.gemini/`).
+Hỗ trợ engine: **Kilo Code** (`.kilo/`, nguồn gốc — mọi engine khác được sinh ra từ đây hoặc giữ song song), **Claude Code** (`.claude/` + `CLAUDE.md`, điều phối, sinh từ `.kilo/`), **OpenCode** (`.opencode/` + `opencode.json`, sinh từ `.kilo/`, tái bổ sung ở v4.2.0 làm engine chính và worker CLI), **GitHub Copilot** (`.copilot/`, giữ song song thủ công với `.kilo/`), **Gemini/Antigravity** (`.gemini/`), **Codex CLI** (`.codex/` + `codex-env.ps1` / `codex-env.sh`), và bộ launcher POSIX (`antigravity-env.sh`, `opencode-env.sh`, `codex-env.sh`).
 
 > **v4.2.0:** tái bổ sung engine OpenCode làm engine chính (đã gỡ ở v4.0.0 vì là bản mirror 100% không có giá trị riêng, sau đó đưa lại khi định dạng native ổn định của OpenCode v1.18+ giúp sinh lại từ `.kilo/` gần như đồng nhất, chi phí thấp). Lịch sử đầy đủ trong `.kilo/memory/MEMORY.md` → "Decisions".
 
@@ -392,6 +405,11 @@ Hỗ trợ engine: **Kilo Code** (`.kilo/`, nguồn gốc — mọi engine khác
 ```bash
 # Mở Claude Code (điều phối) — xem claude-env.ps1
 ./claude-env.ps1
+
+# Bộ launcher môi trường POSIX (Linux/WSL)
+./antigravity-env.sh   # Môi trường Antigravity CLI
+./opencode-env.sh      # Môi trường OpenCode CLI worker
+./codex-env.sh         # Môi trường Codex CLI worker
 
 # Sinh lại engine Claude từ nguồn .kilo/
 python tools/generate_harness.py --harness claude
@@ -496,7 +514,7 @@ Việc được định tuyến qua 4 vai trò, khai ở `.kilo/agents/jev.md`:
 | Vai trò | Engine | Ghi chú |
 |---|---|---|
 | **Jev** — chỉ định tuyến | agent trên `openrouter/jev-router` | `edit: deny`; wrapper chạy không `--auto` để deny có hiệu lực |
-| **Codex** — ra đề bài + thẩm định | `gpt-6.1-sol`, effort `medium` | đổi bằng `--model` / `--effort`; chạy qua `codex-env.ps1` |
+| **Codex** — ra đề bài + thẩm định | `gpt-6.1-sol`, effort `medium` | đổi bằng `--model` / `--effort`; chạy qua `codex-env.ps1` / `codex-env.sh` |
 | **DeepSeek V4.1 Flash** — code | OpenCode CLI (`tools/opencode_delegate.py`) hoặc arm API trực tiếp (`tools/model_api.py`) | one-shot: 2,3 s việc nhỏ, 22 s một file; 503 khi prompt trên ~38K token; `--sandbox wsl` chạy cùng brief trong fence namespace (8.5 s khi WSL ấm) |
 | **Gemini 3.8 Flash** — việc nhanh, rộng | Antigravity CLI, tier `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | review độc lập, khảo sát toàn repo |
 
@@ -506,6 +524,14 @@ Quyết định kiến trúc, sản phẩm, bảo mật không được giao: wo
 tạo ra ít nhất một lỗi mà bản tự thuật của nó không thấy — một kết luận sai vẫn ghi "Confident:
 Yes", hai dương tính giả báo là "unsure about: nothing". Bằng chứng của họ đáng tin; tự đánh giá
 thì không — nên điều phối viên tự chạy lại lệnh và các gate thật trước khi tin.
+
+## Kỷ luật vận hành cốt lõi
+
+- **Surgical Changes (Sửa đổi phẫu thuật)**: Chỉ chạm vào những gì yêu cầu đề cập. Giữ đúng quy ước hiện có; chỉ dọn dẹp các import/hàm mồ côi do chính thay đổi của bạn tạo ra.
+- **Simplicity First (Ưu tiên tối giản)**: Viết lượng code ít nhất đáp ứng bài toán. Không tạo abstraction dùng một lần, không thêm cấu hình phỏng đoán, không bọc lỗi cho kịch bản bất khả thi.
+- **Socratic Gate nâng cấp**: Với yêu cầu phức tạp hoặc mơ hồ, đưa ra 2-3 hướng tiếp cận kèm chi phí và trade-off ước tính để người dùng lựa chọn; giải tỏa sự mơ hồ thay vì đếm số câu hỏi.
+- **Goal-Driven Execution (Thực thi hướng mục tiêu)**: Kế hoạch được chia thành các bước kiểm chứng tức thì `1. [Hành động] → verify: [lệnh kiểm tra]`, chốt lại bằng tiêu chí `Done when:` có thể quan sát được.
+- **Anti-Hallucination (Chống ảo giác)**: Xác minh thư viện có thật trước khi dùng (A-1..A-6), cấm bịa signature API, luôn kiểm chứng bằng output lệnh thực tế.
 
 ## Fence (sandbox WSL)
 
