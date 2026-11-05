@@ -385,6 +385,8 @@ python .github/scripts/boundary_audit.py .
 | Lint | `ruff check .` |
 | Boundary | `python .github/scripts/boundary_audit.py .` |
 | Full | `python .github/scripts/checklist.py .` |
+| Task Receipts | `python tools/task_receipt.py list` |
+| Circuit Breaker | `python tools/circuit_breaker.py status --task <id>` |
 
 ## Engines
 

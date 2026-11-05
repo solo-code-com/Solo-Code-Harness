@@ -125,7 +125,7 @@ Work is routed through four roles, declared in `.kilo/agents/jev.md`:
 |---|---|---|
 | **Jev** — routes only | agent on `openrouter/jev-router` | `edit: deny`; the wrapper launches it without `--auto` so the deny binds |
 | **Codex** — briefs and verification | `gpt-6.1-sol`, effort `medium` | `--model` / `--effort` override; launched by `codex-env.ps1` |
-| **DeepSeek V4.1 Flash** — implementation | OpenCode CLI (`tools/opencode_delegate.py`) or the direct API arm (`tools/model_api.py`) | one-shot: 2.3 s trivial, 22 s one file; 503 above ~38 K-token prompts; `--sandbox wsl` runs the same brief inside the namespace fence (8.5 s warm) |
+| **DeepSeek V4.1 Flash** — implementation | OpenCode CLI (`tools/opencode_delegate.py`) or the direct API arm (`tools/model_api.py`) | one-shot: 2.3 s trivial, 22 s one file; 503 above ~38 K-token prompts; `--sandbox wsl` runs the same brief inside the namespace fence (8.5 s warm); `--enforce-scope` strictly fails with exit 4 on out-of-scope edits |
 | **Gemini 3.8 Flash** — fast and broad work | Antigravity CLI, tiers `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | independent review, repo-wide survey |
 
 Architecture, product and security judgment is not delegated: workers are context-blind.
@@ -231,6 +231,8 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | Gate probe | `python tools/gate_probe.py` | REPORT, never blocks: which gate catches which known defect, with caught, missed and no-gate outcomes |
 | Worker stats | `python tools/worker_stats.py` | REPORT, never blocks: per worker/model success rate, median latency, cost and tokens from `.solocode/*-usage.jsonl` |
 | Review receipt | `python tools/review_receipt.py verify` | A staged change over 5 files and 120 lines needs a receipt recorded after /review; the gate blocks, the advisory hook above only measures |
+| Task receipt | `python tools/task_receipt.py list` | Lightweight proof records (.json + .md) for delegated worker runs: brief, scope, diffstat, tests, and status |
+| Circuit breaker | `python tools/circuit_breaker.py status --task <id>` | Loop budget protection: trips on 3 consecutive identical errors, emitting TASK_FAILURE_REPORT.md without destructive rollback |
 
 ## Slash Commands (Kilo + Claude Code)
 
