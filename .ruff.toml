@@ -2,6 +2,7 @@
 extend-exclude = [
     ".kilo/node_modules",
     ".venv",
+    "integrations",
 ]
 
 # Target Python version

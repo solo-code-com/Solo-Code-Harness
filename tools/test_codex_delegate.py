@@ -328,9 +328,10 @@ def test_a_launch_failure_records_no_session(monkeypatch, tmp_path):
 # ── main ─────────────────────────────────────────────────────────────────────
 
 
-def test_main_rejects_non_windows(monkeypatch, capsys):
+def test_main_rejects_non_windows(monkeypatch, capsys, tmp_path):
     mod = _load()
     monkeypatch.setattr(mod.sys, "platform", "linux")
+    monkeypatch.setattr(mod, "ROOT", tmp_path)
     assert mod.main(["task"]) == 1
     assert "Windows-only" in capsys.readouterr().err
 

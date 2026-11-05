@@ -928,6 +928,11 @@ def main(argv: list[str] | None = None) -> int:
         "--session", default=None, help="Session id to continue or create"
     )
     parser.add_argument(
+        "--record-receipt",
+        action="store_true",
+        help="Record a task receipt to .solocode/task-receipts/",
+    )
+    parser.add_argument(
         "--sandbox",
         choices=SANDBOX_CHOICES,
         default="auto",
@@ -1069,6 +1074,31 @@ def main(argv: list[str] | None = None) -> int:
         enforce=args.enforce_scope,
         before_exc=before_exc,
     )
+
+    if getattr(args, "record_receipt", False):
+        try:
+            task_receipt_mod = _load_sibling("task_receipt")
+            status_str = (
+                "VERIFIED"
+                if scope_code == 0 and not result.get("error")
+                else (
+                    "SCOPE_VIOLATION"
+                    if scope_code == SCOPE_ERROR_EXIT_CODE
+                    else "FAILED"
+                )
+            )
+            r_path = task_receipt_mod.record_task_receipt(
+                task=prompt,
+                worker="opencode",
+                model=used_model
+                or (f"agent:{args.agent}" if args.agent else "default"),
+                allowed_directory=args.directory,
+                status=status_str,
+                run_id=run_id,
+            )
+            _stderr(f"task_receipt: {r_path.name}")
+        except Exception as exc:  # noqa: BLE001 - receipt recording is non-blocking
+            _stderr(f"task_receipt: unavailable ({type(exc).__name__})")
 
     # ── Output ──
     if scope_code != 0:

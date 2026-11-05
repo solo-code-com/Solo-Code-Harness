@@ -24,6 +24,7 @@
     "refactor-cleaner": "mechanical",
     "code-simplifier": "mechanical",
     "solo-code-engineer": "default-executor",
-    "jev": "orchestrator"
+    "jev": "orchestrator",
+    "data": "default-executor"
   }
 }

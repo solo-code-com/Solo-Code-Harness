@@ -48,6 +48,9 @@
     },
     "jev": {
       "model": "openrouter/jev-router"
+    },
+    "data": {
+      "model": "opencode-go/deepseek-v4.1-flash"
     }
   },
   "permission": {

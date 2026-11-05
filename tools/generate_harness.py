@@ -225,6 +225,32 @@ def sync_skill_body_mirrors(kilo_root: Path, root: Path) -> int:
     return synced
 
 
+def sync_agent_mirrors(kilo_root: Path, root: Path) -> int:
+    """Copy .kilo/agents/*.md into .copilot/ and .gemini/ mirrors."""
+    src_dir = kilo_root / "agents"
+    if not src_dir.is_dir():
+        return 0
+    mirrors = [
+        root / ".copilot" / "agents",
+        root / ".gemini" / "antigravity" / "agents",
+    ]
+    synced = 0
+    for dst_dir in mirrors:
+        if not dst_dir.is_dir():
+            continue
+        label = dst_dir.relative_to(root).as_posix()
+        for src in sorted(src_dir.glob("*.md")):
+            dst = dst_dir / src.name
+            src_text = src.read_text(encoding="utf-8")
+            if dst.is_file() and dst.read_text(encoding="utf-8") == src_text:
+                continue
+            dst.write_text(src_text, encoding="utf-8", newline="\n")
+            print(f"  [SYNC] {label}/{src.name}")
+            synced += 1
+    print(f"Agent mirrors synced: {synced}")
+    return synced
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
@@ -244,6 +270,8 @@ def main() -> int:
         )
         rc = rc or oc_rc
 
+    print("\n--- Agent mirrors (.copilot, .gemini) ---")
+    sync_agent_mirrors(kilo_root, ROOT_DIR)
     print("\n--- Instruction mirrors (.copilot, .gemini) ---")
     sync_instruction_mirrors(kilo_root, ROOT_DIR)
     print("\n--- Memory mirrors (.copilot) ---")

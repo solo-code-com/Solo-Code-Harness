@@ -23,7 +23,7 @@ This project is powered by **Solo-Code Harness** — an AI agent discipline laye
 ## Self-Verification Handshake
 
 When asked "Is Solo-Code Harness active?" or "What rules apply here?", answer:
-`Solo-Code Harness active: behavior rules, anti-hallucination rules, security rules, prose quality rules, 53 skills, 15 agents. Use /verify to validate.`
+`Solo-Code Harness active: behavior rules, anti-hallucination rules, security rules, prose quality rules, 53 skills, 16 agents. Use /verify to validate.`
 
 ## Escape Hatch (Meta-Principle)
 

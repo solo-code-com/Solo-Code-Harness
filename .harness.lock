@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-10-28T14:48:38Z"
+generated_at = "2026-11-05T13:45:13Z"
 mode = "root"
-content_fingerprint = "sha256:2ed85ee34fe65151f53ac9a530abfd731d796d0f3dadb43fc93d6834c0d821db"
+content_fingerprint = "sha256:3bbcea4e839c7b60f653795fe85a6073162a7a556964fc219556cf6d712fbac5"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -100,6 +100,7 @@ paths = [
     "tools/check_model_catalog.py",
     "tools/check_stdlib_only.py",
     "tools/check_text_hygiene.py",
+    "tools/circuit_breaker.py",
     "tools/claude_engine.py",
     "tools/claude_guard_compat.py",
     "tools/codex_delegate.py",
@@ -146,6 +147,7 @@ paths = [
     "tools/solocode_config.py",
     "tools/subagent_cli.py",
     "tools/subagent_seam.py",
+    "tools/task_receipt.py",
     "tools/test_agent_scope.py",
     "tools/test_antigravity_delegate.py",
     "tools/test_antigravity_probe.py",
@@ -157,6 +159,7 @@ paths = [
     "tools/test_check_model_catalog.py",
     "tools/test_check_skips.py",
     "tools/test_checklist_gate.py",
+    "tools/test_circuit_breaker.py",
     "tools/test_claude_engine.py",
     "tools/test_claude_guard.py",
     "tools/test_claude_hooks.py",
@@ -204,6 +207,7 @@ paths = [
     "tools/test_stdlib_only.py",
     "tools/test_subagent_cli.py",
     "tools/test_subagent_seam.py",
+    "tools/test_task_receipt.py",
     "tools/test_text_hygiene.py",
     "tools/test_validate_schemas.py",
     "tools/test_win_sandbox.py",

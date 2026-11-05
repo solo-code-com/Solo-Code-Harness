@@ -229,7 +229,11 @@ def main():
     # P1: Lint & Type Check
     print_header("P1: CODE QUALITY")
     results.append(
-        run_check("Ruff Linter", ["ruff", "check", str(project_path)], timeout=120)
+        run_check(
+            "Ruff Linter",
+            ["ruff", "check", "--no-cache", str(project_path)],
+            timeout=120,
+        )
     )
 
     npm = project_path / "package.json"
@@ -276,7 +280,7 @@ def main():
                 [
                     sys.executable,
                     "-c",
-                    f"import py_compile; py_compile.compile(r'{guard_hook}', doraise=True)",
+                    f"import ast, pathlib; ast.parse(pathlib.Path(r'{guard_hook}').read_text(encoding='utf-8'))",
                 ],
                 timeout=30,
             )

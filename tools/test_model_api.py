@@ -157,8 +157,37 @@ _WSL = _wsl_launcher()
 
 
 def _wsl_ready() -> bool:
-    """True only when WSL answered at import time, so the suite probes once."""
-    return _WSL is not None
+    """True only when WSL answered at import time and this checkout is mounted in WSL."""
+    if _WSL is None:
+        return False
+    script = model_api._wsl_path(TOOLS / "wsl_sandbox.sh")
+    try:
+        probe = subprocess.run(
+            [_WSL, "-e", "test", "-f", script],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+        return probe.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _wsl_is_root() -> bool:
+    """True when WSL launches as root by default."""
+    if not _WSL:
+        return False
+    try:
+        p = subprocess.run(
+            [_WSL, "-e", "id", "-u"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        return p.stdout.strip() == "0"
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 _WSL_READY = _wsl_ready()
@@ -189,8 +218,9 @@ def test_wsl_sandbox_script_is_fail_closed():
 @pytest.mark.skipif(not _WSL or not _WSL_READY, reason="WSL is not available")
 def test_wsl_sandbox_refuses_to_run_without_unshare():
     """Every mount fails outside the userns, so the script must refuse with a hint."""
+    user_args = ["-u", "nobody"] if _wsl_is_root() else []
     proc = subprocess.run(
-        [_WSL, "-e", *_sandbox_argv("true")],
+        [_WSL, *user_args, "-e", *_sandbox_argv("true")],
         capture_output=True,
         text=True,
         timeout=300,

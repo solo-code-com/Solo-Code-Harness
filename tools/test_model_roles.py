@@ -46,11 +46,11 @@ def _catalog_ids() -> set[str]:
 
 
 def test_every_kilo_agent_has_a_role():
-    """All 15 .kilo/agents/*.md stems appear in the mapping, under a known role."""
+    """All .kilo/agents/*.md stems appear in the mapping, under a known role."""
     stems = {p.stem for p in (ROOT / ".kilo" / "agents").glob("*.md")}
     config = _roles_config()
 
-    assert len(stems) == 15
+    assert len(stems) == 16
     assert stems <= set(config["agents"])
     assert set(config["agents"].values()) <= set(config["roles"])
 

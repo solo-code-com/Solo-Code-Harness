@@ -1592,8 +1592,8 @@ def _uncommitted_changes(target: Path) -> list[str] | None:
     if not (target / ".git").exists():
         return None
     try:
-        proc = subprocess.run(
-            ["git", "-C", str(target), "status", "--porcelain"],
+        proc = subprocess.run(  # noqa: S603 — fixed argv
+            ["git", "-C", str(target), "status", "--porcelain"],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=30,

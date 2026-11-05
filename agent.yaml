@@ -79,6 +79,7 @@ agents:
   - typescript-reviewer
   - web-performance-auditor
   - jev
+  - data
 tags:
   - agent-harness
   - ai-coding
