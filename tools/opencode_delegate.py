@@ -47,6 +47,7 @@ from typing import Any
 # ── Constants ────────────────────────────────────────────────────────────────
 
 DEFAULT_MODEL = "opencode-go/beam-free"
+SCOPE_ERROR_EXIT_CODE = 4
 # The orchestrator runs WITHOUT --auto: that flag auto-approves past its
 # `edit: deny`, so the deny only holds once the flag is gone (measured 2026-10-16:
 # a write landed with the jev agent selected and --auto in play).
@@ -236,6 +237,100 @@ def _snapshot(root: Path) -> dict[str, str] | None:
         return None
 
 
+def _check_scope(
+    before: dict[str, str] | None,
+    directory: str,
+    result: dict[str, Any],
+    *,
+    enforce: bool = False,
+    before_exc: Exception | None = None,
+) -> int:
+    """Check paths the run changed outside --directory.
+
+    In report-only mode (enforce=False, default), reports changes outside --directory
+    to stderr and never changes the exit code (returns 0). Skips report when the run
+    reported an error or no before-snapshot was taken.
+
+    In strict mode (enforce=True), fails closed if before or after snapshot is
+    unavailable, detects any changed workspace path outside --directory even when
+    the worker reports an error, emits clear evidence to stderr, and returns
+    SCOPE_ERROR_EXIT_CODE (4).
+    """
+    if not enforce:
+        if result.get("error") or before is None:
+            return 0
+        try:
+            try:
+                prefix = Path(directory).resolve().relative_to(ROOT).as_posix()
+            except ValueError:
+                # The target is outside the repository root, so nothing changed is inside.
+                prefix = ""
+            snapshot = _load_sibling("workspace_snapshot")
+            after = _snapshot(ROOT)
+            if after is None:
+                return 0
+            changed = snapshot.changed_workspace_paths(before, after)
+            outside = snapshot.paths_outside_directory(changed, prefix)
+            if not outside:
+                return 0
+            shown = outside[:10]
+            listed = ", ".join(shown)
+            if len(outside) > len(shown):
+                listed += f", ... (+{len(outside) - len(shown)} more)"
+            # A newline in the target path must not split the one-line report.
+            shown_directory = directory.replace("\r", " ").replace("\n", " ")
+            _stderr(
+                f"scope: {len(outside)} path(s) changed outside "
+                f"--directory {shown_directory}: {listed}"
+            )
+        except Exception as exc:  # noqa: BLE001 - report only, never fatal
+            _stderr(f"scope: report unavailable ({type(exc).__name__})")
+        return 0
+
+    # Strict mode (enforce=True)
+    if before is None:
+        detail = f" ({type(before_exc).__name__})" if before_exc else ""
+        _stderr(f"scope: snapshot unavailable{detail}")
+        return SCOPE_ERROR_EXIT_CODE
+
+    try:
+        prefix = Path(directory).resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        prefix = ""
+
+    try:
+        snapshot = _load_sibling("workspace_snapshot")
+        after = _snapshot(ROOT)
+    except Exception as exc:  # noqa: BLE001 - strict scope must fail closed
+        _stderr(f"scope: snapshot unavailable ({type(exc).__name__})")
+        return SCOPE_ERROR_EXIT_CODE
+
+    if after is None:
+        _stderr("scope: snapshot unavailable (after snapshot missing)")
+        return SCOPE_ERROR_EXIT_CODE
+
+    try:
+        changed = snapshot.changed_workspace_paths(before, after)
+        outside = snapshot.paths_outside_directory(changed, prefix)
+    except Exception as exc:  # noqa: BLE001 - strict scope must fail closed
+        _stderr(f"scope: snapshot unavailable ({type(exc).__name__})")
+        return SCOPE_ERROR_EXIT_CODE
+
+    if outside:
+        shown = outside[:10]
+        listed = ", ".join(shown)
+        if len(outside) > len(shown):
+            listed += f", ... (+{len(outside) - len(shown)} more)"
+        shown_directory = directory.replace("\r", " ").replace("\n", " ")
+        _stderr(
+            f"scope: {len(outside)} path(s) changed outside "
+            f"--directory {shown_directory}: {listed}"
+        )
+        return SCOPE_ERROR_EXIT_CODE
+
+    return 0
+
+
 def _report_scope(
     before: dict[str, str] | None, directory: str, result: dict[str, Any]
 ) -> None:
@@ -247,35 +342,7 @@ def _report_scope(
     either snapshot or from the reporting is swallowed, and the after-snapshot is
     skipped entirely when the run reported an error or no before-snapshot was taken.
     """
-    if result.get("error") or before is None:
-        return
-    try:
-        try:
-            prefix = Path(directory).resolve().relative_to(ROOT).as_posix()
-        except ValueError:
-            # The target is outside the repository root, so nothing changed is inside.
-            prefix = ""
-        snapshot = _load_sibling("workspace_snapshot")
-        after = _snapshot(ROOT)
-        if after is None:
-            return
-        changed = snapshot.changed_workspace_paths(before, after)
-        outside = snapshot.paths_outside_directory(changed, prefix)
-        if not outside:
-            return
-        shown = outside[:10]
-        listed = ", ".join(shown)
-        if len(outside) > len(shown):
-            listed += f", ... (+{len(outside) - len(shown)} more)"
-        # A newline in the target path must not split the one-line report.
-        shown_directory = directory.replace("\r", " ").replace("\n", " ")
-        _stderr(
-            f"scope: {len(outside)} path(s) changed outside "
-            f"--directory {shown_directory}: {listed}"
-        )
-    except Exception as exc:  # noqa: BLE001 - report only, never fatal
-        _stderr(f"scope: report unavailable ({type(exc).__name__})")
-        return
+    _check_scope(before, directory, result, enforce=False)
 
 
 # npm/bun installs put a `.cmd`/`.bat` shim on PATH. Its `%*` expansion mangles
@@ -317,7 +384,14 @@ def find_opencode_binary() -> str | None:
     """Find OpenCode CLI binary. Check workspace and PATH, then common install locations."""
     # Check bundled workspace install first
     for ws_cand in (
-        ROOT / ".solocode" / "npm" / "node_modules" / "@opencode" / "cli" / "bin" / "opencode.exe",
+        ROOT
+        / ".solocode"
+        / "npm"
+        / "node_modules"
+        / "@opencode"
+        / "cli"
+        / "bin"
+        / "opencode.exe",
         ROOT / ".solocode" / "npm" / "node_modules" / ".bin" / "opencode",
     ):
         if ws_cand.is_file() and os.access(ws_cand, os.X_OK):
@@ -346,7 +420,14 @@ def find_opencode_binary() -> str | None:
 
     # Common POSIX install locations (bundled npm, npm global, ~/.local/bin)
     for posix_cand in (
-        ROOT / ".solocode" / "npm" / "node_modules" / "@opencode" / "cli" / "bin" / "opencode.exe",
+        ROOT
+        / ".solocode"
+        / "npm"
+        / "node_modules"
+        / "@opencode"
+        / "cli"
+        / "bin"
+        / "opencode.exe",
         ROOT / ".solocode" / "npm" / "node_modules" / ".bin" / "opencode",
         Path.home() / ".local" / "bin" / "opencode",
         Path.home() / ".npm-global" / "bin" / "opencode",
@@ -816,6 +897,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Working directory for opencode CLI (default: current dir)",
     )
     parser.add_argument(
+        "--enforce-scope",
+        action="store_true",
+        help="Fail with exit code 4 if any workspace path outside --directory is changed",
+    )
+    parser.add_argument(
         "--no-guardrail",
         action="store_true",
         help="Skip prepending the strict guardrail preamble",
@@ -852,6 +938,14 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+
+    if args.enforce_scope:
+        try:
+            rel_dir = Path(args.directory).resolve().relative_to(ROOT).as_posix()
+        except ValueError:
+            rel_dir = ""
+        if rel_dir in (".", ""):
+            parser.error("--enforce-scope requires a non-root --directory")
 
     sandbox = args.sandbox
     if sandbox == "auto":
@@ -919,12 +1013,18 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── Run opencode CLI → parse events → log ──
     run_id = uuid.uuid4().hex
-    log_start(model or f"agent:{args.agent}", len(prompt), run_id)
     start = time.monotonic()
+    before_exc: Exception | None = None
     try:
         before = _snapshot(ROOT)
-    except Exception:  # noqa: BLE001 - report only, never fatal
+    except Exception as exc:  # noqa: BLE001 - report only by default
         before = None
+        before_exc = exc
+    if args.enforce_scope and before is None:
+        detail = f" ({type(before_exc).__name__})" if before_exc else ""
+        _stderr(f"scope: snapshot unavailable{detail}")
+        return SCOPE_ERROR_EXIT_CODE
+    log_start(model or f"agent:{args.agent}", len(prompt), run_id)
 
     result: dict[str, Any] = {}
     used_model = model
@@ -962,9 +1062,20 @@ def main(argv: list[str] | None = None) -> int:
         run_id,
         sandbox=sandbox,
     )
-    _report_scope(before, args.directory, result)
+    scope_code = _check_scope(
+        before,
+        args.directory,
+        result,
+        enforce=args.enforce_scope,
+        before_exc=before_exc,
+    )
 
     # ── Output ──
+    if scope_code != 0:
+        if result.get("error"):
+            _stderr(f"Error: {result['error']}")
+        return scope_code
+
     if result.get("error"):
         _stderr(f"Error: {result['error']}")
         return 2

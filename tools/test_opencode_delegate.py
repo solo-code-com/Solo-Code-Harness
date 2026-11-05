@@ -650,6 +650,172 @@ def test_main_keeps_the_scope_report_on_one_line(monkeypatch, tmp_path, capsys):
     assert any(expected in line for line in capsys.readouterr().err.splitlines())
 
 
+# ── strict scope enforcement (--enforce-scope) ──────────────────────────────
+
+
+def test_enforce_scope_clean_scope_exits_zero(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    (ws / "src" / "keep.py").write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    def fake_run(**_kwargs):
+        (ws / "src" / "inside.py").write_text("x", encoding="utf-8")
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    argv = [*_scope_argv(ws), "--enforce-scope"]
+    assert opencode_delegate.main(argv) == 0
+    assert "scope:" not in capsys.readouterr().err
+
+
+def test_enforce_scope_out_of_scope_change_fails_with_distinct_status(
+    monkeypatch, tmp_path, capsys
+):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    (ws / "src" / "keep.py").write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    def fake_run(**_kwargs):
+        (ws / "docs").mkdir(exist_ok=True)
+        (ws / "docs" / "escaped.md").write_text("x", encoding="utf-8")
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    argv = [*_scope_argv(ws), "--enforce-scope"]
+    assert opencode_delegate.main(argv) == opencode_delegate.SCOPE_ERROR_EXIT_CODE
+    # Never auto-rollback or delete user changes:
+    assert (ws / "docs" / "escaped.md").is_file()
+
+    err = capsys.readouterr().err
+    assert "scope: 1 path(s) changed outside --directory" in err
+    assert "docs/escaped.md" in err
+
+
+def test_enforce_scope_before_snapshot_failure_fails_closed(
+    monkeypatch, tmp_path, capsys
+):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    (ws / "src" / "keep.py").write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    def raising_snapshot(_root):
+        raise RuntimeError("before snapshot failed")
+
+    monkeypatch.setattr(opencode_delegate, "_snapshot", raising_snapshot)
+
+    def should_not_run(**_kwargs):
+        pytest.fail("worker started without a baseline snapshot")
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", should_not_run)
+
+    argv = [*_scope_argv(ws), "--enforce-scope"]
+    assert opencode_delegate.main(argv) == opencode_delegate.SCOPE_ERROR_EXIT_CODE
+
+    err = capsys.readouterr().err
+    assert "scope: snapshot unavailable" in err
+    assert "RuntimeError" in err
+
+
+def test_enforce_scope_after_snapshot_failure_fails_closed(
+    monkeypatch, tmp_path, capsys
+):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    (ws / "src" / "keep.py").write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    calls: list[Path] = []
+
+    def before_then_explode(root):
+        calls.append(root)
+        if len(calls) == 1:
+            return {"src/keep.py": "hash"}
+        raise RuntimeError("after snapshot failed")
+
+    monkeypatch.setattr(opencode_delegate, "_snapshot", before_then_explode)
+    monkeypatch.setattr(
+        opencode_delegate, "run_opencode_cli", lambda **_kw: _ok_result()
+    )
+
+    argv = [*_scope_argv(ws), "--enforce-scope"]
+    assert opencode_delegate.main(argv) == opencode_delegate.SCOPE_ERROR_EXIT_CODE
+    assert len(calls) == 2
+
+    err = capsys.readouterr().err
+    assert "scope: snapshot unavailable" in err
+    assert "RuntimeError" in err
+
+
+def test_enforce_scope_worker_error_with_scope_breach_returns_scope_status(
+    monkeypatch, tmp_path, capsys
+):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    (ws / "src" / "keep.py").write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    def fake_run(**_kwargs):
+        (ws / "docs").mkdir(exist_ok=True)
+        (ws / "docs" / "escaped.md").write_text("x", encoding="utf-8")
+        return {**_ok_result(), "error": "worker crashed"}
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    argv = [*_scope_argv(ws), "--enforce-scope"]
+    assert opencode_delegate.main(argv) == opencode_delegate.SCOPE_ERROR_EXIT_CODE
+
+    err = capsys.readouterr().err
+    assert "scope: 1 path(s) changed outside --directory" in err
+    assert "docs/escaped.md" in err
+    assert "Error: worker crashed" in err
+
+
+def test_default_compatibility_keeps_report_only_exit_zero(
+    monkeypatch, tmp_path, capsys
+):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    (ws / "src" / "keep.py").write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    def fake_run(**_kwargs):
+        (ws / "docs").mkdir(exist_ok=True)
+        (ws / "docs" / "escaped.md").write_text("x", encoding="utf-8")
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    # Without --enforce-scope (default): report-only, exit 0
+    assert opencode_delegate.main(_scope_argv(ws)) == 0
+
+    err = capsys.readouterr().err
+    assert "scope: 1 path(s) changed outside --directory" in err
+    assert "docs/escaped.md" in err
+
+
+def test_enforce_scope_requires_non_root_directory(monkeypatch, tmp_path):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    with pytest.raises(SystemExit):
+        opencode_delegate.main(
+            ["do it", "--no-guardrail", "--enforce-scope", "--directory", str(ws)]
+        )
+
+
 # ── WSL sandbox ──────────────────────────────────────────────────────────────
 
 
@@ -1067,15 +1233,27 @@ def test_wsl_sandbox_runs_a_brief_through_the_fence():
 def test_looks_like_model_exhausted():
     """Tightened quota markers match only actual exhaustion/routing failures."""
     assert opencode_delegate._looks_like_model_exhausted("429 Too Many Requests")
-    assert opencode_delegate._looks_like_model_exhausted("Resource exhausted: quota exceeded")
-    assert opencode_delegate._looks_like_model_exhausted("You have insufficient credits")
-    assert opencode_delegate._looks_like_model_exhausted("provider.no-route: Model unavailable")
+    assert opencode_delegate._looks_like_model_exhausted(
+        "Resource exhausted: quota exceeded"
+    )
+    assert opencode_delegate._looks_like_model_exhausted(
+        "You have insufficient credits"
+    )
+    assert opencode_delegate._looks_like_model_exhausted(
+        "provider.no-route: Model unavailable"
+    )
     assert opencode_delegate._looks_like_model_exhausted("Rate limit reached for model")
 
     # Regular runtime errors must NOT be mistaken for quota exhaustion
-    assert not opencode_delegate._looks_like_model_exhausted("syntax error: unexpected token")
-    assert not opencode_delegate._looks_like_model_exhausted("insufficient arguments supplied to command")
-    assert not opencode_delegate._looks_like_model_exhausted("FileNotFoundError: no such file")
+    assert not opencode_delegate._looks_like_model_exhausted(
+        "syntax error: unexpected token"
+    )
+    assert not opencode_delegate._looks_like_model_exhausted(
+        "insufficient arguments supplied to command"
+    )
+    assert not opencode_delegate._looks_like_model_exhausted(
+        "FileNotFoundError: no such file"
+    )
     assert not opencode_delegate._looks_like_model_exhausted("unknown error: disk full")
 
 
@@ -1091,11 +1269,13 @@ def test_fallback_chain_rotates_on_quota_error(monkeypatch):
         return {"text": "Success from fallback model", "error": None}
 
     monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run_opencode_cli)
-    monkeypatch.setattr(opencode_delegate, "find_opencode_binary", lambda: "/bin/opencode")
+    monkeypatch.setattr(
+        opencode_delegate, "find_opencode_binary", lambda: "/bin/opencode"
+    )
 
-    code = opencode_delegate.main([
-        "--model", "opencode/deepseek-v4.1-flash-free", "test prompt"
-    ])
+    code = opencode_delegate.main(
+        ["--model", "opencode/deepseek-v4.1-flash-free", "test prompt"]
+    )
     assert code == 0
     assert len(attempted_models) == 2
     assert attempted_models[0] == "opencode/deepseek-v4.1-flash-free"
@@ -1112,11 +1292,12 @@ def test_fallback_chain_does_not_rotate_on_runtime_error(monkeypatch):
         return {"text": "", "error": "TypeError: null pointer in task execution"}
 
     monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run_opencode_cli)
-    monkeypatch.setattr(opencode_delegate, "find_opencode_binary", lambda: "/bin/opencode")
+    monkeypatch.setattr(
+        opencode_delegate, "find_opencode_binary", lambda: "/bin/opencode"
+    )
 
-    code = opencode_delegate.main([
-        "--model", "opencode/deepseek-v4.1-flash-free", "test prompt"
-    ])
+    code = opencode_delegate.main(
+        ["--model", "opencode/deepseek-v4.1-flash-free", "test prompt"]
+    )
     assert code == 2
     assert len(attempted_models) == 1
-
