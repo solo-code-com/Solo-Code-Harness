@@ -624,6 +624,50 @@ def resolve_wsl_binary(explicit: str | None) -> str | None:
     return binary
 
 
+def _resolve_default_agent() -> str | None:
+    """Read the project's default_agent from root opencode.json, or None.
+
+    Resolved from ROOT, never Path.cwd(): the wrapper is often launched from a
+    subdirectory, and a cwd that misses the file reads as "no default agent" --
+    which re-adds --auto and bypasses the orchestrator's write deny.
+    """
+    try:
+        path = ROOT / "opencode.json"
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+        candidate = cfg.get("default_agent")
+        return candidate if isinstance(candidate, str) and candidate.strip() else None
+    except (OSError, ValueError):
+        return None
+
+
+def _effective_agent(agent: str | None) -> str | None:
+    """The agent OpenCode will actually load: the named one, else the project default.
+
+    One resolver for both the argv and the log line, so the printed command cannot claim
+    `--auto` while the argv withholds it.
+    """
+    return agent or _resolve_default_agent()
+
+
+def _describe_run(agent: str | None, model: str | None, sandbox: str) -> str:
+    """The one-line log of what will run, built from the same resolver as the argv.
+
+    A separate condition here is how the log once claimed `--auto` for the orchestrator
+    while the argv withheld it.
+    """
+    effective = _effective_agent(agent)
+    running = "Running: opencode run ..."
+    if effective:
+        running += f" --agent {effective}"
+    running += f" --model {model}" if model else " --model (agent default)"
+    running += " --format json"
+    if effective != ORCHESTRATOR_AGENT:
+        running += " --auto"
+    if sandbox == "wsl":
+        running += " [sandbox=wsl]"
+    return running
+
+
 def _inner_argv(
     prompt: str,
     model: str | None,
@@ -638,8 +682,8 @@ def _inner_argv(
         "json",
         "--standalone",  # private server -- do not touch the shared user server
     ]
-    if agent != ORCHESTRATOR_AGENT:
-        # Workers need unattended writes; the orchestrator must not have them.
+    effective_agent = _effective_agent(agent)
+    if effective_agent != ORCHESTRATOR_AGENT:
         argv.append("--auto")
     if model:  # the orchestrator's model is passed explicitly; v2.0.32 ignores an agent's own model
         argv += ["--model", model]
@@ -744,17 +788,7 @@ def run_opencode_cli(
             home_dir.mkdir(parents=True, exist_ok=True)
             env["HOME"] = str(home_dir)
 
-    # Built from what the argv actually got: the orchestrator runs without --auto.
-    running = "Running: opencode run ..."
-    if agent:
-        running += f" --agent {agent}"
-    running += f" --model {model}" if model else " --model (agent default)"
-    running += " --format json"
-    if agent != ORCHESTRATOR_AGENT:
-        running += " --auto"
-    if sandbox == "wsl":
-        running += " [sandbox=wsl]"
-    _stderr(running)
+    _stderr(_describe_run(agent, model, sandbox))
 
     registry = _load_sibling("session_registry")
     try:
@@ -777,6 +811,7 @@ def run_opencode_cli(
     run_id = registry.record_start(
         "opencode",
         model=model or (f"agent:{agent}" if agent else None),
+        agent=agent,
         pid=proc.pid,
         argv=cmd,
     )
@@ -818,7 +853,9 @@ def run_opencode_cli(
     return parse_json_events(stdout)
 
 
-def log_start(model: str, prompt_len: int, run_id: str) -> None:
+def log_start(
+    model: str, prompt_len: int, run_id: str, agent: str | None = None
+) -> None:
     """Append a phase:start row so a lost run is distinguishable from a never-run one.
 
     The start row pairs with the finish row log_usage writes: they share run_id, so a
@@ -830,6 +867,7 @@ def log_start(model: str, prompt_len: int, run_id: str) -> None:
         entry: dict[str, Any] = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "model": model,
+            "agent": agent,
             "prompt_chars": prompt_len,
             "elapsed_s": 0,
             "phase": "start",
@@ -848,6 +886,7 @@ def log_usage(
     result: dict[str, Any],
     run_id: str,
     sandbox: str = "win",
+    agent: str | None = None,
 ) -> None:
     """Log delegation call to .solocode/opencode-usage.jsonl for auditing."""
     try:
@@ -855,6 +894,7 @@ def log_usage(
         entry: dict[str, Any] = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "model": model,
+            "agent": agent,
             "prompt_chars": prompt_len,
             "elapsed_s": round(elapsed, 2),
             "session_id": result.get("session_id"),
@@ -1029,7 +1069,7 @@ def main(argv: list[str] | None = None) -> int:
         detail = f" ({type(before_exc).__name__})" if before_exc else ""
         _stderr(f"scope: snapshot unavailable{detail}")
         return SCOPE_ERROR_EXIT_CODE
-    log_start(model or f"agent:{args.agent}", len(prompt), run_id)
+    log_start(model or f"agent:{args.agent}", len(prompt), run_id, agent=args.agent)
 
     result: dict[str, Any] = {}
     used_model = model
@@ -1066,6 +1106,7 @@ def main(argv: list[str] | None = None) -> int:
         result,
         run_id,
         sandbox=sandbox,
+        agent=args.agent,
     )
     scope_code = _check_scope(
         before,

@@ -144,3 +144,59 @@ def test_provider_endpoint_keeps_the_models_path(
     url, key = env_file.provider_endpoint("deepseek", "models")
     assert url == raw + "/models"
     assert key == "test-key"
+
+
+def _point_at(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, text: str) -> None:
+    """Give `provider_endpoint` a temp `.env`, parsed by the real reader."""
+    env = tmp_path / ".env"
+    env.write_text(text, encoding="utf-8")
+    real_parse = env_file.parse_env_file
+    monkeypatch.setattr(env_file, "parse_env_file", lambda _path: real_parse(env))
+    monkeypatch.setattr(env_file, "_WARNED_KEY_CONFLICTS", set())
+
+
+def test_provider_endpoint_warns_when_the_shell_shadows_the_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A stale export wins silently today; the warning is the only pointer to the 401's cause."""
+    _point_at(monkeypatch, tmp_path, "COMMANDCODE_API_KEY=file-key\n")
+    monkeypatch.setenv("COMMANDCODE_API_KEY", "shell-key")
+    _url, key = env_file.provider_endpoint("commandcode", "chat")
+    err = capsys.readouterr().err
+    assert key == "shell-key", "the shell still wins"
+    assert err.count("COMMANDCODE_API_KEY differs between the shell and .env") == 1
+    assert "shell-key" not in err and "file-key" not in err, (
+        "the warning must not leak the key"
+    )
+
+
+def test_provider_endpoint_warns_once_per_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A delegate calls this per request; the hint must not flood stderr."""
+    _point_at(monkeypatch, tmp_path, "COMMANDCODE_API_KEY=file-key\n")
+    monkeypatch.setenv("COMMANDCODE_API_KEY", "shell-key")
+    env_file.provider_endpoint("commandcode", "chat")
+    env_file.provider_endpoint("commandcode", "chat")
+    assert capsys.readouterr().err.count("differs between the shell and .env") == 1
+
+
+def test_provider_endpoint_is_silent_when_the_values_agree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _point_at(monkeypatch, tmp_path, "COMMANDCODE_API_KEY=same-key\n")
+    monkeypatch.setenv("COMMANDCODE_API_KEY", "same-key")
+    _url, key = env_file.provider_endpoint("commandcode", "chat")
+    assert key == "same-key"
+    assert "differs between the shell and .env" not in capsys.readouterr().err
+
+
+def test_provider_endpoint_is_silent_when_only_the_env_file_has_the_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """One source means nothing is shadowed, so the file value is used without comment."""
+    _point_at(monkeypatch, tmp_path, "COMMANDCODE_API_KEY=file-key\n")
+    monkeypatch.delenv("COMMANDCODE_API_KEY", raising=False)
+    _url, key = env_file.provider_endpoint("commandcode", "chat")
+    assert key == "file-key"
+    assert "differs between the shell and .env" not in capsys.readouterr().err

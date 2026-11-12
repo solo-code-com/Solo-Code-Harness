@@ -7,6 +7,10 @@ because the only route is `POST <base>/systemone` (measured 2026-10-20). Pointin
 at `/chat/completions` is refused with `unsupported_model`; the release-pinned
 `typesafe/jev-1.14.0` answers the same shape at the same price, and the `typesafe/jev-router`
 alias is rejected with a message naming those two ids.
+The base URL must be the Command Code gateway (`COMMANDCODE_BASE_URL`, without a
+`/chat/completions` suffix). Binding this tool to the `deepseek` provider was the defect that made
+it answer 404 once `.env` pointed at the official DeepSeek API. Verified live 2026-11-12:
+`POST <base>/systemone` answered 200 in 0.79s with `{"answers": {"is_urgent": {"noul": 0.83}}}`.
 
 The reply is probabilities, so the request has to carry the questions:
 
@@ -126,10 +130,10 @@ def decide(
     }
     started = time.monotonic()
     try:
-        url, key = env_file.provider_endpoint("deepseek", "chat")
+        url, key = env_file.provider_endpoint("commandcode", "chat")
         if not url or not key:
             raise JevDecideError(
-                "missing base url or deepseek credential in .env", config=True
+                "missing base url or commandcode credential in .env", config=True
             )
         endpoint = url.removesuffix("/chat/completions") + ENDPOINT_PATH
         request = urllib.request.Request(  # noqa: S310 - operator-configured https endpoint

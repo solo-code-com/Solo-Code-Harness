@@ -123,8 +123,8 @@ Work is routed through four roles, declared in `.kilo/agents/jev.md`:
 
 | Role | Engine | Notes |
 |---|---|---|
-| **Jev** — routes only | agent on `openrouter/jev-router` | `edit: deny`; the wrapper launches it without `--auto` so the deny binds |
-| **Codex** — briefs and verification | `gpt-6.1-sol`, effort `medium` | `--model` / `--effort` override; launched by `codex-env.ps1` |
+| **Jev** — routes only | agent on `openrouter/jev-router` | `edit: deny`; the wrapper launches it without `--auto` so the deny binds; it also resolves the project `default_agent` before granting `--auto`, and `tools/router.py` records the routing decision |
+| **Codex** — briefs and verification | `gpt-6.1-sol`, effort `medium` | `--model` / `--effort` override; launched by `codex-env.ps1`. It is optional and absent on this host: when it is missing, Jev writes the brief itself and DeepSeek re-checks the result, and verification still ends with the gates |
 | **DeepSeek V4.1 Flash** — implementation | OpenCode CLI (`tools/opencode_delegate.py`) or the direct API arm (`tools/model_api.py`) | one-shot: 2.3 s trivial, 22 s one file; 503 above ~38 K-token prompts; `--sandbox wsl` runs the same brief inside the namespace fence (8.5 s warm); `--enforce-scope` strictly fails with exit 4 on out-of-scope edits |
 | **Gemini 3.8 Flash** — fast and broad work | Antigravity CLI, tiers `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | independent review, repo-wide survey |
 
@@ -134,6 +134,17 @@ Architecture, product and security judgment is not delegated: workers are contex
 one error invisible in its own summary — a wrong finding marked "Confident: Yes", two false
 positives reported as "unsure about: nothing". Their evidence is reliable; their self-assessment is
 not, so the orchestrator re-runs the commands and the real gates before trusting a change.
+
+### Routing decisions
+
+- `tools/router.py "<task>"` classifies a task by rule table and names a brain, a worker, a model and a budget.
+  `--dry-run` appends the decision to `.solocode/route-decisions.jsonl`; nothing is spawned.
+- The brain fallback chain lives in `tools/config/model-roles.json` as `routing_brains`; it never falls back to the
+  executor model.
+- `tools/decision_probe.py` records and replays the Google decision endpoint. It is marked UNVERIFIED: the endpoint
+  answers 402 until the project has credits, so only the request field types are known.
+
+Writes need `--agent solo-code-engineer`; without it the wrapper now withholds `--auto`.
 
 ## Core Operating Discipline
 

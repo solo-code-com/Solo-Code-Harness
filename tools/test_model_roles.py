@@ -76,3 +76,15 @@ def test_build_agent_models_covers_most_agents():
         opencode_engine._JEV_AGENT_MODEL,
         opencode_engine._JEV_AGENT_FALLBACK,
     )
+
+
+def test_a_missing_jev_router_falls_to_the_declared_brain(monkeypatch):
+    """The orchestrator never silently drops to the executor model (report G3)."""
+    config = _roles_config()
+    brains = config["routing_brains"]
+
+    assert len(brains) > 1
+    assert brains[1] != config["roles"]["default-executor"]
+
+    monkeypatch.delitem(opencode_engine._OPENROUTER_MODELS, "jev-router", raising=False)
+    assert opencode_engine._build_agent_models()["jev"]["model"] == brains[1]

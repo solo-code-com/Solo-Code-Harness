@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-05T13:51:05Z"
+generated_at = "2026-11-12T12:12:03Z"
 mode = "root"
-content_fingerprint = "sha256:3aa89d89daaa16e10140bdeed0984b720508489f08326d11db132ab37d4396f7"
+content_fingerprint = "sha256:3b77a8d5952be2df9b7766b8a6ec2928d6a95031a01c4809ed8508f03141cb40"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -116,6 +116,7 @@ paths = [
     "tools/config/prose-budget.json",
     "tools/config/review-policy.json",
     "tools/coverage_gate.py",
+    "tools/decision_probe.py",
     "tools/deploy.py",
     "tools/dsh_delegate.py",
     "tools/env_file.py",
@@ -137,6 +138,7 @@ paths = [
     "tools/opencode_engine.py",
     "tools/prose_lint.py",
     "tools/review_receipt.py",
+    "tools/router.py",
     "tools/session_analytics.py",
     "tools/session_control.py",
     "tools/session_persistence.py",
@@ -171,6 +173,7 @@ paths = [
     "tools/test_compaction.py",
     "tools/test_compaction_pruner.py",
     "tools/test_coverage_gate.py",
+    "tools/test_decision_probe.py",
     "tools/test_deploy.py",
     "tools/test_dsh_delegate.py",
     "tools/test_e2e.py",
@@ -196,6 +199,7 @@ paths = [
     "tools/test_opencode_delegate.py",
     "tools/test_prose_lint.py",
     "tools/test_review_receipt.py",
+    "tools/test_router.py",
     "tools/test_secret_patterns.py",
     "tools/test_session_analytics.py",
     "tools/test_session_control.py",

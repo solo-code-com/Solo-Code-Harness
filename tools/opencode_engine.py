@@ -699,8 +699,8 @@ _COMMANDCODE_MODELS: dict[str, dict[str, Any]] = {
 # run uses, while this one is the orchestrator's own brain.
 _JEV_AGENT_MODEL = "openrouter/jev-router"
 # Operator rule (2026-10-15): when the Jev model cannot be loaded, the agent runs
-# on DeepSeek V4.1 Flash -- the harness's default *executor* -- not on the
-# orchestrator default (V4 Pro).
+# on a reasoning model. Kept for callers that name it explicitly; the routing path
+# in `_build_agent_models` reads the declared `routing_brains` chain instead.
 _JEV_AGENT_FALLBACK = "opencode-go/deepseek-v4.1-flash"
 
 
@@ -711,13 +711,23 @@ _JEV_AGENT_FALLBACK = "opencode-go/deepseek-v4.1-flash"
 _MODEL_ROLES_PATH = ROOT_DIR / "tools" / "config" / "model-roles.json"
 
 
+def _routing_brains() -> list[str]:
+    """Ordered brain fallback chain from model-roles.json, or the single default."""
+    with contextlib.suppress(OSError, json.JSONDecodeError):
+        config = json.loads(_MODEL_ROLES_PATH.read_text(encoding="utf-8"))
+        brains = config.get("routing_brains")
+        if isinstance(brains, list) and brains:
+            return [b for b in brains if isinstance(b, str) and b.strip()]
+    return [_JEV_AGENT_MODEL]
+
+
 def _build_agent_models() -> dict[str, dict[str, str]]:
     """Per-agent model overrides, read from tools/config/model-roles.json.
 
-    Every agent the file maps gets an override; `jev` keeps the operator's rule
-    (2026-10-15): when the OpenRouter catalog does not declare the Jev router, the
-    orchestrator runs on the harness's default executor, not on the orchestrator
-    default. A missing or unreadable file leaves `jev` on that same rule.
+    Every agent the file maps gets an override. When the OpenRouter catalog does
+    not declare the Jev router, `jev` falls to the second declared routing brain,
+    so the orchestrator keeps a reasoning model. A missing or unreadable file
+    leaves `jev` on the Jev model itself.
     """
     models: dict[str, dict[str, str]] = {}
     with contextlib.suppress(OSError, json.JSONDecodeError):
@@ -729,8 +739,11 @@ def _build_agent_models() -> dict[str, dict[str, str]]:
                 models[agent] = {"model": model}
     if "jev" not in models:
         models["jev"] = {"model": _JEV_AGENT_MODEL}
+    # Invariant: the orchestrator never silently runs on the executor model, so a
+    # missing Jev router falls to the declared reasoning brain, not to the executor.
     if "jev-router" not in _OPENROUTER_MODELS:
-        models["jev"] = {"model": _JEV_AGENT_FALLBACK}
+        brains = _routing_brains()
+        models["jev"] = {"model": brains[1] if len(brains) > 1 else _JEV_AGENT_MODEL}
     return models
 
 

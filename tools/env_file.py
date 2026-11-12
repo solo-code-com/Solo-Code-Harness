@@ -14,6 +14,7 @@ is passed: the shell's environment stays the operator's decision.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 #: Variables the CLI config reads but `.env` does not define directly: the launcher derives
@@ -37,6 +38,10 @@ MODEL_OVERRIDES: dict[str, str] = {
     "codex": "SOLOCODE_MODEL_CODEX",
     "antigravity": "SOLOCODE_MODEL_ANTIGRAVITY",
 }
+
+#: Key variables already reported as differing between the shell and `.env`, so a long-running
+#: delegate says it once instead of once per request.
+_WARNED_KEY_CONFLICTS: set[str] = set()
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
@@ -124,11 +129,31 @@ PROVIDERS: dict[str, dict[str, str]] = {
 }
 
 
+def _warn_key_conflict(name: str, shell: str, file_value: str) -> None:
+    """Name the winning source when the shell and `.env` disagree, without printing the value.
+
+    A stale exported key shadows `.env`, and the provider then answers 401, which reads like
+    "the key is wrong" while `.env` holds a working one. The shell still wins: it is the
+    operator's decision.
+    """
+    if not shell or not file_value or shell == file_value:
+        return
+    if name in _WARNED_KEY_CONFLICTS:
+        return
+    _WARNED_KEY_CONFLICTS.add(name)
+    print(
+        f"[env_file] {name} differs between the shell and .env; the shell wins",
+        file=sys.stderr,
+    )
+
+
 def provider_endpoint(provider: str, kind: str = "chat") -> tuple[str, str]:
     """(url, api key) for a provider and an endpoint kind (`chat` or `models`).
 
     The base url comes from the raw `.env` value (falling back to the process environment), and
-    the key honours the aliases above, so a `freemodel` call works without the launcher.
+    the key honours the aliases above, so a `freemodel` call works without the launcher. The
+    process environment wins for the key; when it disagrees with `.env`, one line naming the
+    variable goes to stderr so a stale export cannot masquerade as a bad key.
     """
     spec = PROVIDERS.get(provider)
     if not spec:
@@ -146,5 +171,10 @@ def provider_endpoint(provider: str, kind: str = "chat") -> tuple[str, str]:
         key = os.environ.get("OPENAI_API_KEY", "") or parse_env_file(env_path).get(
             "OPENAI_API_KEY", ""
         )
+    _warn_key_conflict(
+        spec["key_env"],
+        os.environ.get(spec["key_env"], ""),
+        parse_env_file(env_path).get(spec["key_env"], ""),
+    )
     path = spec["chat_path"] if kind == "chat" else spec["models_path"]
     return base.rstrip("/") + path, key

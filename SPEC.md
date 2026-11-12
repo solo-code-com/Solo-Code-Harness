@@ -63,12 +63,12 @@ Nếu plugin bắt đầu chứa code tự dựng lại native capability → v�
 
 | Vai trò | Ai | Việc |
 |---|---|---|
-| **Điều phối** | **Jev** — agent chạy trên **model JEV** (`openrouter/jev-router`) | Nhận bài, chia task, gọi worker qua CLI, thu kết quả, chạy gate |
-| **Ra đề bài + verify** | **Codex / ChatGPT** (`gpt-6.1-sol`, effort `medium`, đổi được bằng `--model`/`--effort`) | Viết brief cho thay đổi; **verify** kết quả trả về (read-only) |
+| **Điều phối** | **Jev** — agent chạy trên **model JEV** (`openrouter/jev-router`) | Nhận bài, chia task, gọi worker qua CLI, thu kết quả, chạy gate; quyết định định tuyến do `tools/router.py` ghi, và chuỗi fallback của brain khai là `routing_brains` trong `tools/config/model-roles.json` |
+| **Ra đề bài + verify** | **Codex / ChatGPT** (`gpt-6.1-sol`, effort `medium`, đổi được bằng `--model`/`--effort`) | Viết brief cho thay đổi; **verify** kết quả trả về (read-only). Codex là tùy chọn và không có trên máy này: khi thiếu nó, Jev tự viết brief và DeepSeek thẩm tra lại kết quả, còn nghiệm thu vẫn kết thúc bằng các gate |
 | **Code sâu** | **DeepSeek V4.1 Flash** qua OpenCode CLI; `dsh` cho việc DeepSeek-native | Cài đặt theo brief |
 | **Việc nhanh nhẹ** | **Gemini 3.8 Flash** qua Antigravity CLI | Tra cứu/đọc nhanh — token free |
 
-- **Fallback:** khi Codex không ổn định, **DeepSeek viết brief và thẩm tra lại kết quả của Gemini**; Jev vẫn điều phối.
+- **Fallback:** khi Codex không ổn định, **DeepSeek viết brief và thẩm tra lại kết quả của Gemini**; Jev vẫn điều phối. Fallback này là mặc định vì Codex không được cài trên máy này.
 - Jev **chỉ điều phối**: `edit: deny` trong agent config, và wrapper chạy agent này **không kèm `--auto`** để deny có hiệu lực thật.
 - Verify live 2026-10-16: Jev→Codex `CODEX_VIA_JEV_OK` · DeepSeek `DEEPSEEK_ARM_OK` · Gemini `GEMINI_ARM_OK` · Codex trực tiếp `CODEX_ARM_OK`, và trả đúng `DEFAULT_MODEL=gpt-6.1-sol DEFAULT_EFFORT=medium`.
 - **Giới hạn đã đo:** nhánh DeepSeek **từ chối task tài liệu quy mô lớn** (2 lần liên tiếp không ghi file: một lần exit 2, một lần hỏi lại "viết vào đâu") — dùng nó cho task hẹp với đường dẫn đích tường minh. Nhánh **dsh đã verify 2026-10-16** (`DSH_ARM_OK`, 7s) sau 3 điều kiện: `pnpm build` trong checkout, `DSH_CLIENT_COMMIT_HASH` (checkout không có `.git`), và **bỏ `DEEPSEEK_BASE_URL`** khỏi môi trường (nếu còn, dsh 404 vì protocol `messages` của nó).
@@ -251,11 +251,19 @@ Lịch sử đầy đủ + lý do từng quyết định: `.kilo/memory/MEMORY.m
 (bản đã nén ra khỏi MEMORY.md để giữ dưới ngưỡng `memory_gate`). Các mốc
 lớn kể từ v3.3.0:
 
+- **2026-11-12**: `tools/router.py` ghi sổ quyết định định tuyến (`--dry-run` append vào
+  `.solocode/route-decisions.jsonl`), và chuỗi fallback của brain khai là `routing_brains` trong
+  `tools/config/model-roles.json`. Wrapper delegate nay resolve `default_agent` trước khi cấp `--auto`.
+  `gemini-decision-1` được ghi nhận là decision endpoint với output token limit 1, kèm `tools/decision_probe.py`
+  sau marker UNVERIFIED, còn tools/jev_decide.py được phục hồi trong ngày sau khi bind sang provider
+  `commandcode` (đo trực tiếp: HTTP 200, 0.79–0.93s).
+
 - **2026-10-20**: catalog **105 model / 4 provider** (opencode-go 95, freemodel 3, deepseek 2,
   openrouter 5); thêm `minimax/minimax-m3.1-flash`, bản `:free` của nó và `reflection/beam:free`,
   bỏ id đã chết `stealth/cat-jam:free`. Jev decision model (`typesafe/jev`) chỉ phục vụ trên
-  `POST /provider/v1/systemone` và không nằm trong `/models`; `tools/jev_decide.py` gọi nó, và
-  `check_model_catalog.py` probe endpoint đó.
+  `POST /provider/v1/systemone` và không nằm trong `/models`; route này thuộc gateway Command Code, và
+  tools/jev_decide.py đã được phục hồi ngày 2026-11-12 sau khi bind sang provider `commandcode`, còn
+  `tools/decision_probe.py` lo phần discovery cho Google decision endpoint.
 
 - **v4.4.0 / v4.3.1** (2026-10-16): SPEC khai **pipeline 4 vai trò** (§0.2) + quy tắc
   fallback; sửa danh sách engine (OpenCode là engine chính, thêm Codex); chuyển

@@ -452,6 +452,20 @@ def test_guardrail_carries_the_evidence_boundary():
     assert opencode_delegate.EVIDENCE_BOUNDARY in opencode_delegate.GUARDRAIL
 
 
+def test_default_agent_resolution_ignores_process_cwd(monkeypatch, tmp_path):
+    """A run from any subdirectory still sees the project default agent.
+
+    The default agent is what keeps --auto off the orchestrator; resolving it
+    from Path.cwd() meant a wrapper launched outside the repo root found no file,
+    re-added --auto, and bypassed the orchestrator write deny.
+    """
+    empty = tmp_path / "no-opencode-json-here"
+    empty.mkdir()
+
+    monkeypatch.chdir(empty)
+    assert opencode_delegate._resolve_default_agent() == "jev"
+
+
 # ── post-run scope report ────────────────────────────────────────────────────
 
 
@@ -1204,8 +1218,10 @@ def _wsl_available() -> bool:
 
 
 @pytest.mark.skipif(
-    not os.environ.get("DEEPSEEK_API_KEY") or not _wsl_available(),
-    reason="needs DEEPSEEK_API_KEY and a working WSL distro",
+    not os.environ.get("DEEPSEEK_API_KEY")
+    or not _wsl_available()
+    or opencode_delegate.resolve_wsl_binary(None) is None,
+    reason="needs DEEPSEEK_API_KEY, a working WSL distro, and @opencode/cli inside it",
 )
 def test_wsl_sandbox_runs_a_brief_through_the_fence():
     """One live call: the fence wraps a real answer, end to end."""
@@ -1301,3 +1317,257 @@ def test_fallback_chain_does_not_rotate_on_runtime_error(monkeypatch):
     )
     assert code == 2
     assert len(attempted_models) == 1
+
+
+# ── find_opencode_binary ─────────────────────────────────────────────────────
+
+
+def test_find_opencode_binary_prefers_the_bundled_workspace_exe(monkeypatch, tmp_path):
+    candidate = (
+        tmp_path
+        / ".solocode"
+        / "npm"
+        / "node_modules"
+        / "@opencode"
+        / "cli"
+        / "bin"
+        / "opencode.exe"
+    )
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text("", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", tmp_path)
+    monkeypatch.setattr(opencode_delegate.os, "access", lambda _p, _m: True)
+    monkeypatch.setattr(opencode_delegate.shutil, "which", lambda _name: None)
+
+    assert opencode_delegate.find_opencode_binary() == str(candidate)
+
+
+def test_find_opencode_binary_falls_back_to_the_posix_bin_shim(monkeypatch, tmp_path):
+    candidate = tmp_path / ".solocode" / "npm" / "node_modules" / ".bin" / "opencode"
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text("", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", tmp_path)
+    monkeypatch.setattr(opencode_delegate.os, "access", lambda _p, _m: True)
+    monkeypatch.setattr(opencode_delegate.shutil, "which", lambda _name: None)
+
+    assert opencode_delegate.find_opencode_binary() == str(candidate)
+
+
+def test_find_opencode_binary_returns_a_path_hit_on_windows(monkeypatch, tmp_path):
+    exe = tmp_path / "opencode.exe"
+    exe.write_text("", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", tmp_path / "empty-root")
+    monkeypatch.setattr(opencode_delegate.sys, "platform", "win32")
+    monkeypatch.setattr(
+        opencode_delegate.shutil,
+        "which",
+        lambda name: str(exe) if name == "opencode" else None,
+    )
+
+    assert opencode_delegate.find_opencode_binary() == str(exe)
+
+
+def test_find_opencode_binary_skips_a_wsl_mount_hit(monkeypatch, tmp_path):
+    node = tmp_path / "node" / "node"
+    node.parent.mkdir()
+    node.write_text("", encoding="utf-8")
+    candidate = (
+        node.parent / "node_modules" / "@opencode" / "cli" / "bin" / "opencode.exe"
+    )
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text("", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", tmp_path / "empty-root")
+    monkeypatch.setattr(opencode_delegate.sys, "platform", "linux")
+    hits = {"opencode": "/mnt/c/Users/u/opencode", "node": str(node)}
+    monkeypatch.setattr(opencode_delegate.shutil, "which", lambda name: hits.get(name))
+
+    found = opencode_delegate.find_opencode_binary()
+
+    assert found == str(candidate)
+    assert found != "/mnt/c/Users/u/opencode"
+
+
+def test_find_opencode_binary_finds_the_cli_next_to_node(monkeypatch, tmp_path):
+    node = tmp_path / "node" / "node"
+    node.parent.mkdir()
+    node.write_text("", encoding="utf-8")
+    candidate = (
+        node.parent / "node_modules" / "@opencode" / "cli" / "bin" / "opencode.exe"
+    )
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text("", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", tmp_path / "empty-root")
+    monkeypatch.setattr(
+        opencode_delegate.shutil,
+        "which",
+        lambda name: str(node) if name == "node" else None,
+    )
+
+    assert opencode_delegate.find_opencode_binary() == str(candidate)
+
+
+def test_find_opencode_binary_returns_none_when_nothing_is_installed(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(opencode_delegate, "ROOT", tmp_path / "empty-root")
+    monkeypatch.setattr(opencode_delegate.os, "access", lambda _p, _m: False)
+    monkeypatch.setattr(opencode_delegate.shutil, "which", lambda _name: None)
+
+    assert opencode_delegate.find_opencode_binary() is None
+
+
+# ── _check_scope strict mode fails closed ────────────────────────────────────
+
+
+def test_strict_scope_without_a_before_snapshot_fails_closed(tmp_path, capsys):
+    code = opencode_delegate._check_scope(
+        None,
+        str(tmp_path),
+        {},
+        enforce=True,
+        before_exc=RuntimeError("before snapshot failed"),
+    )
+
+    assert code == opencode_delegate.SCOPE_ERROR_EXIT_CODE
+    assert "scope: snapshot unavailable (RuntimeError)" in capsys.readouterr().err
+
+
+def test_strict_scope_raising_after_snapshot_fails_closed(
+    monkeypatch, tmp_path, capsys
+):
+    def raising_snapshot(_root):
+        raise RuntimeError("after snapshot failed")
+
+    monkeypatch.setattr(opencode_delegate, "_snapshot", raising_snapshot)
+
+    code = opencode_delegate._check_scope(
+        {"src/keep.py": "hash"}, str(tmp_path), {}, enforce=True
+    )
+
+    assert code == opencode_delegate.SCOPE_ERROR_EXIT_CODE
+    assert "scope: snapshot unavailable (RuntimeError)" in capsys.readouterr().err
+
+
+def test_strict_scope_missing_after_snapshot_fails_closed(
+    monkeypatch, tmp_path, capsys
+):
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: None)
+
+    code = opencode_delegate._check_scope(
+        {"src/keep.py": "hash"}, str(tmp_path), {}, enforce=True
+    )
+
+    assert code == opencode_delegate.SCOPE_ERROR_EXIT_CODE
+    assert "after snapshot missing" in capsys.readouterr().err
+
+
+def test_strict_scope_raising_diff_fails_closed(monkeypatch, tmp_path, capsys):
+    class _RaisingSnapshot:
+        @staticmethod
+        def changed_workspace_paths(_before, _after):
+            raise RuntimeError("diff failed")
+
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(
+        opencode_delegate, "_load_sibling", lambda _name: _RaisingSnapshot
+    )
+
+    code = opencode_delegate._check_scope(
+        {"src/keep.py": "hash"}, str(tmp_path), {}, enforce=True
+    )
+
+    assert code == opencode_delegate.SCOPE_ERROR_EXIT_CODE
+    assert "scope: snapshot unavailable (RuntimeError)" in capsys.readouterr().err
+
+
+# ── --record-receipt ─────────────────────────────────────────────────────────
+
+
+def _drive_record_receipt(
+    monkeypatch, tmp_path, result: dict
+) -> tuple[int, list[dict]]:
+    """main(--record-receipt) with the worker and the receipt module stubbed."""
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    (ws / "src" / "keep.py").write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", lambda **_kw: result)
+
+    recorded: list[dict] = []
+
+    class _ReceiptModule:
+        @staticmethod
+        def record_task_receipt(**kwargs):
+            recorded.append(kwargs)
+            return tmp_path / "receipt.json"
+
+    real_load_sibling = opencode_delegate._load_sibling
+    monkeypatch.setattr(
+        opencode_delegate,
+        "_load_sibling",
+        lambda name: (
+            _ReceiptModule if name == "task_receipt" else real_load_sibling(name)
+        ),
+    )
+
+    argv = [
+        "do it",
+        "--no-guardrail",
+        "--directory",
+        str(ws / "src"),
+        "--record-receipt",
+    ]
+    return opencode_delegate.main(argv), recorded
+
+
+def test_record_receipt_records_a_verified_run(monkeypatch, tmp_path, capsys):
+    result = {
+        **_ok_result(),
+        "tokens": {"input": 1, "output": 2, "reasoning": 0, "total": 3},
+        "cost": 0.5,
+    }
+
+    code, recorded = _drive_record_receipt(monkeypatch, tmp_path, result)
+
+    assert code == 0
+    assert len(recorded) == 1
+    assert recorded[0]["status"] == "VERIFIED"
+    assert recorded[0]["worker"] == "opencode"
+    assert recorded[0]["task"] == "do it"
+    assert recorded[0]["allowed_directory"] == str(tmp_path / "ws" / "src")
+    assert recorded[0]["run_id"]
+
+    err = capsys.readouterr().err
+    assert "task_receipt: receipt.json" in err
+    assert "cost: $0.500000" in err
+    assert "tokens: in=1 out=2" in err
+
+
+def test_record_receipt_marks_a_failed_run(monkeypatch, tmp_path, capsys):
+    code, recorded = _drive_record_receipt(
+        monkeypatch, tmp_path, {**_ok_result(), "error": "worker exploded"}
+    )
+
+    assert code == 2
+    assert len(recorded) == 1
+    assert recorded[0]["status"] == "FAILED"
+    assert "Error: worker exploded" in capsys.readouterr().err
+
+
+def test_the_run_log_never_claims_auto_for_the_orchestrator():
+    """The log is built from the same resolver as the argv, so it cannot claim --auto."""
+    log = opencode_delegate._describe_run(
+        None, "opencode-go/deepseek-v4.1-flash", "win"
+    )
+
+    assert "--agent jev" in log
+    assert "--auto" not in log
+
+
+def test_the_run_log_marks_auto_for_a_writable_agent():
+    log = opencode_delegate._describe_run("solo-code-engineer", "m", "win")
+
+    assert "--agent solo-code-engineer" in log
+    assert "--auto" in log

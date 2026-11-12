@@ -38,11 +38,6 @@ High-signal context loaded at session start. Detailed history belongs in
   verified writes with `tools/codex_guard.py --write`.
 
 ## Gotchas
-- [gotcha] Bare Codex does not load `.env`; always run via the launcher.
-- [gotcha] Codex gateway needs `code_mode.enabled = false`,
-  `unified_exec = false`, `wire_api = "responses"`, and a full-access sandbox.
-- [gotcha] Codex base URLs do not interpolate `${VAR}`; the launcher passes a
-  `-c model_providers.<id>.base_url=...` override instead.
 - [gotcha] Codex CLI internal exec policy blocks `rm -f` / `-Force` patterns;
   under `approval_policy = "never"` this aborts process creation. Avoid `-Force`
   in PowerShell, or use `python tools/codex_guard.py --write`.
@@ -57,14 +52,6 @@ High-signal context loaded at session start. Detailed history belongs in
 - [gotcha] `jev.md` khai `edit: deny` nhung KHONG bind suot dau phien
   (`opencode.json:12` noi `edit: ask`) - hai tang lech nhau. Phien chay agent
   Jev phai sua file qua `tools/*_delegate.py`, khong qua edit truc tiep.
-- [gotcha] Kilo can `python tools/kilo_server_manager.py ensure` truoc moi
-  phien dung arm Kilo; thieu buoc do = 100% fail voi `kilo CLI exit code 1`
-  (do duoc: 325 loi, 14 ngay, server chet tu 16/10).
-- [gotcha] Script trong `tools/` in output ra console Windows cp1252 se crash
-  neu output co ky tu ngoai bang ma - dung `_make_streams_encoding_safe`
-  (`codex_delegate.py` tung thieu, crash o U+2192).
-- [gotcha] Khong chay 2 pytest song song: dung chung `.pytest_temp` - test do
-  gia (da gap 2 lan trong phien 2026-10-20).
 - [gotcha] Kilo arm cần `python tools/kilo_server_manager.py ensure` trước mỗi
   phiên dùng nó. Thiếu bước đó = 100% fail với `kilo CLI exit code 1` (đo: 325
   lỗi trong 14 ngày, server chết từ 16/10). Wrapper nay preflight + exit 7.
@@ -77,6 +64,9 @@ High-signal context loaded at session start. Detailed history belongs in
   mirror skill — sửa script trong skill thì format cả 4 bản.
 - [gotcha] Cap `memory_gate` đo bằng KÝ TỰ (`len`), không phải byte. `$s.Length`
   của PowerShell trên file UTF-8 không BOM đếm sai (8182 vs 7671) — đo bằng python.
+- [gotcha] `antigravity_delegate.py --allow-tools` (read-only) chay song song voi worker dang ghi cay se bao
+  "read-only violation" cho chinh cac file nguoi khac sua - snapshot khong quy duoc chu. Chi chay review agy
+  khi cay da dung yen.
 
 ## Decisions
 - [decision] Pipeline 4 vai trò (2026-10-16): Jev (agent trên **model JEV**
@@ -107,6 +97,14 @@ High-signal context loaded at session start. Detailed history belongs in
   legitimate. A lock with no `mode` is treated as root. A target lock declares only the
   files deploy actually shipped. `failure_ledger --sweep` reports per-project fingerprint
   match.
+- [decision] Router co ledger (2026-11-12): `tools/router.py` phan loai task bang bang rule (6 loai,
+  khong goi LLM), tra ve `{task_type, brain, worker, model, reason, budget, evidence}` va ghi
+  `.solocode/route-decisions.jsonl` khi `--dry-run`. Brain ghi `rules` cho moi route cho den khi
+  `--probe` duoc noi; brain fallback khai trong `routing_brains` (`openrouter/jev-router` ->
+  `opencode-go/claude-haiku-5-5`), khong bao gio la executor. `opencode_delegate.py` doc
+  `default_agent` tu `ROOT/opencode.json` (khong phai cwd) truoc khi cap `--auto`, nen thieu `--agent`
+  thi worker khong con quyen ghi. `gemini-decision-1` la decision API (`outputTokenLimit: 1`,
+  `POST /v1beta/decisions`), khong phai chat model.
 
 - [measurement] WSL fence + worker Linux (2026-10-24/25, B4 pha 1):
   `tools/wsl_sandbox.sh` **fail-open** nếu gọi ngoài `unshare -Urm` - đã sửa: exit 69,

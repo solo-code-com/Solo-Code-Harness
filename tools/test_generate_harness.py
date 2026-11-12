@@ -20,8 +20,11 @@ Usage:
 from __future__ import annotations
 
 import json
+import runpy
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -422,3 +425,137 @@ def test_harness_claude_run_also_syncs_the_copilot_memory_mirror(tmp_path, monke
     assert (tmp_path / MEMORY_MIRROR / "MEMORY.md").read_text(
         encoding="utf-8"
     ) == "SOURCE\n"
+
+
+def test_harness_opencode_run_generates_the_opencode_engine(tmp_path, monkeypatch):
+    """`--harness opencode` must reach the OpenCode engine and report its status."""
+    calls = []
+
+    class _StubEngine:
+        @staticmethod
+        def generate_all(kilo_root, opencode_dir, root, skip_names=None):
+            calls.append((kilo_root, opencode_dir, root))
+            return 3
+
+    monkeypatch.setattr(generate_harness, "ROOT_DIR", tmp_path)
+    monkeypatch.setattr(generate_harness, "_load_opencode_engine", lambda: _StubEngine)
+    monkeypatch.setattr(
+        sys, "argv", ["generate_harness.py", "--harness", "opencode", "--include-all"]
+    )
+
+    assert generate_harness.main() == 3
+    assert calls == [(tmp_path / ".kilo", tmp_path / ".opencode", tmp_path)]
+
+
+# ─── engine imports and skip list ────────────────────────────────────────────
+#
+# generate_harness is also run as `python tools/generate_harness.py`, where only
+# tools/ itself is on sys.path. The engine modules are siblings, so the loader
+# has to add that directory before importing them.
+
+
+def test_load_claude_engine_adds_tools_to_sys_path(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "path",
+        [p for p in sys.path if p != str(generate_harness.TOOLS_DIR)],
+    )
+
+    engine = generate_harness._load_claude_engine()
+
+    assert hasattr(engine, "generate_all")
+    assert str(generate_harness.TOOLS_DIR) in sys.path
+
+
+def test_load_opencode_engine_adds_tools_to_sys_path(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "path",
+        [p for p in sys.path if p != str(generate_harness.TOOLS_DIR)],
+    )
+
+    engine = generate_harness._load_opencode_engine()
+
+    assert hasattr(engine, "generate_all")
+    assert str(generate_harness.TOOLS_DIR) in sys.path
+
+
+def test_load_skip_list_warns_and_copies_everything_without_a_file(tmp_path, capsys):
+    assert generate_harness.load_skip_list(tmp_path / "absent.txt") == set()
+
+    out = capsys.readouterr().out
+    assert "[WARN] Skip file not found" in out
+    assert "All skills will be copied" in out
+
+
+def test_load_skip_list_names_each_entry(tmp_path, capsys):
+    skip_file = tmp_path / "skip.txt"
+    skip_file.write_text("alpha\n\n  beta  \n", encoding="utf-8")
+
+    assert generate_harness.load_skip_list(skip_file) == {"alpha", "beta"}
+
+    out = capsys.readouterr().out
+    assert "Loaded 2 skip entries" in out
+    assert "- alpha" in out
+    assert "- beta" in out
+
+
+def test_split_frontmatter_without_a_block_keeps_the_whole_text():
+    assert generate_harness._split_frontmatter("# Title\nbody\n") == (
+        "",
+        "# Title\nbody\n",
+    )
+
+
+# ─── agent mirrors ───────────────────────────────────────────────────────────
+
+AGENT_MIRRORS = [
+    (".copilot", Path(".copilot") / "agents"),
+    (".gemini/antigravity", Path(".gemini") / "antigravity" / "agents"),
+]
+
+
+def _fake_agent_tree(tmp_path: Path) -> Path:
+    _write(tmp_path / ".kilo" / "agents" / "worker.md", "SOURCE\n")
+    for _, rel in AGENT_MIRRORS:
+        _write(tmp_path / rel / "worker.md", "DRIFTED\n")
+    return tmp_path
+
+
+def test_agent_sync_repairs_drifted_mirrors(tmp_path):
+    root = _fake_agent_tree(tmp_path)
+
+    assert generate_harness.sync_agent_mirrors(root / ".kilo", root) == len(
+        AGENT_MIRRORS
+    )
+
+    for _, rel in AGENT_MIRRORS:
+        assert (root / rel / "worker.md").read_text(encoding="utf-8") == "SOURCE\n"
+
+
+def test_agent_sync_is_idempotent(tmp_path):
+    root = _fake_agent_tree(tmp_path)
+    generate_harness.sync_agent_mirrors(root / ".kilo", root)
+
+    assert generate_harness.sync_agent_mirrors(root / ".kilo", root) == 0
+
+
+def test_agent_sync_skips_an_absent_source_dir(tmp_path):
+    assert generate_harness.sync_agent_mirrors(tmp_path / ".kilo", tmp_path) == 0
+
+
+def test_agent_sync_skips_absent_mirror_dirs(tmp_path):
+    _write(tmp_path / ".kilo" / "agents" / "worker.md", "SOURCE\n")
+
+    assert generate_harness.sync_agent_mirrors(tmp_path / ".kilo", tmp_path) == 0
+
+
+def test_module_entry_point_exits_with_the_main_status(monkeypatch, capsys):
+    """`python tools/generate_harness.py` must exit through main(), not off the end."""
+    monkeypatch.setattr(sys, "argv", ["generate_harness.py", "--help"])
+
+    with pytest.raises(SystemExit) as excinfo:
+        runpy.run_path(str(generate_harness.__file__), run_name="__main__")
+
+    assert excinfo.value.code == 0
+    assert "--harness" in capsys.readouterr().out

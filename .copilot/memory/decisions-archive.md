@@ -1340,3 +1340,42 @@ daemon on the Windows side at all.
   `.solocode/antigravity-usage.jsonl`; `failure_ledger.py` moi gop moi nguon van
   hanh va co `--sweep` da du an.
 
+## Pruned 2026-11-12
+
+Moved verbatim out of `MEMORY.md` so the loaded memory stays under its 8,000-character
+gate; nothing was deleted.
+
+- [gotcha] Kilo can `python tools/kilo_server_manager.py ensure` truoc moi
+  phien dung arm Kilo; thieu buoc do = 100% fail voi `kilo CLI exit code 1`
+  (do duoc: 325 loi, 14 ngay, server chet tu 16/10).
+- [gotcha] Script trong `tools/` in output ra console Windows cp1252 se crash
+  neu output co ky tu ngoai bang ma - dung `_make_streams_encoding_safe`
+  (`codex_delegate.py` tung thieu, crash o U+2192).
+
+Both are the terse duplicates; the fuller Vietnamese wording of each stays in
+`MEMORY.md`.
+
+- [gotcha] Khong chay 2 pytest song song: dung chung `.pytest_temp` - test do
+  gia (da gap 2 lan trong phien 2026-10-20).
+
+This one duplicates item (a) of the `Ba bẫy tooling` gotcha that stays in `MEMORY.md`.
+
+- [gotcha] Bare Codex does not load `.env`; always run via the launcher.
+- [gotcha] Codex gateway needs `code_mode.enabled = false`,
+  `unified_exec = false`, `wire_api = "responses"`, and a full-access sandbox.
+- [gotcha] Codex base URLs do not interpolate `${VAR}`; the launcher passes a
+  `-c model_providers.<id>.base_url=...` override instead.
+
+The three Codex items above are documented with their evidence in the `2026-09-14`
+Codex decision entry and in `## Codex worker arm (moved out of MEMORY.md, 2026-10-16)`
+both earlier in this file; they moved only to reach the 7,900-character target.
+
+## 2026-11-12 — `jev_decide.py` bound to `commandcode`
+
+- `tools/jev_decide.py` restored 2026-11-12 on `commandcode`; the old binding was `deepseek`, which has no
+  `/systemone` route (HTTP 404).
+- Measured: `POST https://api.commandcode.ai/provider/v1/systemone` -> HTTP 200, 0.79-0.93s,
+  `{"is_urgent": {"type": "noul", "noul": 0.83}}`, 280 input / 23 output tokens.
+- `.env` needs `COMMANDCODE_API_KEY` and `COMMANDCODE_BASE_URL=https://api.commandcode.ai/provider/v1` — no
+  `/chat/completions` suffix; the code appends the path. Gotcha: a stale shell `COMMANDCODE_API_KEY` shadows
+  `.env` (`user_5...` -> 401 vs `user_4...` -> 200) and only the new one-line stderr warning says so.
