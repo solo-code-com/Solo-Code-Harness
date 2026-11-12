@@ -1,0 +1,56 @@
+{
+  "name": "@solo-code/dsh-solo-code",
+  "version": "0.1.0",
+  "description": "Solo-Code operating discipline for DeepSeek Harness: approval policy, write gate, and guidance skills.",
+  "private": true,
+  "type": "module",
+  "icon": "./icon.svg",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "rules.js",
+    "skills.js",
+    "cordis.patch.yml",
+    "README.md",
+    "mcp/server.py",
+    "mcp/test_server.py",
+    "skills/**/SKILL.md",
+    "commands/*.md",
+    "agents/*.md",
+    "presets/*.patch.yml",
+    "scripts/*.mjs",
+    "scripts/*.ps1",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml",
+        "./presets/agent-architect.patch.yml",
+        "./presets/agent-code-reviewer.patch.yml",
+        "./presets/agent-code-simplifier.patch.yml",
+        "./presets/agent-code-skeptic.patch.yml",
+        "./presets/agent-database-reviewer.patch.yml",
+        "./presets/agent-jev.patch.yml",
+        "./presets/agent-planner.patch.yml",
+        "./presets/agent-python-reviewer.patch.yml",
+        "./presets/agent-refactor-cleaner.patch.yml",
+        "./presets/agent-security-auditor.patch.yml",
+        "./presets/agent-solo-code-engineer.patch.yml",
+        "./presets/agent-tdd-guide.patch.yml",
+        "./presets/agent-test-engineer.patch.yml",
+        "./presets/agent-typescript-reviewer.patch.yml",
+        "./presets/agent-web-performance-auditor.patch.yml"
+      ]
+    }
+  }
+}

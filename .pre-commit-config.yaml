@@ -15,10 +15,10 @@ repos:
         args: [--allow-multiple-documents]
         # Deliberately not just *vendored_exclude: the Cordis patches under
         # integrations/dsh-solo-plugins/profiles/ carry `!!js` tags the DSH kernel
-        # evaluates, which PyYAML cannot construct. Excluding those two files keeps
+        # and the packaged presets evaluate, which PyYAML cannot construct. Excluding those files keeps
         # every other YAML in the tree checked; weakening the hook (or hand-editing
         # the patches) would hide real YAML breakage instead.
-        exclude: ^(\.kilo/|\.opencode/|(?:agentic-awesome-skills-main|deepseek-harness-master|open-code-review-main|antigravity-sdk-python-main|learn-harness-engineering-main)/|integrations/dsh-solo-plugins/profiles/)
+        exclude: ^(\.kilo/|\.opencode/|(?:agentic-awesome-skills-main|deepseek-harness-master|open-code-review-main|antigravity-sdk-python-main|learn-harness-engineering-main)/|integrations/dsh-solo-plugins/(?:profiles|packages/solo-code/presets)/)
       - id: check-json
         exclude: *vendored_exclude
       - id: check-added-large-files

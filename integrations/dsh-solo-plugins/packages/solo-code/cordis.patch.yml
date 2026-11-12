@@ -1,0 +1,28 @@
+# Solo-Code profile layer: one row carries the approval policy, the write gate,
+# and the guidance skills. The DSH kernel is not modified.
+- insert:
+    - id: solo-code
+      name: '@solo-code/dsh-solo-code'
+      config:
+        writeGate: false
+        executorModeFile: '.solocode/executor-mode'
+        askOnWrites: false
+        askOnDependencyChanges: true
+        askOnNetwork: true
+        askOnGitPublish: true
+        askOnDelegation: true
+        denyCredentialWrites: true
+    # The MCP client spawns the Solo-Code tool layer. Paths are machine-local by
+    # design: this bundle is linked from a local checkout, not published.
+    - id: solo-code-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: solo
+        transport: stdio
+        command: 'C:/Python313/python.exe'
+        args:
+          - 'F:/Project/g-harness/g-harness/integrations/dsh-solo-plugins/packages/solo-code/mcp/server.py'
+          - '--root'
+          - 'F:/Project/g-harness/g-harness'
+        cwd: 'F:/Project/g-harness/g-harness'
+        failOnStartupError: true
