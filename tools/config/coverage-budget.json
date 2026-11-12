@@ -31,6 +31,7 @@
       "tools/compaction.py": 79.55,
       "tools/compaction_pruner.py": 86.02,
       "tools/coverage_gate.py": 64.86,
+      "tools/decision_probe.py": 90.73,
       "tools/deploy.py": 61.38,
       "tools/dsh_delegate.py": 94.27,
       "tools/env_file.py": 96.43,
@@ -41,6 +42,7 @@
       "tools/gui_server.py": 81.53,
       "tools/harness_config.py": 94.42,
       "tools/harness_fingerprint.py": 86.73,
+      "tools/jev_decide.py": 72.15,
       "tools/kilo_cli_delegate.py": 83.98,
       "tools/kilo_server_manager.py": 90.52,
       "tools/kilo_usage_report.py": 98.15,
@@ -49,6 +51,8 @@
       "tools/opencode_engine.py": 81.79,
       "tools/prose_lint.py": 78.79,
       "tools/review_receipt.py": 86.67,
+      "tools/router.py": 94.51,
+      "tools/router_eval.py": 89.71,
       "tools/session_analytics.py": 94.06,
       "tools/session_control.py": 95.89,
       "tools/session_persistence.py": 42.54,
@@ -157,6 +161,7 @@
       "tools/compaction.py": 79.55,
       "tools/compaction_pruner.py": 86.02,
       "tools/coverage_gate.py": 65.85,
+      "tools/decision_probe.py": 90.73,
       "tools/deploy.py": 61.38,
       "tools/dsh_delegate.py": 94.27,
       "tools/env_file.py": 94.64,
@@ -167,6 +172,7 @@
       "tools/gui_server.py": 81.53,
       "tools/harness_config.py": 94.42,
       "tools/harness_fingerprint.py": 86.73,
+      "tools/jev_decide.py": 72.15,
       "tools/kilo_cli_delegate.py": 83.98,
       "tools/kilo_server_manager.py": 90.95,
       "tools/kilo_usage_report.py": 98.15,
@@ -175,6 +181,8 @@
       "tools/opencode_engine.py": 81.79,
       "tools/prose_lint.py": 78.79,
       "tools/review_receipt.py": 86.67,
+      "tools/router.py": 94.51,
+      "tools/router_eval.py": 89.71,
       "tools/session_analytics.py": 94.06,
       "tools/session_control.py": 90.41,
       "tools/session_persistence.py": 42.54,
@@ -302,6 +310,7 @@
       "tools/test_opencode_delegate.py": 22,
       "tools/test_prose_lint.py": 10,
       "tools/test_review_receipt.py": 31,
+      "tools/test_router_eval.py": 11,
       "tools/test_secret_patterns.py": 79,
       "tools/test_session_analytics.py": 18,
       "tools/test_session_control.py": 28,
@@ -316,7 +325,8 @@
       "tools/test_text_hygiene.py": 10,
       "tools/test_validate_schemas.py": 21,
       "tools/test_win_sandbox.py": 40,
-      "tools/test_worker_stats.py": 15
+      "tools/test_worker_stats.py": 15,
+      "tools/test_jev_decide.py": 10
     },
     "win32": {
       "tools/test_agent_scope.py": 24,
@@ -365,6 +375,7 @@
       "tools/test_opencode_delegate.py": 62,
       "tools/test_prose_lint.py": 10,
       "tools/test_review_receipt.py": 37,
+      "tools/test_router_eval.py": 11,
       "tools/test_secret_patterns.py": 79,
       "tools/test_session_analytics.py": 18,
       "tools/test_session_control.py": 28,
@@ -381,7 +392,8 @@
       "tools/test_win_sandbox.py": 40,
       "tools/test_worker_preflight.py": 14,
       "tools/test_worker_stats.py": 15,
-      "tools/test_workspace_snapshot.py": 9
+      "tools/test_workspace_snapshot.py": 9,
+      "tools/test_jev_decide.py": 10
     }
   }
 }

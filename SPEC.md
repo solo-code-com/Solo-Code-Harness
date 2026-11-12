@@ -256,7 +256,11 @@ lớn kể từ v3.3.0:
   `tools/config/model-roles.json`. Wrapper delegate nay resolve `default_agent` trước khi cấp `--auto`.
   `gemini-decision-1` được ghi nhận là decision endpoint với output token limit 1, kèm `tools/decision_probe.py`
   sau marker UNVERIFIED, còn tools/jev_decide.py được phục hồi trong ngày sau khi bind sang provider
-  `commandcode` (đo trực tiếp: HTTP 200, 0.79–0.93s).
+  `commandcode` (đo trực tiếp: HTTP 200, 0.79–0.93s). Cờ `--shadow` ghi câu trả lời của decision model cạnh
+  quyết định của rule mà không đổi route, còn `tools/router_eval.py` báo độ đồng thuận theo từng loại task kèm
+  Wilson lower bound và từ chối tuyên bố bên thắng khi mẫu còn nhỏ, thiếu headroom, hoặc nhãn chưa nối được với
+  kết quả chạy (NEED_MORE_DATA / HEADROOM_TOO_SMALL / LINKAGE_REQUIRED). Sổ hiện chưa có `run_id`, nên việc
+  promote brain vẫn bị chặn ở đúng mắt xích đó.
 
 - **2026-10-20**: catalog **105 model / 4 provider** (opencode-go 95, freemodel 3, deepseek 2,
   openrouter 5); thêm `minimax/minimax-m3.1-flash`, bản `:free` của nó và `reflection/beam:free`,

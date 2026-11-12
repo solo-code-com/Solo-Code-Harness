@@ -19,9 +19,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import urllib.request
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -53,6 +55,7 @@ LEDGER_KEYS = {
     "at",
     "spawned",
 }
+SHADOW_KEYS = {"version", "label", "confidence", "noul", "error"}
 
 #: One representative prompt per task type.
 CASES = {
@@ -160,12 +163,137 @@ def test_dry_run_appends_a_ledger_row(tmp_path, monkeypatch, capsys):
     assert ledger == router.LEDGER_PATH
 
 
-def test_dry_run_is_the_only_mode_that_writes_a_ledger(tmp_path, monkeypatch):
+def test_a_plain_run_writes_no_ledger(tmp_path, monkeypatch):
     ledger = tmp_path / "route-decisions.jsonl"
     monkeypatch.setattr(router, "LEDGER_PATH", ledger)
 
     assert router.main([CASES["question"]]) == 0
     assert not ledger.exists()
+
+
+def test_a_shadow_row_carries_the_nine_keys_plus_shadow(tmp_path, monkeypatch):
+    ledger = tmp_path / "route-decisions.jsonl"
+    monkeypatch.setattr(router, "LEDGER_PATH", ledger)
+    monkeypatch.setattr(
+        router,
+        "shadow_decision",
+        lambda task, decision: {
+            "version": router.SHADOW_QUESTIONS_VERSION,
+            "label": "question",
+            "confidence": 0.62,
+            "noul": 0.2,
+            "error": None,
+        },
+    )
+
+    assert router.main([CASES["question"], "--shadow", "--dry-run"]) == 0
+
+    rows = [
+        json.loads(line)
+        for line in ledger.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(rows) == 1
+    row = rows[0]
+    assert set(row) == LEDGER_KEYS | {"shadow"}
+    assert set(row["shadow"]) == SHADOW_KEYS
+    assert row["shadow"]["version"] == router.SHADOW_QUESTIONS_VERSION
+    assert row["shadow"]["error"] is None
+
+
+def test_shadow_never_changes_the_decision(tmp_path, monkeypatch, capsys):
+    ledger = tmp_path / "route-decisions.jsonl"
+    monkeypatch.setattr(router, "LEDGER_PATH", ledger)
+    monkeypatch.setattr(
+        router,
+        "shadow_decision",
+        lambda task, decision: {
+            "version": router.SHADOW_QUESTIONS_VERSION,
+            "label": "survey",
+            "confidence": 0.51,
+            "noul": 0.4,
+            "error": None,
+        },
+    )
+
+    # --shadow without --dry-run still logs, and the label is one the rules never pick.
+    assert router.main([CASES["question"], "--shadow"]) == 0
+
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["task_type"] == "question"
+    assert printed["worker"] == "none"
+    assert "shadow" not in printed
+    rows = [
+        json.loads(line)
+        for line in ledger.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(rows) == 1
+    assert rows[0]["task_type"] == "question"
+    assert rows[0]["shadow"]["label"] == "survey"
+
+
+def test_shadow_import_is_lazy():
+    program = (
+        "import sys\n"
+        f"sys.path.insert(0, {str(TOOLS)!r})\n"
+        "import router\n"
+        "assert 'jev_decide' not in sys.modules, 'router imported the brain eagerly'\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, text=True, check=False
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    # No network stack at module scope either: the brain import waits for --shadow.
+    assert not any(name.split(".")[0] == "urllib" for name in vars(router))
+
+
+def test_shadow_records_an_error_instead_of_raising(tmp_path, monkeypatch):
+    ledger = tmp_path / "route-decisions.jsonl"
+    monkeypatch.setattr(router, "LEDGER_PATH", ledger)
+    offline = ModuleType("jev_decide")
+
+    def refuse(*_args, **_kwargs):
+        raise RuntimeError("brain is offline")
+
+    offline.decide = refuse
+    monkeypatch.setitem(sys.modules, "jev_decide", offline)
+
+    assert router.main([CASES["question"], "--shadow"]) == 0
+
+    row = json.loads(ledger.read_text(encoding="utf-8").strip())
+    assert row["task_type"] == "question"
+    assert row["shadow"]["label"] is None
+    assert row["shadow"]["confidence"] is None
+    assert row["shadow"]["error"] == "RuntimeError: brain is offline"
+
+
+def test_shadow_records_the_answer_the_brain_gives(tmp_path, monkeypatch):
+    ledger = tmp_path / "route-decisions.jsonl"
+    monkeypatch.setattr(router, "LEDGER_PATH", ledger)
+    brain = ModuleType("jev_decide")
+
+    def answer(state, questions, *, timeout):
+        return {
+            "answers": {
+                "task_type": {"type": "choice", "choice": "survey", "confidence": 0.71},
+                "needs_second_opinion": {"type": "noul", "noul": 0.33},
+            }
+        }
+
+    brain.decide = answer
+    monkeypatch.setitem(sys.modules, "jev_decide", brain)
+
+    assert router.main([CASES["question"], "--shadow"]) == 0
+
+    row = json.loads(ledger.read_text(encoding="utf-8").strip())
+    # The rules still route it as a question; only the shadow label disagrees.
+    assert row["task_type"] == "question"
+    assert row["shadow"]["label"] == "survey"
+    assert row["shadow"]["confidence"] == 0.71
+    assert row["shadow"]["noul"] == 0.33
+    assert row["shadow"]["error"] is None
 
 
 def test_probe_is_not_wired(capsys):

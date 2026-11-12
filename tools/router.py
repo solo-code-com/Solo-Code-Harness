@@ -21,9 +21,15 @@ brain field names the decision source that was actually consulted, and every rou
 names `rules` today; `jev-router` and `gemini-decision` are reserved for when
 `--probe` is wired, and only `--probe` may call an endpoint.
 
+`--shadow` asks the decision model the frozen question set and records its answer
+in the ledger, without letting that answer change the route: the printed decision
+stays the rule table's, and a failed brain call lands in the row as an error
+rather than a lost decision.
+
 Usage:
     python tools/router.py "explain how auth works"
     python tools/router.py "delete the users table" --dry-run
+    python tools/router.py "explain how auth works" --shadow
 """
 
 from __future__ import annotations
@@ -40,7 +46,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 #: The one place every agent's and role's model id is declared.
 MODEL_ROLES_PATH = ROOT / "tools" / "config" / "model-roles.json"
-#: Append-only ledger, written by `--dry-run` only. Mirrors dsh-routing.jsonl.
+#: Append-only ledger, written by `--dry-run` and `--shadow`. Mirrors dsh-routing.jsonl.
 LEDGER_PATH = ROOT / ".solocode" / "route-decisions.jsonl"
 
 #: Bumped whenever _CLASSIFIERS or _ROUTES changes, so a ledger row can be traced.
@@ -130,6 +136,30 @@ _BUDGETS: dict[str, tuple[int, int]] = {
 #: Evidence string used when model-roles.json cannot be read.
 EVIDENCE_UNREADABLE = "model-roles:unreadable"
 
+#: Bumped whenever SHADOW_QUESTIONS changes, so a shadow row can be traced.
+SHADOW_QUESTIONS_VERSION = "v1"
+
+#: Frozen question set for `--shadow`. The choice options are the six task types
+#: the rule table emits, so a shadow label compares to the rule's answer directly.
+SHADOW_QUESTIONS = {
+    "task_type": {
+        "type": "choice",
+        "instructions": "Which work shape is this task?",
+        "criteria": {
+            "question": "asks what, how or why something works; changes nothing",
+            "simple_edit": "one small mechanical change to one file; no plan needed",
+            "complex": "builds, creates, refactors or migrates; needs a plan first",
+            "review": "judges work that already exists: review, audit, second opinion",
+            "survey": "reads many files to find every place a pattern appears",
+            "destructive": "deletes, drops or force-pushes something that cannot be undone",
+        },
+    },
+    "needs_second_opinion": {
+        "type": "noul",
+        "instructions": "Is this classification genuinely ambiguous?",
+    },
+}
+
 
 def _roles() -> dict[str, str]:
     """The role -> model-id map from model-roles.json; empty when unreadable."""
@@ -217,9 +247,45 @@ def probe(decision: dict) -> None:
     )
 
 
-def _ledger_row(task: str, decision: dict) -> dict:
-    """The dsh-routing.jsonl-shaped row for one decision (`spawned` is always false)."""
-    return {
+def shadow_decision(task: str, decision: dict) -> dict:
+    """What the decision model would answer, recorded without changing the route.
+
+    `decision` is accepted so a caller can log the pair, and never read: the
+    brain's answer is kept verbatim even when it disagrees with the rule table.
+    The import sits inside the function so importing this module stays offline,
+    and every failure comes back as `error` instead of an exception.
+    """
+    shadow: dict = {
+        "version": SHADOW_QUESTIONS_VERSION,
+        "label": None,
+        "confidence": None,
+        "noul": None,
+        "error": None,
+    }
+    try:
+        import jev_decide
+
+        response = jev_decide.decide(task, SHADOW_QUESTIONS, timeout=5)
+        answers = response.get("answers") or {}
+        choice = answers.get("task_type") or {}
+        second = answers.get("needs_second_opinion") or {}
+        shadow["label"] = choice.get("choice")
+        with contextlib.suppress(TypeError, ValueError):
+            shadow["confidence"] = float(choice.get("confidence"))
+        with contextlib.suppress(TypeError, ValueError):
+            shadow["noul"] = float(second.get("noul"))
+    except Exception as exc:  # noqa: BLE001 - a failed brain must not lose the decision
+        shadow["error"] = f"{type(exc).__name__}: {exc}"
+    return shadow
+
+
+def _ledger_row(task: str, decision: dict, shadow: dict | None = None) -> dict:
+    """The dsh-routing.jsonl-shaped row for one decision (`spawned` is always false).
+
+    `shadow` is added only when it was collected, so a plain `--dry-run` row keeps
+    the nine keys dsh-routing.jsonl already has.
+    """
+    row = {
         "task_type": decision["task_type"],
         "brain": decision["brain"],
         "worker": decision["worker"],
@@ -230,15 +296,22 @@ def _ledger_row(task: str, decision: dict) -> dict:
         "at": int(time.time()),
         "spawned": False,
     }
+    if shadow is not None:
+        row["shadow"] = shadow
+    return row
 
 
-def append_decision(task: str, decision: dict, path: Path | None = None) -> None:
+def append_decision(
+    task: str, decision: dict, path: Path | None = None, shadow: dict | None = None
+) -> None:
     """Append one ledger row; an unwritable ledger must not lose the printed decision."""
     target = path or LEDGER_PATH
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(_ledger_row(task, decision), ensure_ascii=False))
+            handle.write(
+                json.dumps(_ledger_row(task, decision, shadow), ensure_ascii=False)
+            )
             handle.write("\n")
     except OSError:  # a full disk is not a routing failure
         pass
@@ -259,6 +332,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="ask the chosen brain endpoint (not wired yet)",
     )
+    parser.add_argument(
+        "--shadow",
+        action="store_true",
+        help="also record what the decision model would answer, without routing by it",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -273,8 +351,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     print(json.dumps(decision, ensure_ascii=False))
-    if args.dry_run:
-        append_decision(args.task, decision)
+    shadow = shadow_decision(args.task, decision) if args.shadow else None
+    if args.dry_run or args.shadow:
+        append_decision(args.task, decision, shadow=shadow)
     return 0
 
 

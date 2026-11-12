@@ -143,6 +143,9 @@ not, so the orchestrator re-runs the commands and the real gates before trusting
   executor model.
 - `tools/decision_probe.py` records and replays the Google decision endpoint. It is marked UNVERIFIED: the endpoint
   answers 402 until the project has credits, so only the request field types are known.
+- `tools/router.py "<task>" --shadow` also asks the decision model and records its answer next to the
+  rule's, without changing the route. `tools/router_eval.py` reads that ledger and refuses to claim a
+  winner while the sample is too small or the labels cannot be linked to run outcomes.
 
 Writes need `--agent solo-code-engineer`; without it the wrapper now withholds `--auto`.
 
