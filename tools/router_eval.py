@@ -70,6 +70,9 @@ DEFAULT_SINCE = "14d"
 DEFAULT_MIN_SAMPLES = 30
 #: Below this escalation rate the rule table is already right often enough.
 ESCALATION_FLOOR = 0.05
+#: The brain has to disagree with the rule table this often before its answer can matter.
+#: Below the floor it adds nothing the rules do not already say, whatever the headroom is.
+DISAGREEMENT_FLOOR = 0.10
 P95_QUANTILE = 0.95
 
 VERDICT_NEED_MORE_DATA = "NEED_MORE_DATA"
@@ -326,12 +329,19 @@ def shadow_stats(ledger_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return ordered
 
 
-def verdict_for(usable: int, min_samples: int, escalation_rate: float | None) -> str:
+def verdict_for(
+    usable: int,
+    min_samples: int,
+    escalation_rate: float | None,
+    disagreement_rate: float | None = None,
+) -> str:
     """The one verdict the data supports; a winner claim is never among them."""
     if escalation_rate is None:
         return VERDICT_NEED_MORE_DATA
     if usable < min_samples:
         return VERDICT_NEED_MORE_DATA
+    if disagreement_rate is not None and disagreement_rate < DISAGREEMENT_FLOOR:
+        return VERDICT_HEADROOM_TOO_SMALL
     if escalation_rate < ESCALATION_FLOOR:
         return VERDICT_HEADROOM_TOO_SMALL
     return VERDICT_LINKAGE_REQUIRED
@@ -348,6 +358,8 @@ def collect(
 
     task_types = shadow_stats(ledger_rows)
     usable = sum(item["agree"] + item["disagree"] for item in task_types)
+    disagreements = sum(item["disagree"] for item in task_types)
+    disagreement_rate = (disagreements / usable) if usable else None
     usage = summarize_usage(usage_rows)
     return {
         "window": {"cutoff": since.isoformat()},
@@ -368,9 +380,12 @@ def collect(
         },
         "task_types": task_types,
         "usable_shadow_rows": usable,
+        "disagreement_rate": disagreement_rate,
         "missing_samples": max(min_samples - usable, 0),
         "min_samples": min_samples,
-        "verdict": verdict_for(usable, min_samples, usage["escalation_rate"]),
+        "verdict": verdict_for(
+            usable, min_samples, usage["escalation_rate"], disagreement_rate
+        ),
     }
 
 
@@ -431,6 +446,14 @@ def _verdict_reason(report: dict[str, Any]) -> str:
             f"({report['usable_shadow_rows']} of {report['min_samples']})"
         )
     if report["verdict"] == VERDICT_HEADROOM_TOO_SMALL:
+        disagreement = report.get("disagreement_rate")
+        if disagreement is not None and disagreement < DISAGREEMENT_FLOOR:
+            return (
+                f"the brain disagreed on {_format_rate(disagreement)}% of "
+                f"{report['usable_shadow_rows']} rows, below the "
+                f"{DISAGREEMENT_FLOOR:.0%} floor: it adds nothing the rule table does "
+                "not already say"
+            )
         return (
             f"escalation rate {_format_rate(usage['escalation_rate'])}% is below the "
             f"{ESCALATION_FLOOR:.0%} floor, so the rules already answer often enough "

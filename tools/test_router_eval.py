@@ -259,11 +259,27 @@ def test_verdict_linkage_required_at_or_above_the_floor(tmp_path):
     usage.append(
         {"ts": _now_iso(), "run_id": "r-fail", "phase": "finish", "error": "boom"}
     )
-    report = _collect(tmp_path, _agreeing_rows(20), usage, min_samples=20)
+    # Two of twenty disagree (10%), so the brain is not dismissed for never disagreeing.
+    rows = _agreeing_rows(18) + [
+        {"task_type": "question", "at": NOW, "shadow": _shadow("complex")},
+        {"task_type": "question", "at": NOW, "shadow": _shadow("complex")},
+    ]
+    report = _collect(tmp_path, rows, usage, min_samples=20)
 
     assert report["usage"]["runs"] == 20
     assert report["verdict"] == "LINKAGE_REQUIRED"
     assert "run_id" in router_eval.render_report(report)
+
+
+def test_a_brain_that_never_disagrees_is_not_headroom(tmp_path):
+    """No disagreement means the brain adds nothing, whatever the escalation rate is."""
+    usage = _clean_usage(20)
+    rows = _agreeing_rows(20)
+    report = _collect(tmp_path, rows, usage, min_samples=20)
+
+    assert report["disagreement_rate"] == 0.0
+    assert report["verdict"] == "HEADROOM_TOO_SMALL"
+    assert "disagreed on 0.0%" in router_eval.render_report(report)
 
 
 def test_json_output_carries_the_table_numbers(tmp_path, capsys):
