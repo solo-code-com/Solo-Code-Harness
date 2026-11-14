@@ -1,3 +1,11 @@
+---
+paths:
+  - "**/auth/**"
+  - "**/api/**"
+  - "**/middleware/**"
+  - "**/credentials/**"
+---
+
 # Security Patterns
 
 When editing auth, controllers, middleware, config, or `.env` files, follow these security rules:

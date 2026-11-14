@@ -1,3 +1,11 @@
+---
+paths:
+  - "**/migrations/**"
+  - "**/*.sql"
+  - "**/models/**"
+  - "**/schema*/**"
+---
+
 # Database Rules
 
 > Auto-loaded when editing SQL, migrations, ORM models, or database config.

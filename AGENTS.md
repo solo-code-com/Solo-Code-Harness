@@ -47,7 +47,7 @@ This project is powered by **Solo-Code Harness** — an AI agent discipline laye
 ## Self-Verification Handshake
 
 When asked "Is Solo-Code Harness active?" or "What rules apply here?", answer:
-`Solo-Code Harness active: behavior rules, anti-hallucination rules, security rules, prose quality rules, 53 skills, 16 agents, hooks enabled (Kilo) / guard + lifecycle hooks enabled (Claude Code). Use /verify to validate.`
+`Solo-Code Harness active: behavior rules, anti-hallucination rules, security rules, prose quality rules, 54 skills, 16 agents, hooks enabled (Kilo) / guard + lifecycle hooks enabled (Claude Code). Use /verify to validate.`
 
 ## Escape Hatch (Meta-Principle)
 
@@ -264,6 +264,7 @@ consider delegation, not an instruction to always delegate.
 | Read >5 files, then summarize/compare/audit | **Antigravity CLI** | Large context through a headless worker |
 | Repo-wide survey — "where else does X appear?" | **Antigravity CLI** | Breadth is exactly its edge |
 | Independent review of a design or diff | **Antigravity CLI** | A second model catches different things |
+| Broad audit/research fitting Claude's context | **Native Workflow tool** | In-process subagents, structured output, no CLI round-trip |
 | UI verification, screenshots, recordings | **Antigravity GUI handoff** | The CLI cannot verify a rendered UI |
 | Small mechanical edit, boilerplate, one test | **OpenCode CLI** | Headless — costs the user nothing |
 | Scoped code writing behind an explicit fence | Antigravity CLI if broad, OpenCode CLI if narrow | Both need the fence stated in writing |
@@ -319,6 +320,21 @@ See `.kilo/skill/git-workflow-master/SKILL.md` for full commit format, types, an
 ## Memory System
 
 Persistent memory at `.kilo/memory/`. The AI reads `MEMORY.md` at session start. Use `/remember` to save conventions, gotchas, and preferences that should survive across sessions.
+
+## Native auto memory
+
+Claude Code writes its own auto memory per repository alongside this harness's
+custom memory system (`memory/` dir + `MEMORY.md` index). Both load every
+session and serve different purposes — they coexist, not compete.
+
+| System | Who writes it | What it holds |
+|---|---|---|
+| Native auto memory | Claude, automatically | Preferences and corrections picked up interactively |
+| Custom memory (`memory/`) | You or Claude deliberately | Structured project facts: goals, constraints, external pointers not derivable from code |
+
+**Rule:** Let native auto memory hold preferences and corrections. Write to
+`memory/` only for project facts with stable structure. Run
+`/doctor prompt-audit` quarterly to catch drift between the two.
 
 ---
 

@@ -29,13 +29,13 @@ boundary list.
 
 When asked "Is Solo-Code Harness active?", answer:
 `Solo-Code Harness active: behavior rules, anti-hallucination rules, security rules,
-prose quality rules, 53 skills, 16 agents, guard + lifecycle hooks enabled (Claude Code).
+prose quality rules, 54 skills, 16 agents, guard + lifecycle hooks enabled (Claude Code).
 Use /verify to validate.`
 
 ## Claude Code Assets
 
 - **Subagents (16)** in `.claude/agents/` -- invoke via the Task tool or by name.
-- **Skills (53)** in `.claude/skills/` -- auto-discovered `SKILL.md` capabilities.
+- **Skills (54)** in `.claude/skills/` -- auto-discovered `SKILL.md` capabilities.
 - **Slash commands (15)** in `.claude/commands/` -- `/verify`, `/plan`, `/decide`, `/ship`, and more.
 - **Guard hook** in `.claude/hooks/guard.py` (`PreToolUse`) -- blocks destructive
   commands, secret leaks, protected-config edits, and (default ON) direct
@@ -147,6 +147,21 @@ Run `/verify` (or `make check`) before declaring work complete:
 ## Git Commit Convention
 Use Conventional Commits: `type(scope): summary` (feat, fix, docs, test, refactor, chore).
 
+## Native auto memory
+
+Claude Code writes its own auto memory per repository alongside this harness's
+custom memory system (`memory/` dir + `MEMORY.md` index). Both load every
+session and serve different purposes -- they coexist, not compete.
+
+| System | Who writes it | What it holds |
+|---|---|---|
+| Native auto memory | Claude, automatically | Preferences and corrections picked up interactively |
+| Custom memory (`memory/`) | You or Claude deliberately | Structured project facts: goals, constraints, external pointers not derivable from code |
+
+**Rule:** Let native auto memory hold preferences and corrections. Write to
+`memory/` only for project facts with stable structure. Run
+`/doctor prompt-audit` quarterly to catch drift between the two.
+
 ## Choosing a worker engine (routing table)
 
 Three workers are available. Propose one **proactively** when the work fits --
@@ -159,6 +174,7 @@ delegation, not an instruction to always delegate.
 | Read >5 files, then summarize/compare/audit | **Antigravity CLI** | Large context through a headless worker |
 | Repo-wide survey -- "where else does X appear?" | **Antigravity CLI** | Breadth is its edge |
 | Independent review of a design or diff | **Antigravity CLI** | A second model catches different things |
+| Broad audit/research fitting Claude's context | **Native Workflow tool** | In-process subagents, structured output, no CLI round-trip |
 | UI verification, screenshots, recordings | **Antigravity GUI handoff** | The CLI cannot verify a rendered UI |
 | Small mechanical edit, boilerplate, one test | **Kilo CLI** or **OpenCode CLI** | Both headless -- cost the user nothing |
 | Scoped code writing behind an explicit fence | Antigravity CLI if broad, Kilo/OpenCode if narrow | All three need the fence in writing |

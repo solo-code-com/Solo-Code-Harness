@@ -4,7 +4,14 @@
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",
-      "Read(./secrets/**)"
+      "Read(./secrets/**)",
+      "Bash(rm -rf *)",
+      "Bash(rm -rf /*)",
+      "Bash(git push --force *)",
+      "Bash(git push -f origin main*)",
+      "Bash(git push -f origin master*)",
+      "Bash(git reset --hard*)",
+      "Bash(DROP TABLE*)"
     ]
   },
   "hooks": {
@@ -14,7 +21,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard.py\"",
+            "onFailure": "block"
           }
         ]
       }
@@ -42,7 +50,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/security_post.py\""
+            "command": "python \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/security_post.py\"",
+            "onFailure": "block"
           }
         ]
       }

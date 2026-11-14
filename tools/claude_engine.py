@@ -11,6 +11,7 @@ Generated artifacts:
   - .claude/skills/<n>/SKILL.md  Skills (copied verbatim; format is compatible)
   - .claude/commands/*.md        Slash commands (frontmatter normalized)
   - .claude/instruction/*.md     Instruction references (copied verbatim)
+  - .claude/rules/*.md           Path-scoped rules (frontmatter `paths:` prepended)
   - CLAUDE.md                    Root rulebook (generated from AGENTS.md + boundaries)
 
 Design notes:
@@ -124,10 +125,31 @@ _TOOL_MAP: dict[str, list[str]] = {
 # Deterministic ordering for the generated tools: [...] allowlist.
 _TOOL_ORDER = ["Read", "Grep", "Glob", "Edit", "Write", "Bash", "Task"]
 
+# Instruction sources whose rules only matter for some file types. Claude Code
+# loads a .claude/rules/ file into context only when it touches a matching path,
+# so these stay out of the always-on budget and the rest keep a plain reference
+# copy. Paths are matched against those Claude reads or writes.
+PATH_SCOPED_RULES: dict[str, tuple[str, ...]] = {
+    "rules-typescript.md": ("**/*.ts", "**/*.tsx"),
+    "rules-database.md": (
+        "**/migrations/**",
+        "**/*.sql",
+        "**/models/**",
+        "**/schema*/**",
+    ),
+    "security-patterns.md": (
+        "**/auth/**",
+        "**/api/**",
+        "**/middleware/**",
+        "**/credentials/**",
+    ),
+}
+
 
 # ---------------------------------------------------------------------------
 # Frontmatter helpers
 # ---------------------------------------------------------------------------
+
 
 def _split_frontmatter(content: str) -> tuple[str, str] | None:
     """Return (frontmatter, body) or None if no valid frontmatter block."""
@@ -137,7 +159,7 @@ def _split_frontmatter(content: str) -> tuple[str, str] | None:
     if end == -1:
         return None
     frontmatter = content[3:end].strip("\n")
-    body = content[end + 4:]
+    body = content[end + 4 :]
     return frontmatter, body
 
 
@@ -191,7 +213,12 @@ def _parse_kilo_permissions(frontmatter: str) -> tuple[dict[str, str], str, str 
             continue
 
         # Inside permission block -- detect end (dedent with a new top-level key)
-        if indent <= perm_indent and ":" in stripped and not stripped.startswith('"') and not stripped.startswith("'"):
+        if (
+            indent <= perm_indent
+            and ":" in stripped
+            and not stripped.startswith('"')
+            and not stripped.startswith("'")
+        ):
             in_perm = False
             current_tool = None
             if stripped.startswith("description:"):
@@ -211,7 +238,7 @@ def _parse_kilo_permissions(frontmatter: str) -> tuple[dict[str, str], str, str 
             continue
 
         # Nested pattern entry: '    "pattern": effect'
-        sm = re.match(r'^(.+?):\s*(\S+)\s*$', stripped)
+        sm = re.match(r"^(.+?):\s*(\S+)\s*$", stripped)
         if sm and current_tool and indent >= perm_indent + 4:
             record(current_tool, sm.group(2))
             continue
@@ -233,12 +260,16 @@ def _build_tools_allowlist(perms: dict[str, str]) -> list[str]:
 
 
 def _derive_description(name: str) -> str:
-    return " ".join(w.capitalize() if i == 0 else w for i, w in enumerate(name.replace("-", " ").split()))
+    return " ".join(
+        w.capitalize() if i == 0 else w
+        for i, w in enumerate(name.replace("-", " ").split())
+    )
 
 
 # ---------------------------------------------------------------------------
 # Generators
 # ---------------------------------------------------------------------------
+
 
 def generate_agents(kilo_root: Path, claude_root: Path) -> int:
     """Generate .claude/agents/*.md from .kilo/agents/*.md."""
@@ -271,13 +302,17 @@ def generate_agents(kilo_root: Path, claude_root: Path) -> int:
         new_content = f"---{NL}{fm}---{NL}{body.lstrip(NL)}"
         _write_lf(dst_dir / agent_file.name, new_content)
         copied += 1
-        print(f"  [GEN] agents/{agent_file.name}  tools=[{', '.join(tools) or 'inherit'}]")
+        print(
+            f"  [GEN] agents/{agent_file.name}  tools=[{', '.join(tools) or 'inherit'}]"
+        )
 
     print(f"Claude agents generated: {copied}")
     return 0
 
 
-def generate_skills(kilo_root: Path, claude_root: Path, *, skip_names: set[str] | None = None) -> int:
+def generate_skills(
+    kilo_root: Path, claude_root: Path, *, skip_names: set[str] | None = None
+) -> int:
     """Copy skills from .kilo/skill/ to .claude/skills/ (Claude uses plural 'skills')."""
     src_dir = kilo_root / "skill"
     dst_dir = claude_root / "skills"
@@ -333,7 +368,9 @@ def generate_commands(kilo_root: Path, claude_root: Path) -> int:
                     break
             if not description:
                 description = _derive_description(cmd_file.stem)
-            new_content = f"---{NL}description: {description}{NL}---{NL}{body.lstrip(NL)}"
+            new_content = (
+                f"---{NL}description: {description}{NL}---{NL}{body.lstrip(NL)}"
+            )
         _write_lf(dst_dir / cmd_file.name, new_content)
         copied += 1
         print(f"  [GEN] commands/{cmd_file.name}")
@@ -342,9 +379,16 @@ def generate_commands(kilo_root: Path, claude_root: Path) -> int:
 
 
 def generate_instructions(kilo_root: Path, claude_root: Path) -> int:
-    """Copy instruction files verbatim to .claude/instruction/ for reference."""
+    """Write instruction sources into .claude/, path-scoping the ones that qualify.
+
+    Claude Code does not load .claude/instruction/, so a path-scoped source is
+    rewritten into .claude/rules/ with a `paths:` frontmatter block -- that
+    directory is loaded only for matching files. Everything else stays a
+    verbatim reference copy.
+    """
     src_dir = kilo_root / "instruction"
     dst_dir = claude_root / "instruction"
+    rules_dir = claude_root / "rules"
     if not src_dir.is_dir():
         print(f"[ERROR] Source instruction directory not found: {src_dir}")
         return 1
@@ -352,7 +396,22 @@ def generate_instructions(kilo_root: Path, claude_root: Path) -> int:
     dst_dir.mkdir(parents=True, exist_ok=True)
     copied = 0
     for f in sorted(src_dir.glob("*.md")):
-        _copy_if_changed(f, dst_dir / f.name)
+        globs = PATH_SCOPED_RULES.get(f.name)
+        if globs is None:
+            _copy_if_changed(f, dst_dir / f.name)
+            stale_rule = rules_dir / f.name
+            if stale_rule.exists():
+                stale_rule.unlink()
+                print(f"  [PRUNE] rules/{f.name} (no longer path-scoped)")
+        else:
+            rules_dir.mkdir(parents=True, exist_ok=True)
+            paths = "".join(f'  - "{glob}"{NL}' for glob in globs)
+            body = f.read_text(encoding="utf-8")
+            _write_lf(rules_dir / f.name, f"---{NL}paths:{NL}{paths}---{NL}{NL}{body}")
+            stale_copy = dst_dir / f.name
+            if stale_copy.exists():
+                stale_copy.unlink()
+                print(f"  [PRUNE] instruction/{f.name} (now a path-scoped rule)")
         copied += 1
     print(f"Claude instructions copied: {copied}")
     return 0
@@ -392,8 +451,12 @@ def _claude_md_counts(root_dir: Path) -> dict[str, int]:
     commands_dir = root_dir / ".kilo" / "command"
     return {
         "n_agents": len(list(agents_dir.glob("*.md"))) if agents_dir.is_dir() else 0,
-        "n_skills": len([p for p in skills_dir.iterdir() if p.is_dir()]) if skills_dir.is_dir() else 0,
-        "n_commands": len(list(commands_dir.glob("*.md"))) if commands_dir.is_dir() else 0,
+        "n_skills": len([p for p in skills_dir.iterdir() if p.is_dir()])
+        if skills_dir.is_dir()
+        else 0,
+        "n_commands": len(list(commands_dir.glob("*.md")))
+        if commands_dir.is_dir()
+        else 0,
     }
 
 
@@ -554,6 +617,21 @@ Run `/verify` (or `make check`) before declaring work complete:
 ## Git Commit Convention
 Use Conventional Commits: `type(scope): summary` (feat, fix, docs, test, refactor, chore).
 
+## Native auto memory
+
+Claude Code writes its own auto memory per repository alongside this harness's
+custom memory system (`memory/` dir + `MEMORY.md` index). Both load every
+session and serve different purposes -- they coexist, not compete.
+
+| System | Who writes it | What it holds |
+|---|---|---|
+| Native auto memory | Claude, automatically | Preferences and corrections picked up interactively |
+| Custom memory (`memory/`) | You or Claude deliberately | Structured project facts: goals, constraints, external pointers not derivable from code |
+
+**Rule:** Let native auto memory hold preferences and corrections. Write to
+`memory/` only for project facts with stable structure. Run
+`/doctor prompt-audit` quarterly to catch drift between the two.
+
 ## Choosing a worker engine (routing table)
 
 Three workers are available. Propose one **proactively** when the work fits --
@@ -566,6 +644,7 @@ delegation, not an instruction to always delegate.
 | Read >5 files, then summarize/compare/audit | **Antigravity CLI** | Large context through a headless worker |
 | Repo-wide survey -- "where else does X appear?" | **Antigravity CLI** | Breadth is its edge |
 | Independent review of a design or diff | **Antigravity CLI** | A second model catches different things |
+| Broad audit/research fitting Claude's context | **Native Workflow tool** | In-process subagents, structured output, no CLI round-trip |
 | UI verification, screenshots, recordings | **Antigravity GUI handoff** | The CLI cannot verify a rendered UI |
 | Small mechanical edit, boilerplate, one test | **Kilo CLI** or **OpenCode CLI** | Both headless -- cost the user nothing |
 | Scoped code writing behind an explicit fence | Antigravity CLI if broad, Kilo/OpenCode if narrow | All three need the fence in writing |
@@ -632,7 +711,13 @@ Respond in the user's language. Code, identifiers, and commit messages stay in E
 """
 
 
-def generate_all(kilo_root: Path, claude_root: Path, root_dir: Path, *, skip_names: set[str] | None = None) -> int:
+def generate_all(
+    kilo_root: Path,
+    claude_root: Path,
+    root_dir: Path,
+    *,
+    skip_names: set[str] | None = None,
+) -> int:
     """Generate every Claude engine artifact. Returns 0 on success."""
     claude_root.mkdir(parents=True, exist_ok=True)
     print("--- Claude agents ---")

@@ -1,3 +1,9 @@
+---
+paths:
+  - "**/*.ts"
+  - "**/*.tsx"
+---
+
 # TypeScript/JavaScript Coding Rules
 
 > Auto-loaded when editing `.ts`, `.tsx`, `.js`, `.jsx` files.

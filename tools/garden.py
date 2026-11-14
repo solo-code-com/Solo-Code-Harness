@@ -496,7 +496,8 @@ def check_claude(
       .kilo/agents      -> .claude/agents
       .kilo/skill       -> .claude/skills   (plural)
       .kilo/command     -> .claude/commands (plural)
-      .kilo/instruction -> .claude/instruction
+      .kilo/instruction -> .claude/instruction  (verbatim reference copy)
+      .kilo/instruction -> .claude/rules        (path-scoped, `paths:` added)
     Plus static infra: CLAUDE.md, settings.json, hooks/guard.py.
     """
     issues: list[str] = []
@@ -539,8 +540,38 @@ def check_claude(
         for name in sorted(dst_names - src_names):
             issues.append(f"Stale command (no source): .claude/commands/{name}")
 
-    # Instructions (direct copy, same filename)
-    issues.extend(check_instructions(src, dst, ".claude"))
+    # Instructions: path-scoped sources live in .claude/rules/ with a `paths:`
+    # frontmatter block, everything else is a verbatim copy in .claude/instruction/.
+    # The mapping is imported from the generator so the check and the writer can
+    # never disagree about which source goes where; deferred to call time because
+    # tools/ is not on sys.path when garden is imported as a module.
+    tools_dir = Path(__file__).resolve().parent
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    from claude_engine import PATH_SCOPED_RULES
+
+    src_instr = src / "instruction"
+    if src_instr.is_dir():
+        dst_instr = dst / "instruction"
+        dst_rules = dst / "rules"
+        for f in sorted(src_instr.glob("*.md")):
+            if f.name in PATH_SCOPED_RULES:
+                if not (dst_rules / f.name).is_file():
+                    issues.append(f"Missing rule: .claude/rules/{f.name}")
+                if (dst_instr / f.name).is_file():
+                    issues.append(
+                        f"Stale instruction (now a path-scoped rule): "
+                        f".claude/instruction/{f.name}"
+                    )
+            elif not (dst_instr / f.name).is_file():
+                issues.append(f"Missing instruction: .claude/instruction/{f.name}")
+        if dst_rules.is_dir():
+            for rule in sorted(dst_rules.glob("*.md")):
+                if (
+                    rule.name not in PATH_SCOPED_RULES
+                    or not (src_instr / rule.name).is_file()
+                ):
+                    issues.append(f"Stale rule (no source): .claude/rules/{rule.name}")
 
     # Memory (direct copy, same filename) — feat-008 parity
     issues.extend(check_memory(src, dst, ".claude"))
@@ -1078,6 +1109,7 @@ _ENGINE_LAYOUT = {
         "agent": "agents",
         "command": "commands",
         "instruction": "instruction",
+        "rules": "rules",
     },
     ".copilot": {
         "skill": "skill",
@@ -1120,6 +1152,12 @@ def _measure_engine(root: Path, engine: str) -> dict[str, int]:
     for kind in ("agent", "command", "instruction"):
         d = base / layout[kind]
         counts[kind] = len(list(d.glob("*.md"))) if d.is_dir() else 0
+
+    # .claude/rules/ holds instruction sources the generator rewrote with a
+    # `paths:` frontmatter block. They are still instructions, so the documented
+    # .claude/ instruction total must include them.
+    if "rules" in layout:
+        counts["instruction"] += len(list((base / layout["rules"]).glob("*.md")))
 
     return counts
 

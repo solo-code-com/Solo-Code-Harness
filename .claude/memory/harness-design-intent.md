@@ -10,7 +10,7 @@ Solo-Code Harness is a multi-layer quality and safety system for AI coding agent
 AGENTS.md        → Behavior rules, anti-hallucination, prose quality, harness boundaries
 .harness.lock    → Boundary manifest — which files are harness vs project code
 .kilo/instruction/ → Language-specific rules (Python, TS, Git, DB)
-.kilo/skill/     → 53 domain skills (code-review, debugging, testing...)
+.kilo/skill/     → 54 domain skills (code-review, debugging, testing...)
 .kilo/agents/    → 15 specialized agents with handoff chains
 .kilo/hooks/     → 20 lifecycle hooks (bash validation, secret scan, learning...)
 .kilo/hookify/   → MD-config rules engine (user-customizable policies)
