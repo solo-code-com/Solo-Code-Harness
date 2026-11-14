@@ -4,6 +4,8 @@ description: "Orchestrate broad, parallel, or adversarial tasks using the native
 license: MIT
 ---
 
+> **Claude Code only.** Kilo, OpenCode, and Copilot do not have the Workflow tool - use CLI delegation (`tools/antigravity_delegate.py`, `tools/opencode_delegate.py`) instead.
+
 # Dynamic Workflow Orchestration
 
 Use the native Workflow tool (not CLI delegation) when a task is genuinely

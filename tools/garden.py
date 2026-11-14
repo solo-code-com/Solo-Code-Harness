@@ -548,14 +548,23 @@ def check_claude(
     tools_dir = Path(__file__).resolve().parent
     if str(tools_dir) not in sys.path:
         sys.path.insert(0, str(tools_dir))
-    from claude_engine import PATH_SCOPED_RULES
+    scoped_rules = None
+    try:
+        from claude_engine import PATH_SCOPED_RULES
+
+        scoped_rules = PATH_SCOPED_RULES
+    except Exception as exc:  # noqa: BLE001 - a broken generator must surface as drift
+        issues.append(
+            "Cannot check .claude/rules/: failed to import PATH_SCOPED_RULES "
+            f"from claude_engine.py ({exc.__class__.__name__}: {exc})"
+        )
 
     src_instr = src / "instruction"
-    if src_instr.is_dir():
+    if src_instr.is_dir() and scoped_rules is not None:
         dst_instr = dst / "instruction"
         dst_rules = dst / "rules"
         for f in sorted(src_instr.glob("*.md")):
-            if f.name in PATH_SCOPED_RULES:
+            if f.name in scoped_rules:
                 if not (dst_rules / f.name).is_file():
                     issues.append(f"Missing rule: .claude/rules/{f.name}")
                 if (dst_instr / f.name).is_file():
@@ -568,7 +577,7 @@ def check_claude(
         if dst_rules.is_dir():
             for rule in sorted(dst_rules.glob("*.md")):
                 if (
-                    rule.name not in PATH_SCOPED_RULES
+                    rule.name not in scoped_rules
                     or not (src_instr / rule.name).is_file()
                 ):
                     issues.append(f"Stale rule (no source): .claude/rules/{rule.name}")

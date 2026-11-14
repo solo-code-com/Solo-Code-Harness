@@ -5,13 +5,15 @@
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(./secrets/**)",
-      "Bash(rm -rf *)",
       "Bash(rm -rf /*)",
       "Bash(git push --force *)",
       "Bash(git push -f origin main*)",
       "Bash(git push -f origin master*)",
       "Bash(git reset --hard*)",
       "Bash(DROP TABLE*)"
+    ],
+    "ask": [
+      "Bash(rm -rf *)"
     ]
   },
   "hooks": {
