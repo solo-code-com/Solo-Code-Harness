@@ -1146,6 +1146,11 @@ _ENGINE_ROOT = {".gemini": Path(".gemini") / "antigravity"}
 # Matches an engine mention anywhere on the line, e.g. "`.gemini/` commands (14)".
 _ENGINE_MENTION = re.compile(r"`?(\.(?:kilo|claude|copilot|gemini|opencode))/")
 
+# A count in prose may carry thousands separators: "1,000 agents" must read as
+# 1000. Matching the grouped form as one capture stops the comma from starting
+# a fresh number at "000", which read as a claim about zero agents.
+_COUNT_PATTERN = r"(\d{1,3}(?:,\d{3})*|\d+)"
+
 
 def _measure_engine(root: Path, engine: str) -> dict[str, int]:
     """Count skills/agents/commands/instructions actually present in an engine."""
@@ -1200,9 +1205,10 @@ def check_doc_counts(root: Path = ROOT) -> list[str]:
             "skills",
             [
                 re.compile(
-                    r"\b(\d+)\s+(?:specialized\s+|domain\s+)?skills?\b", re.IGNORECASE
+                    rf"\b{_COUNT_PATTERN}\s+(?:specialized\s+|domain\s+)?skills?\b",
+                    re.IGNORECASE,
                 ),
-                re.compile(r"\bskills?\s*\(\s*(\d+)\b", re.IGNORECASE),
+                re.compile(rf"\bskills?\s*\(\s*{_COUNT_PATTERN}\b", re.IGNORECASE),
             ],
         ),
         (
@@ -1210,25 +1216,35 @@ def check_doc_counts(root: Path = ROOT) -> list[str]:
             "agents",
             [
                 re.compile(
-                    r"\b(\d+)\s+(?:specialized\s+)?(?:sub)?agents?\b", re.IGNORECASE
+                    rf"\b{_COUNT_PATTERN}\s+(?:specialized\s+)?(?:sub)?agents?\b",
+                    re.IGNORECASE,
                 ),
-                re.compile(r"\b(?:sub)?agents?\s*\(\s*(\d+)\b", re.IGNORECASE),
+                re.compile(
+                    rf"\b(?:sub)?agents?\s*\(\s*{_COUNT_PATTERN}\b", re.IGNORECASE
+                ),
             ],
         ),
         (
             "command",
             "commands",
             [
-                re.compile(r"\b(\d+)\s+(?:slash\s+)?commands?\b", re.IGNORECASE),
-                re.compile(r"\b(?:slash\s+)?commands?\s*\(\s*(\d+)\b", re.IGNORECASE),
+                re.compile(
+                    rf"\b{_COUNT_PATTERN}\s+(?:slash\s+)?commands?\b", re.IGNORECASE
+                ),
+                re.compile(
+                    rf"\b(?:slash\s+)?commands?\s*\(\s*{_COUNT_PATTERN}\b",
+                    re.IGNORECASE,
+                ),
             ],
         ),
         (
             "instruction",
             "instructions",
             [
-                re.compile(r"\b(\d+)\s+instructions?\b", re.IGNORECASE),
-                re.compile(r"\binstructions?\s*\(\s*(\d+)\b", re.IGNORECASE),
+                re.compile(rf"\b{_COUNT_PATTERN}\s+instructions?\b", re.IGNORECASE),
+                re.compile(
+                    rf"\binstructions?\s*\(\s*{_COUNT_PATTERN}\b", re.IGNORECASE
+                ),
             ],
         ),
     ]
@@ -1252,7 +1268,7 @@ def check_doc_counts(root: Path = ROOT) -> list[str]:
                 want = expected[kind]
                 for pat in patterns:
                     for m in pat.finditer(line):
-                        val = int(m.group(1))
+                        val = int(m.group(1).replace(",", ""))
                         if val != want:
                             issues.append(
                                 f"{rel_path}:{line_no}: claimed {val} {label}, "

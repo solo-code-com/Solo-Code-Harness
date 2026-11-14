@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -397,6 +398,19 @@ def test_check_doc_counts_unnamed_line_falls_back_to_kilo(tmp_path):
 
     issues = garden.check_doc_counts(root=tmp_path)
     assert any("claimed 2 commands, but ground truth is 1" in i for i in issues), issues
+
+
+def test_count_pattern_reads_a_thousands_separator():
+    r"""`1,000 agents` is one count of 1000, not a claim about zero agents.
+
+    The ungrouped (\d+) capture started at "000", so a doc line stating the
+    runtime's own agent cap was reported as claiming 0 agents against 16.
+    """
+    match = re.search(
+        garden._COUNT_PATTERN + r"\s+agents?\b", "capped at 1,000 agents per run"
+    )
+    assert match is not None
+    assert int(match.group(1).replace(",", "")) == 1000
 
 
 # ── check_doc_paths ──────────────────────────────────────────────────────

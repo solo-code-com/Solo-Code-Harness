@@ -1,7 +1,7 @@
 export const meta = {
   name: 'crud-module',
   description: 'Generate the model, repository, service, api and test files for one entity, then lint and type check them',
-  phases: ['Generate', 'Verify'],
+  phases: ['Contract', 'Generate', 'Verify'],
 }
 
 const input = args || {}
@@ -18,8 +18,6 @@ const entityName = input.entityName.trim()
 const entitySchema = JSON.stringify(input.entitySchema)
 const outputDir = typeof input.outputDir === 'string' && input.outputDir !== '' ? input.outputDir : 'src/'
 const baseDir = outputDir.endsWith('/') ? outputDir : outputDir + '/'
-
-phase('Generate')
 
 const components = [
   {
@@ -49,6 +47,67 @@ const components = [
   },
 ]
 
+phase('Contract')
+
+const contract = await agent(
+  [
+    'Define the naming and structure conventions for the "' + entityName + '" CRUD module.',
+    'Five independent agents will write these files next and never see each other, so this contract is the only thing keeping them consistent:',
+    components.map((component) => component.name + ' -> ' + component.path).join('\n'),
+    'The repository exposes exactly five methods: create, findById, list, update and delete. The service must call them by exactly those names.',
+    'Set importPaths to the path from the tests file to each of the other files, written exactly as it must appear inside an import statement.',
+    'Entity schema: ' + entitySchema,
+  ].join('\n'),
+  {
+    label: 'contract',
+    schema: {
+      type: 'object',
+      required: ['modelClass', 'serviceClass', 'repositoryClass', 'importPaths', 'methodNames', 'injectionPattern'],
+      properties: {
+        modelClass: { type: 'string', description: 'PascalCase class name for the model, such as Product' },
+        serviceClass: { type: 'string', description: 'PascalCase class name for the service, such as ProductService' },
+        repositoryClass: { type: 'string', description: 'PascalCase class name for the repository, such as ProductRepository' },
+        importPaths: {
+          type: 'object',
+          required: ['model', 'repository', 'service', 'api'],
+          description: 'Relative import path from the tests file to each layer',
+          properties: {
+            model: { type: 'string' },
+            repository: { type: 'string' },
+            service: { type: 'string' },
+            api: { type: 'string' },
+          },
+        },
+        methodNames: {
+          type: 'object',
+          required: ['create', 'findById', 'list', 'update', 'delete'],
+          description: 'Method names on the service class',
+          properties: {
+            create: { type: 'string' },
+            findById: { type: 'string' },
+            list: { type: 'string' },
+            update: { type: 'string' },
+            delete: { type: 'string' },
+          },
+        },
+        injectionPattern: {
+          type: 'string',
+          enum: ['class-constructor', 'singleton'],
+          description: 'How the service receives the repository',
+        },
+      },
+    },
+  },
+)
+
+if (!contract) {
+  throw new Error('crud-module: the contract agent returned no result for ' + entityName)
+}
+
+const contractNote = 'Follow this contract exactly - do not invent names or patterns it does not list: ' + JSON.stringify(contract)
+
+phase('Generate')
+
 const generated = await parallel(
   components.map((component) => () =>
     agent(
@@ -57,6 +116,7 @@ const generated = await parallel(
         'Entity schema: ' + entitySchema,
         'Write exactly one file, at ' + component.path + ', and do not modify any other file.',
         'Requirements: ' + component.requirements,
+        contractNote,
       ].join('\n'),
       {
         label: component.name,

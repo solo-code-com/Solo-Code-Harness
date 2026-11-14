@@ -77,7 +77,7 @@ const generated = await pipeline(selected, async (endpoint) => {
       : String(endpoint.method) + '-' + String(endpoint.path).replace(/[^a-zA-Z0-9]+/g, '-')
 
   const route = await agent(
-    'Register the route for ' + target + ' in the router under ' + baseDir + 'routes/. Point it at the handler this run writes.',
+    'Write the route for ' + target + ' at ' + baseDir + 'routes/' + slug + '.js. Import the handler from ../handlers/' + slug + '.js, which exports one named function called handle, and register it for this method and path.',
     {
       label: slug + ':route',
       schema: {
@@ -92,7 +92,7 @@ const generated = await pipeline(selected, async (endpoint) => {
   )
 
   const handler = await agent(
-    'Write the handler for ' + target + ' at ' + baseDir + 'handlers/' + slug + '.js. Validate nothing here; call the validation layer.',
+    'Write the handler for ' + target + ' at ' + baseDir + 'handlers/' + slug + '.js. Export one named function called handle that takes (req, res). Import the validation from ../validation/' + slug + '.js, which exports one named function called validate, and call it. Do not validate anything inline.',
     {
       label: slug + ':handler',
       schema: {
@@ -107,7 +107,7 @@ const generated = await pipeline(selected, async (endpoint) => {
   )
 
   const validation = await agent(
-    'Write the request validation for ' + target + ' at ' + baseDir + 'validation/' + slug + '.js, covering every parameter and body field the spec declares.',
+    'Write the request validation for ' + target + ' at ' + baseDir + 'validation/' + slug + '.js. Export one named function called validate that takes the request and returns the validated input, throwing on a bad request. Cover every parameter and body field the spec declares.',
     {
       label: slug + ':validation',
       schema: {
@@ -122,7 +122,7 @@ const generated = await pipeline(selected, async (endpoint) => {
   )
 
   const tests = await agent(
-    'Write the tests for ' + target + ' at ' + baseDir + 'tests/' + slug + '.test.js, covering the success path and each declared error response.',
+    'Write the tests for ' + target + ' at ' + baseDir + 'tests/' + slug + '.test.js. Import the handler from ../handlers/' + slug + '.js as a named export called handle, and the validation from ../validation/' + slug + '.js as a named export called validate. Cover the success path and each declared error response.',
     {
       label: slug + ':tests',
       schema: {
