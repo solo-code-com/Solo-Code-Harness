@@ -174,13 +174,42 @@ delegation, not an instruction to always delegate.
 | Read >5 files, then summarize/compare/audit | **Antigravity CLI** | Large context through a headless worker |
 | Repo-wide survey -- "where else does X appear?" | **Antigravity CLI** | Breadth is its edge |
 | Independent review of a design or diff | **Antigravity CLI** | A second model catches different things |
-| Broad audit/research fitting Claude's context | **Native Workflow tool** | In-process subagents, structured output, no CLI round-trip |
+| Generate a CRUD module per entity | **Native Workflow** (`/crud-module`) | Five components in parallel, schema-enforced output |
+| Implement an API from a written spec | **Native Workflow** (`/api-from-spec`) | One endpoint per pipeline item, no barrier between endpoints |
+| Migrate data files to a new schema | **Native Workflow** (`/data-migration`) | One file per item, explicit output path, validated at the end |
+| Audit code or docs against rules | **Native Workflow** (`/compliance-audit`) | Parallel per directory, findings ranked in plain JS |
+| Implement a feature with adversarial review | **Native Workflow** (`/adversarial-implementation`) | Two independent reviewers, one fix pass |
 | UI verification, screenshots, recordings | **Antigravity GUI handoff** | The CLI cannot verify a rendered UI |
 | Small mechanical edit, boilerplate, one test | **Kilo CLI** or **OpenCode CLI** | Both headless -- cost the user nothing |
 | Scoped code writing behind an explicit fence | Antigravity CLI if broad, Kilo/OpenCode if narrow | All three need the fence in writing |
 | Free model experimentation, cache tracking | **OpenCode CLI** | Has free models + reasoning/cache token breakdown |
 | Architecture / product / security decisions | **Neither -- do it here** | Judgment is not delegable |
 | Anything needing this conversation's history | **Neither -- do it here** | All workers are context-blind |
+
+**Workflow vs CLI delegation.** A workflow run caps at 4,096 items per `parallel()` or `pipeline()` call, an agent cap of 1,000 per run, and 16 concurrent agents. Use it when the work fits Claude's context and benefits from structured output or independent reviewers. Delegate to the CLI when the work exceeds Claude's context, needs a different model, or needs UI verification. Running both is normal: the workflow does the work, a CLI worker reviews it.
+
+## Using workflow templates
+
+Templates live in `.claude/workflows/` and run as slash commands, one per file
+stem. Describe the input in the same message and Claude passes it to the script
+as the `args` global.
+
+Generate a CRUD module:
+
+```text
+/crud-module Product, fields id uuid, name string, price decimal, into src/modules/product/
+```
+
+Implement a feature and have it reviewed adversarially:
+
+```text
+/adversarial-implementation specs/user-authentication.md, into src/auth/, rules docs/security-policy.md
+```
+
+A template throws before any agent runs when a required argument is missing, so
+a malformed invocation fails fast rather than generating half a module. Read
+`.claude/skills/dynamic-workflow-orchestration/SKILL.md` for all five templates,
+their arguments and the runtime limits.
 
 Kilo CLI, OpenCode CLI, and Antigravity CLI are headless. Use
 `tools/antigravity_delegate.py` for broad scopes; writes require both

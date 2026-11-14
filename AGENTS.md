@@ -264,12 +264,18 @@ consider delegation, not an instruction to always delegate.
 | Read >5 files, then summarize/compare/audit | **Antigravity CLI** | Large context through a headless worker |
 | Repo-wide survey — "where else does X appear?" | **Antigravity CLI** | Breadth is exactly its edge |
 | Independent review of a design or diff | **Antigravity CLI** | A second model catches different things |
-| Broad audit/research fitting Claude's context | **Native Workflow tool** | In-process subagents, structured output, no CLI round-trip |
+| Generate a CRUD module per entity | **Native Workflow** (`/crud-module`) | Five components in parallel, schema-enforced output |
+| Implement an API from a written spec | **Native Workflow** (`/api-from-spec`) | One endpoint per pipeline item, no barrier between endpoints |
+| Migrate data files to a new schema | **Native Workflow** (`/data-migration`) | One file per item, explicit output path, validated at the end |
+| Audit code or docs against rules | **Native Workflow** (`/compliance-audit`) | Parallel per directory, findings ranked in plain JS |
+| Implement a feature with adversarial review | **Native Workflow** (`/adversarial-implementation`) | Two independent reviewers, one fix pass |
 | UI verification, screenshots, recordings | **Antigravity GUI handoff** | The CLI cannot verify a rendered UI |
 | Small mechanical edit, boilerplate, one test | **OpenCode CLI** | Headless — costs the user nothing |
 | Scoped code writing behind an explicit fence | Antigravity CLI if broad, OpenCode CLI if narrow | Both need the fence stated in writing |
 | Architecture / product / security decisions | **Neither — do it here** | Judgment is not delegable |
 | Anything needing this conversation's history | **Neither — do it here** | Workers are context-blind |
+
+**Workflow vs CLI delegation.** A workflow run caps at 4,096 items per `parallel()` or `pipeline()` call, an agent cap of 1,000 per run, and 16 concurrent agents. Use it when the work fits Claude's context and benefits from structured output or independent reviewers. Delegate to the CLI when the work exceeds Claude's context, needs a different model, or needs UI verification. Running both is normal: the workflow does the work, a CLI worker reviews it. Invocation examples and the full template list are in `.claude/skills/dynamic-workflow-orchestration/SKILL.md`.
 
 OpenCode CLI, Kilo CLI, and Antigravity CLI are headless. **OpenCode CLI is the
 primary narrow executor and the orchestrator that plans and routes work**;

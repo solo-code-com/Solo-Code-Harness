@@ -312,8 +312,6 @@ EXCLUDE_DIRS = {
     # Runtime state directories — never belong in a deploy
     "sessions",  # .kilo/state/sessions/
     "logs",  # .kilo/logs/
-    # Solo-Code-CLI's own CI/release pipeline — target project designs its own
-    "workflows",  # .github/workflows/ci.yml, release.yml
 }
 EXCLUDE_FILES = {
     ".env",
@@ -992,6 +990,12 @@ def _generate_harness_lock(
 def should_copy(path: Path) -> bool:
     """Check if a file/dir should be copied (not excluded)."""
     name = path.name
+    if ".github" in path.parts and "workflows" in path.parts:
+        # Solo-Code-CLI's own CI/release pipeline. Scoped by path, not by the
+        # bare directory name: `workflows` also matched .claude/workflows/,
+        # which silently dropped the harness's own workflow templates from
+        # every deploy.
+        return False
     for part in path.parts:
         if part in EXCLUDE_DIRS:
             return False
