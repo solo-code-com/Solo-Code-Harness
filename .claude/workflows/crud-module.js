@@ -62,11 +62,12 @@ const contract = await agent(
     label: 'contract',
     schema: {
       type: 'object',
-      required: ['modelClass', 'serviceClass', 'repositoryClass', 'importPaths', 'methodNames', 'injectionPattern'],
+      required: ['modelClass', 'serviceClass', 'repositoryClass', 'importPaths', 'methodNames', 'injectionPattern', 'moduleSystem'],
       properties: {
         modelClass: { type: 'string', description: 'PascalCase class name for the model, such as Product' },
         serviceClass: { type: 'string', description: 'PascalCase class name for the service, such as ProductService' },
         repositoryClass: { type: 'string', description: 'PascalCase class name for the repository, such as ProductRepository' },
+        moduleSystem: { type: 'string', enum: ['esm', 'commonjs'], description: 'Module system for all five files: esm uses import/export, commonjs uses require/module.exports. All five files must use the same system.' },
         importPaths: {
           type: 'object',
           required: ['model', 'repository', 'service', 'api'],
