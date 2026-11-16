@@ -73,11 +73,22 @@ number. Its plan quota is finite and it dies mid-batch when exhausted.
 
 1. Write a **self-contained** brief: workers are context-blind, so inline every
    fact they need (paths, constraints, expected gate result).
-2. Fence the scope in writing. Name every writable path. For writes, require
-   both `--auto-approve` and `--allow-dir`. Also pass --agent solo-code-engineer:
-   the wrapper resolves the project's default_agent and omits --auto when that
-   agent is the orchestrator, so a write task with no --agent runs without write
-   permission.
+2. Fence the scope in writing. Name every writable path. Then, per wrapper:
+   - `opencode_delegate.py`: pass `--directory` and `--agent solo-code-engineer`
+     (the wrapper resolves the project's default_agent and omits `--auto` when
+     that agent is the orchestrator, so a write task with no `--agent` runs
+     without write permission). When the fence is a subdirectory, add
+     `--enforce-scope`: it then exits 4 on any write outside `--directory`.
+     Without that flag the post-run scope check only prints to stderr and exits
+     0. It refuses to run when `--directory` resolves to the repo root, because
+     there is no narrower scope to enforce, so a root-level delegation has no
+     automatic fence at all.
+   - `antigravity_delegate.py`: pass both `--auto-approve` and `--allow-dir`.
+     It exits 4 on an out-of-scope write.
+   Neither wrapper reverts a write made outside the fence, and both compare a
+   snapshot of the whole workspace, so a second writer running at the same time
+   looks like this run's violation. Inspect `git status` and the diff after
+   every delegation, and run only one writing worker at a time.
 3. Demand **evidence, not confidence**: a `| Claim | Command run | Output |`
    table. Never accept "Confident: Yes".
 4. Give the measurement, never the answer.
