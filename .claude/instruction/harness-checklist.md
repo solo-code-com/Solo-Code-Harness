@@ -71,7 +71,7 @@
 - [ ] Session start/end hooks capture duration, tool calls, token estimates
 - [ ] Token usage logged per tool call (.kilo/state/token-log.jsonl)
 - [ ] Session logs persisted (.kilo/state/sessions/)
-- [ ] Governance events captured (.kilo/logs/governance-events.jsonl)
+- [ ] Governance events captured (.kilo/logs/governance-events.jsonl) - written by .kilo/hooks/pre-tool-use/governance-capture.js only when a Kilo hook records an event; its presence is not evidence that Kilo ran
 - [ ] Cost estimates visible in session summary
 
 ## When this harness component should be removed

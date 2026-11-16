@@ -1613,11 +1613,10 @@ def test_check_hook_references_malformed_json_is_one_issue(tmp_path):
     assert "hooks.json" in issues[0]
 
 
-def test_check_hook_references_missing_file_is_one_issue(tmp_path):
-    issues = garden.check_hook_references(tmp_path)
-
-    assert len(issues) == 1, issues
-    assert "hooks.json" in issues[0]
+def test_check_hook_references_absent_file_is_not_an_issue(tmp_path):
+    """An absent hooks.json is optional, not drift: removing the Kilo hook
+    layer must not fail the gate."""
+    assert garden.check_hook_references(tmp_path) == []
 
 
 def test_live_repo_hook_references_resolve():

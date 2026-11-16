@@ -2083,14 +2083,18 @@ def check_hook_references(root: Path = ROOT) -> list[str]:
     A `hook` command pointing at a removed script only fails at runtime, in
     the middle of a session -- the worst moment to discover it. Duplicate ids
     are reported too: the profiles select hooks by id, so a duplicate makes
-    one entry unreachable without any error. A missing or malformed
-    hooks.json is one issue, never a traceback.
+    one entry unreachable without any error. An absent hooks.json is not an
+    issue; a malformed one is one issue, never a traceback.
     """
     path = root / ".kilo" / "hooks" / "hooks.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except FileNotFoundError:
-        return ["hooks.json missing: .kilo/hooks/hooks.json"]
+        # Optional: the Kilo hook layer may be removed entirely, and a gate
+        # must not fail for protecting code that no longer exists. When the
+        # file is present, the script references and duplicate ids below are
+        # still checked.
+        return []
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return [f"hooks.json unreadable (.kilo/hooks/hooks.json): {exc}"]
 
