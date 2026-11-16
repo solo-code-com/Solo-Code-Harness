@@ -92,7 +92,14 @@ const generated = await pipeline(selected, async (endpoint) => {
   )
 
   const handler = await agent(
-    'Write the handler for ' + target + ' at ' + baseDir + 'handlers/' + slug + '.js. Export one named function called handle that takes (req, res). Import the validation from ../validation/' + slug + '.js, which exports one named function called validate, and call it. Do not validate anything inline.',
+    [
+      'Write the handler for ' + target + ' at ' + baseDir + 'handlers/' + slug + '.js.',
+      'Export one named function called handle that takes (req, res).',
+      'Import validate and ValidationError from ../validation/' + slug + '.js. That module exports both by name.',
+      'Call validate(req), passing the whole request object. On success it returns the validated input object; continue with the returned value.',
+      'Wrap the call in try/catch. When the caught error is a ValidationError, respond with status 400 and the error message. Any other thrown error is a server fault: respond with status 500 and do not leak the stack.',
+      'Do not validate anything inline.',
+    ].join('\n'),
     {
       label: slug + ':handler',
       schema: {
@@ -107,7 +114,13 @@ const generated = await pipeline(selected, async (endpoint) => {
   )
 
   const validation = await agent(
-    'Write the request validation for ' + target + ' at ' + baseDir + 'validation/' + slug + '.js. Export one named function called validate that takes the request and returns the validated input, throwing on a bad request. Cover every parameter and body field the spec declares.',
+    [
+      'Write the request validation for ' + target + ' at ' + baseDir + 'validation/' + slug + '.js.',
+      'Export a class ValidationError that extends Error, sets this.name to ValidationError and this.status to 400.',
+      'Export one named function called validate that takes the full request object (req), reads req.body and req.params from it, and returns the validated and coerced input object on success.',
+      'On a bad request throw new ValidationError with a message naming the field at fault. Never return an error list: always throw.',
+      'Cover every parameter and body field the spec declares.',
+    ].join('\n'),
     {
       label: slug + ':validation',
       schema: {
@@ -122,7 +135,14 @@ const generated = await pipeline(selected, async (endpoint) => {
   )
 
   const tests = await agent(
-    'Write the tests for ' + target + ' at ' + baseDir + 'tests/' + slug + '.test.js. Import the handler from ../handlers/' + slug + '.js as a named export called handle, and the validation from ../validation/' + slug + '.js as a named export called validate. Cover the success path and each declared error response.',
+    [
+      'Write the tests for ' + target + ' at ' + baseDir + 'tests/' + slug + '.test.js.',
+      'Import the handler from ../handlers/' + slug + '.js as a named export called handle.',
+      'Import validate and ValidationError from ../validation/' + slug + '.js as named exports.',
+      'Cover the success path and each declared error response.',
+      'Assert that validate returns the validated input for a good request, and that it throws a ValidationError for each bad case.',
+      'Assert that handle responds 400 when validate throws, and the success status on a valid request.',
+    ].join('\n'),
     {
       label: slug + ':tests',
       schema: {
