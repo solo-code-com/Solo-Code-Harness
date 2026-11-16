@@ -180,10 +180,21 @@ const generated = await pipeline(selected, async (endpoint) => {
     },
   )
 
-  return { endpoint, route, handler, validation, tests }
+  return { endpoint, slug, route, handler, validation, tests }
 })
 
 const files = generated.filter(Boolean)
+
+const expectedFiles = files.flatMap((entry) => [
+  baseDir + 'routes/' + entry.slug + '.js',
+  baseDir + 'handlers/' + entry.slug + '.js',
+  baseDir + 'validation/' + entry.slug + '.js',
+  baseDir + 'tests/' + entry.slug + '.test.js',
+])
+
+if (selected.length > 0 && files.length === 0) {
+  throw new Error('api-from-spec: every endpoint agent failed, so nothing was generated from ' + specFile)
+}
 
 const routeFiles = files
   .map((entry) => (entry && entry.route && entry.route.file ? entry.route.file : null))
@@ -216,6 +227,10 @@ const mounted =
         },
       )
 
+if (routeFiles.length > 0 && !mounted) {
+  throw new Error('api-from-spec: the mount agent returned no result, so ' + baseDir + 'routes/index.js was not written')
+}
+
 phase('Verify')
 
 const verification = await agent(
@@ -225,6 +240,10 @@ const verification = await agent(
     'Read every generated handler and confirm each path sends a response. A handler whose success path never calls res.status and res.json is a failure even when every test passes.',
     'Route files written this run:',
     routeFiles.length > 0 ? routeFiles.join('\n') : '(no route file was written)',
+    'Every endpoint must produce four files, and the mount must produce the index. Confirm each of these paths exists on disk and report every missing one as a failure:',
+    expectedFiles.join('\n'),
+    baseDir + 'routes/index.js',
+    'A file this run was supposed to write but did not is a failure, even when the tests that do exist all pass.',
     'The mount index is ' + baseDir + 'routes/index.js: check it requires each descriptor file and wires each one onto one shared Express router with router[descriptor.method](descriptor.path, descriptor.handle).',
     'A failure in one generated endpoint must not hide the others: report every failing check.',
     'Do not edit any file.',
