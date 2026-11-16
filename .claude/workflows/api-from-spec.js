@@ -1,7 +1,7 @@
 export const meta = {
   name: 'api-from-spec',
   description: 'Generate route, handler, validation and tests for every endpoint in an API spec, then verify the contract',
-  phases: ['Parse', 'Generate', 'Verify'],
+  phases: ['Parse', 'Generate', 'Mount', 'Verify'],
 }
 
 const input = args || {}
@@ -15,6 +15,18 @@ const outputDir = typeof input.outputDir === 'string' && input.outputDir !== '' 
 const baseDir = outputDir.endsWith('/') ? outputDir : outputDir + '/'
 const maxEndpoints = typeof input.maxEndpoints === 'number' && input.maxEndpoints > 0 ? Math.floor(input.maxEndpoints) : 40
 const cap = 4096
+
+const requestedModuleSystem = input.moduleSystem === undefined ? 'commonjs' : input.moduleSystem
+
+if (requestedModuleSystem !== 'esm' && requestedModuleSystem !== 'commonjs') {
+  throw new Error('api-from-spec: moduleSystem must be "esm" or "commonjs"')
+}
+
+const moduleSystem = requestedModuleSystem
+const moduleRule =
+  moduleSystem === 'esm'
+    ? 'Use ES modules throughout: import and export. Never use require or module.exports.'
+    : 'Use CommonJS throughout: require and module.exports. Never use import or export.'
 
 phase('Parse')
 
@@ -77,7 +89,10 @@ const generated = await pipeline(selected, async (endpoint) => {
       : String(endpoint.method) + '-' + String(endpoint.path).replace(/[^a-zA-Z0-9]+/g, '-')
 
   const route = await agent(
-    'Write the route for ' + target + ' at ' + baseDir + 'routes/' + slug + '.js. Import the handler from ../handlers/' + slug + '.js, which exports one named function called handle, and register it for this method and path.',
+    [
+      'Write the route for ' + target + ' at ' + baseDir + 'routes/' + slug + '.js. Import the handler from ../handlers/' + slug + '.js, which exports one named function called handle, and register it for this method and path.',
+      moduleRule,
+    ].join('\n'),
     {
       label: slug + ':route',
       schema: {
@@ -99,6 +114,7 @@ const generated = await pipeline(selected, async (endpoint) => {
       'Call validate(req), passing the whole request object. On success it returns the validated input object; continue with the returned value.',
       'Wrap the call in try/catch. When the caught error is a ValidationError, respond with status 400 and the error message. Any other thrown error is a server fault: respond with status 500 and do not leak the stack.',
       'Do not validate anything inline.',
+      moduleRule,
     ].join('\n'),
     {
       label: slug + ':handler',
@@ -120,6 +136,7 @@ const generated = await pipeline(selected, async (endpoint) => {
       'Export one named function called validate that takes the full request object (req), reads req.body and req.params from it, and returns the validated and coerced input object on success.',
       'On a bad request throw new ValidationError with a message naming the field at fault. Never return an error list: always throw.',
       'Cover every parameter and body field the spec declares.',
+      moduleRule,
     ].join('\n'),
     {
       label: slug + ':validation',
@@ -142,6 +159,7 @@ const generated = await pipeline(selected, async (endpoint) => {
       'Cover the success path and each declared error response.',
       'Assert that validate returns the validated input for a good request, and that it throws a ValidationError for each bad case.',
       'Assert that handle responds 400 when validate throws, and the success status on a valid request.',
+      moduleRule,
     ].join('\n'),
     {
       label: slug + ':tests',
@@ -161,11 +179,45 @@ const generated = await pipeline(selected, async (endpoint) => {
 
 const files = generated.filter(Boolean)
 
+const routeFiles = files
+  .map((entry) => (entry && entry.route && entry.route.file ? entry.route.file : null))
+  .filter(Boolean)
+
+phase('Mount')
+
+const mounted =
+  routeFiles.length === 0
+    ? null
+    : await agent(
+        [
+          'These route files exist, and each exports a default function that takes a router and registers one endpoint:',
+          routeFiles.join('\n'),
+          'Write ' + baseDir + 'routes/index.js.',
+          'Import each route module above, call each default export with the same router instance, and export that router as the default export of this index file.',
+          'Do not modify the route files themselves.',
+          moduleRule,
+        ].join('\n'),
+        {
+          label: 'mount',
+          schema: {
+            type: 'object',
+            required: ['file', 'summary'],
+            properties: {
+              file: { type: 'string', description: 'The index file written' },
+              summary: { type: 'string', description: 'One sentence on what it mounts' },
+            },
+          },
+        },
+      )
+
 phase('Verify')
 
 const verification = await agent(
   [
     'Run the test suite and the API contract check for the endpoints generated from ' + specFile + '.',
+    'Route files written this run:',
+    routeFiles.length > 0 ? routeFiles.join('\n') : '(no route file was written)',
+    'The mount index is ' + baseDir + 'routes/index.js: check it imports each route and calls each default export.',
     'A failure in one generated endpoint must not hide the others: report every failing check.',
     'Do not edit any file.',
   ].join('\n'),
@@ -182,4 +234,4 @@ const verification = await agent(
   },
 )
 
-return { specFile, endpointCount: endpoints.length, generated: files, verification }
+return { specFile, endpointCount: endpoints.length, generated: files, mounted, verification }

@@ -19,6 +19,18 @@ const entitySchema = JSON.stringify(input.entitySchema)
 const outputDir = typeof input.outputDir === 'string' && input.outputDir !== '' ? input.outputDir : 'src/'
 const baseDir = outputDir.endsWith('/') ? outputDir : outputDir + '/'
 
+const requestedModuleSystem = input.moduleSystem === undefined ? 'commonjs' : input.moduleSystem
+
+if (requestedModuleSystem !== 'esm' && requestedModuleSystem !== 'commonjs') {
+  throw new Error('crud-module: moduleSystem must be "esm" or "commonjs"')
+}
+
+const moduleSystem = requestedModuleSystem
+const moduleRule =
+  moduleSystem === 'esm'
+    ? 'Use ES modules throughout: import and export. Never use require or module.exports.'
+    : 'Use CommonJS throughout: require and module.exports. Never use import or export.'
+
 const components = [
   {
     name: 'model',
@@ -55,6 +67,7 @@ const contract = await agent(
     'Five independent agents will write these files next and never see each other, so this contract is the only thing keeping them consistent:',
     components.map((component) => component.name + ' -> ' + component.path).join('\n'),
     'The repository exposes exactly five methods: create, findById, list, update and delete. The service must call them by exactly those names.',
+    'moduleSystem is fixed to ' + moduleSystem + ' for all five files; use it exactly and do not choose another.',
     'Set importPaths to the path from the tests file to each of the other files, written exactly as it must appear inside an import statement.',
     'Entity schema: ' + entitySchema,
   ].join('\n'),
@@ -62,12 +75,11 @@ const contract = await agent(
     label: 'contract',
     schema: {
       type: 'object',
-      required: ['modelClass', 'serviceClass', 'repositoryClass', 'importPaths', 'methodNames', 'injectionPattern', 'moduleSystem'],
+      required: ['modelClass', 'serviceClass', 'repositoryClass', 'importPaths', 'methodNames', 'injectionPattern'],
       properties: {
         modelClass: { type: 'string', description: 'PascalCase class name for the model, such as Product' },
         serviceClass: { type: 'string', description: 'PascalCase class name for the service, such as ProductService' },
         repositoryClass: { type: 'string', description: 'PascalCase class name for the repository, such as ProductRepository' },
-        moduleSystem: { type: 'string', enum: ['esm', 'commonjs'], description: 'Module system for all five files: esm uses import/export, commonjs uses require/module.exports. All five files must use the same system.' },
         importPaths: {
           type: 'object',
           required: ['model', 'repository', 'service', 'api'],
@@ -104,6 +116,8 @@ const contract = await agent(
 if (!contract) {
   throw new Error('crud-module: the contract agent returned no result for ' + entityName)
 }
+
+contract.moduleSystem = moduleSystem
 
 const contractNote = 'Follow this contract exactly - do not invent names or patterns it does not list: ' + JSON.stringify(contract)
 
