@@ -173,21 +173,40 @@ def _wsl_ready() -> bool:
         return False
 
 
+_WSL_IS_ROOT: bool | None = None
+
+
 def _wsl_is_root() -> bool:
-    """True when WSL launches as root by default."""
+    """True when WSL launches as root by default.
+
+    Cached for the session: the probe is a subprocess, and under a full-suite
+    load it once exceeded its own timeout. The old fallback answered "not
+    root" on that failure, which flipped the sandbox assertion below to the
+    opposite scenario and failed five tests that pass on their own. An unknown
+    answer now skips instead of asserting the wrong branch.
+    """
+    global _WSL_IS_ROOT
+    if _WSL_IS_ROOT is not None:
+        return _WSL_IS_ROOT
     if not _WSL:
+        _WSL_IS_ROOT = False
         return False
-    try:
-        p = subprocess.run(
-            [_WSL, "-e", "id", "-u"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-        return p.stdout.strip() == "0"
-    except (OSError, subprocess.SubprocessError):
-        return False
+    for _attempt in range(2):
+        try:
+            p = subprocess.run(
+                [_WSL, "-e", "id", "-u"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            _WSL_IS_ROOT = p.stdout.strip() == "0"
+            return _WSL_IS_ROOT
+        except (OSError, subprocess.SubprocessError):
+            continue
+    pytest.skip(
+        "cannot determine whether WSL runs as root, so the sandbox scenario is unknown"
+    )
 
 
 _WSL_READY = _wsl_ready()
