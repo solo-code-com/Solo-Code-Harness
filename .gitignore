@@ -26,11 +26,14 @@ node_modules/
 !.env.template
 
 # Harness per-project config
-.solocode/
-# But allow executor config templates to be committed
+.solocode/*
+# Exclude each entry rather than the directory itself: a trailing-slash pattern
+# makes git skip the whole directory, which kills every negation below it.
+# The deploy template must ship with a clone; deploy.py reads it as the source
+# for a target's .solocode/executor-config.json.
 !.solocode/executor-config.json
-!.solocode/executor-mode
-!.solocode/.gitkeep
+# Local gate state. Never ship a target whose write gate is already off.
+.solocode/executor-mode
 
 # Claude Code personal overrides (generated locally, not committed)
 .claude/settings.local.json

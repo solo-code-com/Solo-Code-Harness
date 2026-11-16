@@ -1,0 +1,27 @@
+{
+  "default_executor": "opencode",
+  "executors": {
+    "opencode": {
+      "command": "python tools/opencode_delegate.py",
+      "default_model": "commandcode/deepseek-v4-pro",
+      "paid_model": "commandcode/deepseek-v4-pro",
+      "usage_log": ".solocode/opencode-usage.jsonl",
+      "success_rate": 0.8,
+      "features": ["free_models", "reasoning_tokens", "cache_tracking"]
+    },
+    "kilo": {
+      "command": "python tools/kilo_cli_delegate.py",
+      "default_model": "commandcode/deepseek/deepseek-v4-pro",
+      "usage_log": ".solocode/kilo-usage.jsonl",
+      "success_rate": 0.2,
+      "features": ["json_events", "session_tracking"]
+    }
+  },
+  "routing": {
+    "simple_edits": "opencode",
+    "boilerplate": "opencode",
+    "single_test": "opencode",
+    "mechanical_changes": "opencode",
+    "fallback": "kilo"
+  }
+}
