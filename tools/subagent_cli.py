@@ -165,7 +165,10 @@ class CliProvider:
         ok = code == 0
         evidence: dict[str, object] = {"argv": argv, "exit_code": code}
         if not ok:
-            evidence["error"] = err.strip() or out.strip() or f"exit {code}"
+            # Both streams can carry the fragment a wrapper captured; a timeout
+            # arrives on stdout (antigravity_delegate.py, codex_delegate.py).
+            parts = [part.strip() for part in (err, out) if part.strip()]
+            evidence["error"] = "\n".join(parts)[:2000] or f"exit {code}"
         return SubagentResult(
             ok=ok,
             summary=out,
@@ -177,7 +180,7 @@ class CliProvider:
 def select_provider(
     request: SubagentRequest, registry: tuple[CliProvider, ...] | None = None
 ) -> CliProvider:
-    """Pick a provider: an explicit `options['worker']`, else cheapest capable."""
+    """Pick a provider: explicit `options['worker']`, else the router, else cheapest."""
     providers = (
         registry if registry is not None else tuple(CliProvider(w) for w in WORKERS)
     )
@@ -187,6 +190,19 @@ def select_provider(
         if explicit not in by_id:
             raise ValueError(f"unknown worker: {explicit!r}")
         return by_id[explicit]
+    # The router knows the task's shape; the registry only knows argv. Ask it, but
+    # never depend on the answer: a routing failure must not break dispatch.
+    try:
+        from tools import router
+
+        routed_id = provider_id_for_router_worker(
+            router.route(request.prompt)["worker"]
+        )
+    except Exception:  # noqa: BLE001 - any failure means "no opinion", including an unknown id
+        routed_id = None
+    routed = by_id.get(routed_id) if routed_id else None
+    if routed is not None and request.capabilities <= routed.supported_capabilities():
+        return routed
     capable = [
         p for p in providers if request.capabilities <= p.supported_capabilities()
     ]

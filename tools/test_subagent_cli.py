@@ -122,6 +122,41 @@ def test_run_failure_puts_error_in_evidence():
     assert result.stop_reason == "error"
 
 
+def test_run_failure_keeps_both_streams():
+    mod = _load()
+    provider = mod.CliProvider(
+        mod.WORKERS[0], runner=lambda _a, _t: (3, "stdout tail", "stderr head")
+    )
+    result = provider.run(mod.SubagentRequest(prompt="p"))
+    assert result.evidence["error"] == "stderr head\nstdout tail"
+
+
+def test_run_failure_keeps_stdout_when_stderr_is_empty():
+    mod = _load()
+    provider = mod.CliProvider(
+        mod.WORKERS[0], runner=lambda _a, _t: (4, "only out", "")
+    )
+    result = provider.run(mod.SubagentRequest(prompt="p"))
+    assert result.evidence["error"] == "only out"
+    assert result.summary == "only out"
+
+
+def test_run_failure_without_output_still_names_the_exit_code():
+    mod = _load()
+    provider = mod.CliProvider(mod.WORKERS[0], runner=lambda _a, _t: (5, "  ", "\n"))
+    result = provider.run(mod.SubagentRequest(prompt="p"))
+    assert result.evidence["error"] == "exit 5"
+
+
+def test_run_failure_error_is_capped_at_2000_chars():
+    mod = _load()
+    provider = mod.CliProvider(
+        mod.WORKERS[0], runner=lambda _a, _t: (6, "o" * 1500, "e" * 1500)
+    )
+    result = provider.run(mod.SubagentRequest(prompt="p"))
+    assert len(str(result.evidence["error"])) == 2000
+
+
 def test_run_timeout_maps_to_stop_reason():
     mod = _load()
 
@@ -165,6 +200,50 @@ def test_select_provider_errors():
         mod.select_provider(
             mod.SubagentRequest(prompt="p", capabilities=frozenset({"write"}))
         )
+
+
+def test_select_provider_routes_a_survey_to_gemini():
+    mod = _load()
+    request = mod.SubagentRequest(prompt="survey the repo for auth calls")
+    assert mod.select_provider(request).id == "gemini"
+
+
+def test_select_provider_routes_a_simple_edit_to_opencode():
+    mod = _load()
+    assert (
+        mod.select_provider(mod.SubagentRequest(prompt="fix the typo")).id == "opencode"
+    )
+
+
+def test_select_provider_falls_through_for_a_review():
+    mod = _load()
+    # review maps to subagent:code-reviewer, which is not a CLI provider.
+    assert (
+        mod.select_provider(mod.SubagentRequest(prompt="review this diff")).id
+        == "opencode"
+    )
+
+
+def test_select_provider_router_does_not_override_an_explicit_worker():
+    mod = _load()
+    request = mod.SubagentRequest(
+        prompt="survey the repo for auth calls", options={"worker": "codex"}
+    )
+    assert mod.select_provider(request).id == "codex"
+
+
+def test_select_provider_survives_a_failing_router(monkeypatch):
+    mod = _load()
+    from tools import router
+
+    def boom(_task):
+        raise RuntimeError("router exploded")
+
+    monkeypatch.setattr(router, "route", boom)
+    assert (
+        mod.select_provider(mod.SubagentRequest(prompt="survey the repo")).id
+        == "opencode"
+    )
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
