@@ -73,9 +73,16 @@ description: "Run through this before shipping a harness to production or handin
 
 ## Observability
 
+> Every artifact in this section is written by `.kilo/hooks/*`, which run only under
+> the Kilo engine; Kilo no longer runs in this project. Do not judge freshness by
+> mtime: every file in `.kilo/state/` carries the same 2026-10-06 copy timestamp while
+> its content ends 2026-06-21, and all six session files record
+> `cwd=D:\Project\Solo-Code-Harness`, so the tree was copied in from another checkout.
+> Nothing in it is evidence about this repository.
+
 - [ ] Session start/end hooks capture duration, tool calls, token estimates
-- [ ] Token usage logged per tool call (.kilo/state/token-log.jsonl)
-- [ ] Session logs persisted (.kilo/state/sessions/)
+- [ ] Token usage logged per tool call (.kilo/state/token-log.jsonl) - last entry 2026-06-21; nothing writes it today
+- [ ] Session logs persisted (.kilo/state/sessions/) - copied in from another checkout; read each file's `startedAt`, not its mtime
 - [ ] Governance events captured (.kilo/logs/governance-events.jsonl) - written by .kilo/hooks/pre-tool-use/governance-capture.js only when a Kilo hook records an event; its presence is not evidence that Kilo ran
 - [ ] Cost estimates visible in session summary
 
