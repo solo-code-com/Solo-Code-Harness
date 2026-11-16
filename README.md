@@ -98,9 +98,9 @@ python tools/deploy.py
 
 | Directory | Purpose |
 |---|---|
-| `.claude/` | **Orchestrator** — Claude Code: agents (16), skills (54), commands (15, incl. `ship`), instruction (10, of which 3 are path-scoped rules), guard + lifecycle hooks + `settings.json`; rulebook `CLAUDE.md` at root. Generated from `.kilo/` via `tools/generate_harness.py --harness claude`. |
+| `.claude/` | **Orchestrator** — Claude Code: agents (16), skills (54), commands (15, incl. `ship`), workflows (5), instruction (10, of which 3 are path-scoped rules), guard + lifecycle hooks + `settings.json`; rulebook `CLAUDE.md` at root. Generated from `.kilo/` via `tools/generate_harness.py --harness claude`. |
 | `.copilot/` | GitHub Copilot: agents (16), skills (54), commands (15), instruction (10), memory (4). Manually kept in parity with `.kilo/`; checked (not generated) by `tools/garden.py`. |
-| `.kilo/` | **Source of truth** — Kilo Code: agents (16), skills (54), commands (15, incl. `ship`), hooks, memory, instruction. Edit here first. |
+| `.kilo/` | **Generation root** — every generated engine is produced from this directory. Kilo Code: agents (16), skills (54), commands (15, incl. `ship`), hooks, memory, instruction. Edit here first. The Kilo runtime hooks still live here, but the repository targets OpenCode v2 and Claude Code, not the Kilo application. |
 | `.gemini/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
 | `.codex/` | Codex CLI integration: README, session tracking, verified write guard (`tools/codex_guard.py`), and launchers `codex-env.ps1` / `codex-env.sh`. |
 | `.github/` | Shared scripts: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py`, `security-allowlist.txt` + `copilot-instructions.md`, `prompts/` |
@@ -247,6 +247,7 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | Review receipt | `python tools/review_receipt.py verify` | A staged change over 5 files and 120 lines needs a receipt recorded after /review; the gate blocks, the advisory hook above only measures |
 | Task receipt | `python tools/task_receipt.py list` | Lightweight proof records (.json + .md) for delegated worker runs: brief, scope, diffstat, tests, and status |
 | Circuit breaker | `python tools/circuit_breaker.py status --task <id>` | Loop budget protection: trips on 3 consecutive identical errors, emitting TASK_FAILURE_REPORT.md without destructive rollback |
+| Routing benchmark | `python tools/run_routing_eval.py` | REPORT, never blocks: 26 reviewed cases score route(); exits 0 on a mismatch and --strict exits 1. Labels record desired behaviour and are never copied from current output. |
 
 ## Slash Commands (Kilo + Claude Code)
 
@@ -503,9 +504,9 @@ python tools/deploy.py
 
 | Thư mục | Mục đích |
 |---|---|
-| `.claude/` | **Điều phối** — Claude Code: agents (16), skills (54), commands (15, gồm `ship`), instruction (10, of which 3 are path-scoped rules), guard + lifecycle hooks + `settings.json`; rulebook `CLAUDE.md` ở root. Sinh từ `.kilo/` qua `tools/generate_harness.py --harness claude`. |
+| `.claude/` | **Điều phối** — Claude Code: agents (16), skills (54), commands (15, gồm `ship`), workflows (5), instruction (10, trong đó 3 là path-scoped rules), guard + lifecycle hooks + `settings.json`; rulebook `CLAUDE.md` ở root. Sinh từ `.kilo/` qua `tools/generate_harness.py --harness claude`. |
 | `.copilot/` | GitHub Copilot: agents (16), skills (54), commands (15), instruction (10), memory (4). Giữ song song thủ công với `.kilo/`; `tools/garden.py` chỉ kiểm tra, không tự sinh. |
-| `.kilo/` | **Nguồn gốc** — Kilo Code: agents (16), skills (54), commands (15, gồm `ship`), hooks, memory, instruction. Sửa ở đây trước tiên. |
+| `.kilo/` | **Gốc sinh mã** — các engine được sinh tự động từ thư mục này. Kilo Code: agents (16), skills (54), commands (15, gồm `ship`), hooks, memory, instruction. Sửa ở đây trước tiên. Kilo runtime hooks vẫn nằm ở đây, nhưng repository nhắm tới OpenCode v2 và Claude Code, không phải ứng dụng Kilo. |
 | `.gemini/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
 | `.github/` | Script dùng chung: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py` + `copilot-instructions.md`, `prompts/` |
 | `tools/` | Generator (`generate_harness.py`, `claude_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` (runtime dep của Claude session hooks) |
@@ -614,6 +615,7 @@ cần đổi harness.
 | Gate probe | `python tools/gate_probe.py` | BÁO CÁO, không chặn: gate nào bắt được defect nào, với kết quả caught, missed, no-gate |
 | Worker stats | `python tools/worker_stats.py` | BÁO CÁO, không chặn: tỉ lệ thành công, median độ trễ, chi phí và token theo worker/model từ `.solocode/*-usage.jsonl` |
 | Review receipt | `python tools/review_receipt.py verify` | Thay đổi đã stage vượt 5 file và 120 dòng cần receipt ghi sau /review; cổng này chặn, còn hook advisory bên trên chỉ đo |
+| Benchmark routing | `python tools/run_routing_eval.py` | BÁO CÁO, không chặn: 26 ca đã rà soát chấm route(); exit 0 khi có lệch, --strict thì exit 1. Nhãn là hành vi mong muốn, không chép từ output hiện tại. |
 
 ## Slash Commands (Kilo + Claude Code)
 
