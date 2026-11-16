@@ -307,7 +307,6 @@ EXCLUDE_DIRS = {
     ".venv",
     "venv",
     ".solocode",
-    "cocoindex-code-main",
     "docs",
     # Runtime state directories — never belong in a deploy
     "sessions",  # .kilo/state/sessions/
@@ -995,6 +994,14 @@ def should_copy(path: Path) -> bool:
         # bare directory name: `workflows` also matched .claude/workflows/,
         # which silently dropped the harness's own workflow templates from
         # every deploy.
+        return False
+    parts = path.parts
+    if any(
+        parts[index] == ".kilo" and parts[index + 1] == "state"
+        for index in range(len(parts) - 1)
+    ):
+        # Kilo session runtime state, not harness source. Excluded by path
+        # because a bare "state" name would also match project directories.
         return False
     for part in path.parts:
         if part in EXCLUDE_DIRS:
