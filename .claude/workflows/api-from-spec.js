@@ -1,6 +1,6 @@
 export const meta = {
   name: 'api-from-spec',
-  description: 'Generate route, handler, validation and tests for every endpoint in an API spec, then verify the contract',
+  description: 'Generate a route, handler and validation plus optional tests for every endpoint in an API spec, then verify what this run was required to write',
   phases: ['Parse', 'Generate', 'Mount', 'Verify'],
 }
 
@@ -27,6 +27,12 @@ const moduleRule =
   moduleSystem === 'esm'
     ? 'Use ES modules throughout: import and export. Never use require or module.exports.'
     : 'Use CommonJS throughout: require and module.exports. Never use import or export.'
+
+const includeTests = input.includeTests === undefined ? true : input.includeTests
+
+if (typeof includeTests !== 'boolean') {
+  throw new Error('api-from-spec: includeTests must be true or false')
+}
 
 phase('Parse')
 
@@ -79,14 +85,15 @@ if (endpoints.length > cap) {
 
 const selected = endpoints.slice(0, Math.min(maxEndpoints, cap))
 
-const MAX_ENDPOINTS_PER_RUN = 249
+const agentsPerEndpoint = includeTests ? 4 : 3
+const MAX_ENDPOINTS_PER_RUN = Math.floor((1000 - 3) / agentsPerEndpoint)
 
 if (selected.length > MAX_ENDPOINTS_PER_RUN) {
   throw new Error(
     'api-from-spec: ' +
       selected.length +
       ' endpoints need ' +
-      (selected.length * 4 + 3) +
+      (selected.length * agentsPerEndpoint + 3) +
       ' agents, above the 1000-agent cap of one run. Set maxEndpoints to ' +
       MAX_ENDPOINTS_PER_RUN +
       ' or less, or split the spec.',
@@ -168,43 +175,48 @@ const generated = await pipeline(selected, async (endpoint) => {
     },
   )
 
-  const tests = await agent(
-    [
-      'Write the tests for ' + target + ' at ' + baseDir + 'tests/' + slug + '.test.js.',
-      'Use the built-in node:test runner with node:assert/strict. Do not use jest, mocha or any package that has to be installed.',
-      'Import the handler from ../handlers/' + slug + '.js as a named export called handle.',
-      'Import validate and ValidationError from ../validation/' + slug + '.js as named exports.',
-      'Cover the success path and each declared error response.',
-      'Assert that validate returns the validated input for a good request, and that it throws a ValidationError for each bad case.',
-      'Exercise the 400 path by sending a request body that fails validation. Do not mock, patch, stub or reset modules: the validation function already throws on a bad body.',
-      'Assert the success path positively: the success status code and the JSON body that was sent. Asserting only that a 400 was not sent is not enough, because a handler that never responds passes that check.',
-      'Assert that handle responds 400 on that bad body.',
-      moduleRule,
-    ].join('\n'),
-    {
-      label: slug + ':tests',
-      schema: {
-        type: 'object',
-        required: ['file', 'summary'],
-        properties: {
-          file: { type: 'string', description: 'The test file written' },
-          summary: { type: 'string', description: 'One sentence on the coverage' },
+  const tests = includeTests
+    ? await agent(
+        [
+          'Write the tests for ' + target + ' at ' + baseDir + 'tests/' + slug + '.test.js.',
+          'Use the built-in node:test runner with node:assert/strict. Do not use jest, mocha or any package that has to be installed.',
+          'Import the handler from ../handlers/' + slug + '.js as a named export called handle.',
+          'Import validate and ValidationError from ../validation/' + slug + '.js as named exports.',
+          'Cover the success path and each declared error response.',
+          'Assert that validate returns the validated input for a good request, and that it throws a ValidationError for each bad case.',
+          'Exercise the 400 path by sending a request body that fails validation. Do not mock, patch, stub or reset modules: the validation function already throws on a bad body.',
+          'Assert the success path positively: the success status code and the JSON body that was sent. Asserting only that a 400 was not sent is not enough, because a handler that never responds passes that check.',
+          'Assert that handle responds 400 on that bad body.',
+          moduleRule,
+        ].join('\n'),
+        {
+          label: slug + ':tests',
+          schema: {
+            type: 'object',
+            required: ['file', 'summary'],
+            properties: {
+              file: { type: 'string', description: 'The test file written' },
+              summary: { type: 'string', description: 'One sentence on the coverage' },
+            },
+          },
         },
-      },
-    },
-  )
+      )
+    : null
 
   return { endpoint, slug, route, handler, validation, tests }
 })
 
 const files = generated.filter(Boolean)
 
-const expectedFiles = files.flatMap((entry) => [
-  baseDir + 'routes/' + entry.slug + '.js',
-  baseDir + 'handlers/' + entry.slug + '.js',
-  baseDir + 'validation/' + entry.slug + '.js',
-  baseDir + 'tests/' + entry.slug + '.test.js',
-])
+const expectedFiles = files.flatMap((entry) => {
+  const paths = [
+    baseDir + 'routes/' + entry.slug + '.js',
+    baseDir + 'handlers/' + entry.slug + '.js',
+    baseDir + 'validation/' + entry.slug + '.js',
+  ]
+  if (includeTests) paths.push(baseDir + 'tests/' + entry.slug + '.test.js')
+  return paths
+})
 
 const routeFiles = files
   .map((entry) => (entry && entry.route && entry.route.file ? entry.route.file : null))
@@ -245,15 +257,19 @@ phase('Verify')
 
 const verification = await agent(
   [
-    'Run the tests for the endpoints generated from ' + specFile + ' with node --test from the project root. Node does not accept a directory as an argument, so run it from the root or pass the test files explicitly, and run the API contract check as well.',
+    includeTests
+      ? 'Run the tests for the endpoints generated from ' + specFile + ' with node --test from the project root. Node does not accept a directory as an argument, so run it from the root or pass the test files explicitly, and run the API contract check as well.'
+      : 'Tests were skipped by request for this run. Do not report missing test files; run the API contract check instead.',
     'The project needs express installed for the routes to load. If express is missing, report that as a missing dependency, not as a failing test.',
     'Read every generated handler and confirm each path sends a response. A handler whose success path never calls res.status and res.json is a failure even when every test passes.',
     'Route files written this run:',
     routeFiles.length > 0 ? routeFiles.join('\n') : '(no route file was written)',
-    'Every endpoint must produce four files, and the mount must produce the index. Confirm each of these paths exists on disk and report every missing one as a failure:',
+    includeTests
+      ? 'Every endpoint must produce four files, and the mount must produce the index. Confirm each of these paths exists on disk and report every missing one as a failure:'
+      : 'Every endpoint must produce three files, and the mount must produce the index. Confirm each of these paths exists on disk and report every missing one as a failure:',
     expectedFiles.join('\n'),
     baseDir + 'routes/index.js',
-    'A file this run was supposed to write but did not is a failure, even when the tests that do exist all pass.',
+    'A file this run was supposed to write but did not is a failure, even when every other check passes.',
     'The mount index is ' + baseDir + 'routes/index.js: check it requires each descriptor file and wires each one onto one shared Express router with router[descriptor.method](descriptor.path, descriptor.handle).',
     'A failure in one generated endpoint must not hide the others: report every failing check.',
     'Do not edit any file.',
@@ -264,7 +280,7 @@ const verification = await agent(
       type: 'object',
       required: ['ok', 'issues'],
       properties: {
-        ok: { type: 'boolean', description: 'True when the tests and the contract check both pass' },
+        ok: { type: 'boolean', description: 'True when every check this run was required to pass did pass' },
         issues: { type: 'array', items: { type: 'string' }, description: 'One entry per failing check' },
       },
     },

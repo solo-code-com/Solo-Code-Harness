@@ -681,7 +681,8 @@ Implement a feature and have it reviewed adversarially:
 The `api-from-spec` and `crud-module` templates emit Express routes, so the
 target project needs `express` installed. Their tests use the built-in
 `node:test` runner, which needs no install. Run them from the project root with
-`node --test`; Node rejects a directory argument.
+`node --test`; Node rejects a directory argument. Pass `includeTests: false` to
+skip the test stage: three agents per endpoint instead of four, and no test files.
 
 A template throws before any agent runs when a required argument is missing, so
 a malformed invocation fails fast rather than generating half a module. Read

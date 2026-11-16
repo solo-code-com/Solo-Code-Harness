@@ -26,7 +26,8 @@ object. When `args` is omitted the script sees `undefined`.
 The `api-from-spec` and `crud-module` templates emit Express routes, so the
 target project needs `express` installed. Their tests use the built-in
 `node:test` runner, which needs no install. Run them from the project root with
-`node --test`; Node rejects a directory argument.
+`node --test`; Node rejects a directory argument. Pass `includeTests: false` to
+skip the test stage: three agents per endpoint instead of four, and no test files.
 
 ### /crud-module
 
@@ -49,7 +50,8 @@ problems and edits nothing.
 ### /api-from-spec
 
 **When.** The endpoints already exist as a written spec and each one needs a
-route, a handler, validation and tests.
+route, a handler, validation and tests. Pass `includeTests: false` when you
+only want the scaffold.
 
 **Invoke.** `/api-from-spec` with `specFile`, optional `outputDir` (default
 `src/api/`) and optional `maxEndpoints` (default 40).
@@ -57,11 +59,15 @@ route, a handler, validation and tests.
 **Primitives.** `phase('Parse')` reads the spec once into an endpoint list.
 `pipeline()` then runs one callback per endpoint, and each callback awaits
 route, then handler, then validation, then tests in that order, so one
-endpoint's four agents never interleave with another's.
+endpoint's four agents never interleave with another's. With
+`includeTests: false` the tests step is skipped and each endpoint costs three
+agents instead of four.
 
 **Outcome.** One route, handler, validation and test set per selected endpoint,
-then a `Verify` agent that runs the suite and the contract check. A spec above
-4096 endpoints throws instead of truncating silently.
+then a `Verify` agent that runs the checks this run required, which means the
+suite plus the contract check unless tests were skipped. A spec above 4096
+endpoints throws instead of truncating silently. The agent budget is the tighter
+limit: 249 endpoints with tests, 332 without.
 
 ### /data-migration
 
