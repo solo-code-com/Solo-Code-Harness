@@ -66,7 +66,7 @@ ROOT_FILES = [
     ".gitleaks.toml",
     ".ruff.toml",
     ".pre-commit-config.yaml",
-    "eslint.config.js",
+    "eslint.config.mjs",
     "pyproject.toml",
     "Makefile",
     "claude-env.ps1",
@@ -114,7 +114,7 @@ HARNESS_OWNED_ROOT_FILES = set(ROOT_FILES) | RETIRED_ROOT_FILES | {".harness.loc
 
 # Root files a project also legitimately owns. These are never replaced wholesale - only topped up
 # with the lines the harness needs (see _merge_list_file). `.gitignore` is the well-defined case
-# because it is a line set; pyproject.toml, .ruff.toml, eslint.config.js, .pre-commit-config.yaml
+# because it is a line set; pyproject.toml, .ruff.toml, eslint.config.mjs, .pre-commit-config.yaml
 # and Makefile are also project-plausible but merging structured config is not, so they stay
 # replaced for now and are listed in the archive as the remaining gap.
 MERGE_ROOT_FILES = {".gitignore"}
@@ -127,7 +127,7 @@ MERGE_ROOT_FILES = {".gitignore"}
 PROJECT_OWNED_ROOT_FILES = {
     "pyproject.toml",
     ".ruff.toml",
-    "eslint.config.js",
+    "eslint.config.mjs",
     ".pre-commit-config.yaml",
     "Makefile",
 }
@@ -519,7 +519,7 @@ files = [
     ".mcp.json",
     ".ruff.toml",
     ".gitleaks.toml",
-    "eslint.config.js",
+    "eslint.config.mjs",
     "Makefile",
     "pyproject.toml",
     "claude-env.ps1",

@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-14T16:37:03Z"
+generated_at = "2026-11-15T11:45:24Z"
 mode = "root"
-content_fingerprint = "sha256:b866a9f84cc234d83abdc25c52903d3aab7074ce2fab7b5df0428b3a1e6f45e6"
+content_fingerprint = "sha256:f85e5c044f2842ee984037273d3f82404f311b13bed871aa6ab2995d2fb5b36c"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -238,7 +238,7 @@ files = [
     ".mcp.json",
     ".ruff.toml",
     ".gitleaks.toml",
-    "eslint.config.js",
+    "eslint.config.mjs",
     "Makefile",
     "pyproject.toml",
     "claude-env.ps1",

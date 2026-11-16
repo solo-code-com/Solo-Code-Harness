@@ -116,6 +116,7 @@ const generated = await parallel(
         'Write the ' + component.name + ' component for the "' + entityName + '" entity.',
         'Entity schema: ' + entitySchema,
         'Write exactly one file, at ' + component.path + ', and do not modify any other file.',
+        'Import only the symbols this file uses.',
         'Requirements: ' + component.requirements,
         contractNote,
       ].join('\n'),

@@ -325,7 +325,7 @@ def test_lock_never_claims_a_project_file(tmp_path):
 # The template is a static string, so nothing tied it to ROOT_FILES /
 # EXCLUSIVE_HARNESS_DIRS / SHARED_DIRS. It silently fell behind: .opencode
 # (a whole first-class engine dir) was missing from `dirs`, and opencode.json,
-# eslint.config.js and .env.template were missing from `files` -- so every
+# eslint.config.mjs and .env.template were missing from `files` -- so every
 # deployed lock told the model those were project code it could edit.
 
 
@@ -842,7 +842,7 @@ def test_project_owned_root_files_are_kept(tmp_path: Path) -> None:
         "Makefile": "mine:\n\techo mine\n",
         ".ruff.toml": 'extend-exclude = ["my_dir"]\n',
         ".pre-commit-config.yaml": "repos: []\n",
-        "eslint.config.js": "export default [];\n",
+        "eslint.config.mjs": "export default [];\n",
     }
     for name, body in own.items():
         _write(proj / name, body)
@@ -866,7 +866,7 @@ def test_project_owned_root_files_are_written_when_absent(tmp_path: Path) -> Non
         ".ruff.toml",
         ".pre-commit-config.yaml",
         "Makefile",
-        "eslint.config.js",
+        "eslint.config.mjs",
     ):
         assert (proj / name).is_file(), f"{name} missing on a fresh target"
 

@@ -573,7 +573,7 @@ When executor mode is enabled ( = 'on'), you MUST:
 ### Safety
 - Never run destructive commands (`rm -rf`, `git reset --hard`, `git push --force` to main/master, `DROP TABLE`) without explicit user confirmation. The guard hook blocks these by default.
 - Never commit secrets. The guard hook scans commands and edits for credentials.
-- Never edit protected linter/formatter config (`.ruff.toml`, `eslint.config.js`, etc.) without asking.
+- Never edit protected linter/formatter config (`.ruff.toml`, `eslint.config.mjs`, etc.) without asking.
 
 ### Code Quality
 - Make surgical changes -- touch only what the task requires.
