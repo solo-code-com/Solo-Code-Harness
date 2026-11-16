@@ -5,4 +5,5 @@ pnpm-lock.yaml
 bun.lock
 yarn.lock
 agent-manager.json
-state/
+state/*
+!state/.gitkeep
