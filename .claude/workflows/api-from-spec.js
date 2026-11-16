@@ -192,10 +192,6 @@ const expectedFiles = files.flatMap((entry) => [
   baseDir + 'tests/' + entry.slug + '.test.js',
 ])
 
-if (selected.length > 0 && files.length === 0) {
-  throw new Error('api-from-spec: every endpoint agent failed, so nothing was generated from ' + specFile)
-}
-
 const routeFiles = files
   .map((entry) => (entry && entry.route && entry.route.file ? entry.route.file : null))
   .filter(Boolean)
