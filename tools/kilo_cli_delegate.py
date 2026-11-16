@@ -454,7 +454,19 @@ def run_kilo_cli(
 
     if timed_out:
         _stderr(f"kilo CLI timed out after {timeout_s}s")
-        return _error_result(f"Timeout after {timeout_s}s")
+        result = _error_result(f"Timeout after {timeout_s}s")
+        if stdout.strip():
+            # The worker was killed, its output was not: a fragment that parses keeps
+            # its events, and one that does not is still kept as raw text.
+            try:
+                parsed: dict[str, Any] | None = parse_json_events(stdout)
+            except (AttributeError, TypeError):
+                parsed = None
+            result = parsed or result
+            result["text"] = result["text"] or stdout
+            result["error"] = f"Timeout after {timeout_s}s"
+        result["timed_out"] = True
+        return result
 
     if exit_code != 0 and not stdout.strip():
         # No JSON output: the CLI failed before it could emit anything.
@@ -646,6 +658,11 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── Output ──
     if result.get("error"):
+        if result.get("timed_out") and result.get("text"):
+            # stdout is parsed by the caller, so the fragment leaves through stderr;
+            # without it a killed run leaves the operator with nothing to read.
+            _stderr("--- partial output before the timeout (last 2000 chars) ---")
+            _stderr(result["text"][-2000:])
         _stderr(f"Error: {result['error']}")
         return 2
 

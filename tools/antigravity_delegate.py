@@ -347,7 +347,19 @@ def run_agy_cli(
         run_id, process.returncode, state="timeout" if timed_out else "exited"
     )
     if timed_out:
-        return {"text": "", "error": f"Timeout after {timeout_s}s"}, 124
+        result: dict[str, Any] = {"text": "", "error": f"Timeout after {timeout_s}s"}
+        if stdout.strip():
+            # The stream was cut off mid-run, but its complete lines still parse:
+            # keep those events so a timeout is not reported as total silence.
+            try:
+                parsed: dict[str, Any] | None = parse_ndjson_events(stdout)
+            except (AttributeError, TypeError):
+                parsed = None
+            result = parsed or result
+            result["text"] = result["text"] or stdout
+            result["error"] = f"Timeout after {timeout_s}s"
+        result["timed_out"] = True
+        return result, 124
 
     try:
         parsed = parse_ndjson_events(stdout)

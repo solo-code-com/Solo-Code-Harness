@@ -240,6 +240,27 @@ def test_run_kilo_cli_timeout_kills_the_tree_and_records_it(monkeypatch, tmp_pat
     assert registry.list_sessions(session_dir=tmp_path)[0]["state"] == "timeout"
 
 
+def test_run_kilo_cli_timeout_keeps_the_output_the_worker_already_produced(monkeypatch):
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "_load_sibling",
+        lambda name: (
+            SimpleNamespace(kill_tree=lambda pid: [pid])
+            if name == "session_control"
+            else session_registry
+        ),
+    )
+    partial = '{"type":"text","part":{"text":"half an answer"}}'
+    result = _run(
+        monkeypatch, kilo_cli_delegate, _FakePopen(stdout=partial, timeout=True)
+    )
+
+    assert result["timed_out"] is True
+    assert result["text"] == "half an answer"  # the captured fragment survived
+    assert result["events"]  # and so did the event it had already emitted
+    assert result["error"] == "Timeout after 5s"  # still a failure, not a success
+
+
 def test_run_kilo_cli_launch_failure_records_no_session(monkeypatch, tmp_path):
     registry = _registry()
 

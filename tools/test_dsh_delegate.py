@@ -168,6 +168,24 @@ def test_run_dsh_timeout_is_124(monkeypatch, tmp_path):
     assert killed == [6160]  # the whole tree, not just the pnpm launcher
 
 
+def test_a_timeout_keeps_the_output_the_worker_already_produced(monkeypatch, tmp_path):
+    mod = _load()
+    monkeypatch.setattr(
+        mod, "_load_control", lambda: SimpleNamespace(kill_tree=lambda _p: [6160])
+    )
+    monkeypatch.setattr(
+        mod.subprocess,
+        "Popen",
+        lambda *_a, **_k: _FakePopen(stdout="half an answer", timeout=True),
+    )
+    code, out, err = mod.run_dsh(
+        command=["pnpm"], dsh_dir=tmp_path, env={}, timeout_s=1
+    )
+    assert code == 124
+    assert out == "half an answer"  # the captured fragment survived
+    assert "Timeout" in err  # the message is still there
+
+
 def test_run_dsh_oserror_is_1(monkeypatch, tmp_path):
     mod = _load()
 

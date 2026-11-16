@@ -259,6 +259,22 @@ def test_run_plan_timeout_is_exit_three(monkeypatch, tmp_path):
     assert mod.run_plan(["x"], tmp_path / "o", 5) == (3, "timeout after 5s")
 
 
+def test_a_timeout_keeps_the_output_the_worker_already_produced(monkeypatch, tmp_path):
+    mod = _load()
+    monkeypatch.setattr(
+        mod, "_load_control", lambda: SimpleNamespace(kill_tree=lambda _p: [5150])
+    )
+    monkeypatch.setattr(
+        mod.subprocess,
+        "Popen",
+        lambda *_a, **_k: _FakePopen(stdout="half an answer", timeout=True),
+    )
+    code, text = mod.run_plan(["x"], tmp_path / "o", 5)
+    assert code == 3
+    assert "timeout after 5s" in text  # the message is still there
+    assert "half an answer" in text  # and so is what the worker had written
+
+
 def test_run_plan_falls_back_to_the_transcript(monkeypatch, tmp_path):
     """A read-only confined run cannot write `-o`, so stdout is all that is left."""
     mod = _load()

@@ -196,7 +196,7 @@ def run_dsh(
         run_id, proc.returncode, state="timeout" if timed_out else "exited"
     )
     if timed_out:
-        return 124, "", f"Timeout after {timeout_s}s"
+        return 124, stdout or "", f"Timeout after {timeout_s}s"
     return proc.returncode, stdout or "", stderr or ""
 
 

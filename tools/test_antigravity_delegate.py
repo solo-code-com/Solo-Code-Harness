@@ -363,6 +363,45 @@ def test_run_agy_cli_maps_timeout_to_124(monkeypatch, tmp_path):
     assert result["error"] == "Timeout after 1s"
 
 
+def test_run_agy_cli_timeout_keeps_the_events_already_emitted(monkeypatch, tmp_path):
+    class Completed:
+        returncode = 0
+        stdout = '{"event":"step_update","step_update":{"text_delta":"half an answer"}}'
+        stderr = ""
+
+    proc = _as_popen(Completed)()
+    calls = {"n": 0}
+
+    def communicate(timeout=None):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise subprocess.TimeoutExpired("agy", 1)
+        return Completed.stdout, ""
+
+    proc.communicate = communicate
+    monkeypatch.setattr(antigravity_delegate.subprocess, "Popen", lambda *a, **k: proc)
+    control_stub = SimpleNamespace(kill_tree=lambda pid: [pid])
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "_load_sibling",
+        lambda name: control_stub if name == "session_control" else session_registry,
+    )
+    result, code = antigravity_delegate.run_agy_cli(
+        prompt="p",
+        model="m",
+        target_dir=tmp_path,
+        agy_binary="agy",
+        skip_permissions=False,
+        timeout_s=1,
+    )
+
+    assert code == 124
+    assert result["timed_out"] is True
+    assert result["text"] == "half an answer"  # the captured fragment survived
+    assert result["events"]  # and so did the event it had already emitted
+    assert result["error"] == "Timeout after 1s"  # still a failure, not a success
+
+
 def test_run_agy_cli_maps_oserror_to_one(monkeypatch, tmp_path):
     def raise_oserror(*args, **kwargs):
         raise OSError("not found")

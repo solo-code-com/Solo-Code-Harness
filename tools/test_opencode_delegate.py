@@ -336,6 +336,27 @@ def test_run_timeout_kills_the_tree_and_records_the_timeout(monkeypatch, tmp_pat
     assert session_registry.list_sessions(session_dir=tmp_path)[0]["state"] == "timeout"
 
 
+def test_a_timeout_keeps_the_output_the_worker_already_produced(monkeypatch, tmp_path):
+    monkeypatch.setattr(session_control, "kill_tree", lambda pid: [pid])
+    partial = '{"type":"text","part":{"text":"half an answer"}}'
+    monkeypatch.setattr(
+        opencode_delegate.subprocess,
+        "Popen",
+        lambda cmd, **k: _FakeProc(stdout=partial, timeout=True),
+    )
+    result = opencode_delegate.run_opencode_cli(
+        prompt="x",
+        model="m",
+        directory=str(tmp_path),
+        opencode_binary="opencode",
+        timeout_s=5,
+    )
+    assert result["timed_out"] is True
+    assert result["text"] == "half an answer"  # the captured fragment survived
+    assert result["events"]  # and so did the event it had already emitted
+    assert result["error"] == "Timeout after 5s"  # still a failure, not a success
+
+
 def test_a_launch_failure_records_no_session(monkeypatch, tmp_path):
     def boom(*_a, **_k):
         raise OSError("no such binary")

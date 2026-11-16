@@ -51,6 +51,36 @@ else
   else
     bad "ruff check co loi"
   fi
+  if python tools/check_lint_budget.py >"$TEMP_DIR/lint-budget.log" 2>&1; then
+    ok "check_lint_budget  pass"
+  else
+    bad "check_lint_budget fail"
+  fi
+  if python tools/check_stdlib_only.py >"$TEMP_DIR/stdlib-only.log" 2>&1; then
+    ok "check_stdlib_only  pass"
+  else
+    bad "check_stdlib_only fail"
+  fi
+  if python tools/check_text_hygiene.py >"$TEMP_DIR/text-hygiene.log" 2>&1; then
+    ok "check_text_hygiene  pass"
+  else
+    bad "check_text_hygiene fail"
+  fi
+  if python tools/check_bypass_claims.py >"$TEMP_DIR/bypass-claims.log" 2>&1; then
+    ok "check_bypass_claims  pass"
+  else
+    bad "check_bypass_claims fail"
+  fi
+  if python tools/prose_lint.py >"$TEMP_DIR/prose.log" 2>&1; then
+    ok "prose_lint  pass"
+  else
+    bad "prose_lint fail"
+  fi
+  if python tools/validate_schemas.py >"$TEMP_DIR/schemas.log" 2>&1; then
+    ok "validate_schemas  pass"
+  else
+    bad "validate_schemas fail"
+  fi
 fi
 echo
 

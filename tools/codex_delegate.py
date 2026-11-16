@@ -291,6 +291,10 @@ def run_plan(
         # writable root in read-only), so the transcript is the only copy left.
         text = stdout
     if timed_out:
+        # Keep what the run had already written: a cut-short transcript is evidence,
+        # and exit 3 still says the run did not finish.
+        if text.strip():
+            return 3, f"timeout after {timeout_s}s\n\n{text}"
         return 3, f"timeout after {timeout_s}s"
     if exit_code != 0:
         return exit_code, (text or stderr or stdout)
@@ -392,7 +396,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     powershell = _find_powershell()
     bash = shutil.which("bash") or shutil.which("sh")
-    use_sh = sys.platform != "win32" and not powershell and launcher_sh.is_file() and bash
+    use_sh = (
+        sys.platform != "win32" and not powershell and launcher_sh.is_file() and bash
+    )
 
     if not use_sh and not LAUNCHER.is_file():
         print(f"ERROR: {LAUNCHER} not found.", file=sys.stderr)
