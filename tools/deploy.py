@@ -851,6 +851,16 @@ def _write_blank_memory_templates(target: Path, dirs: list[str], dry_run: bool) 
     return written
 
 
+def _ensure_kilo_state(target_path: Path, dirs: list[str], dry_run: bool) -> None:
+    """Create the empty runtime state directory a fresh target needs."""
+    # Session output is excluded from the copy, but the harness eval gate
+    # asserts the directory exists and a Kilo session writes into it. An empty
+    # directory keeps the gate meaningful without shipping another checkout
+    # session files.
+    if ".kilo" in dirs and not dry_run:
+        (target_path / ".kilo" / "state").mkdir(parents=True, exist_ok=True)
+
+
 def _shared_harness_paths(dirs: list[str]) -> list[str]:
     """Exact paths of harness files that land inside SHARED_DIRS.
 
@@ -1354,6 +1364,8 @@ def scaffold(
         if "[NEW]" in status:
             total_new += 1
 
+    _ensure_kilo_state(target_path, dirs, dry_run)
+
     # ── Step 2.5: Generate .harness.lock ─────────────────────────
     print("\n--- .harness.lock ---")
     _generate_harness_lock(target_path, dry_run, dirs)
@@ -1784,6 +1796,8 @@ def deploy(
     # ── Step 2.45: Blank memory templates (never leak our own memory) ──
     print("\n--- Project Memory (blank templates) ---")
     _write_blank_memory_templates(target_path, dirs, dry_run)
+
+    _ensure_kilo_state(target_path, dirs, dry_run)
 
     # ── Step 2.5: Cleanup stale files ────────────────────────────
     print("\n--- Stale Cleanup ---")

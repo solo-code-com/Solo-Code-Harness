@@ -869,6 +869,7 @@ def test_project_owned_root_files_are_written_when_absent(tmp_path: Path) -> Non
         "eslint.config.mjs",
     ):
         assert (proj / name).is_file(), f"{name} missing on a fresh target"
+    assert (proj / ".kilo" / "state").is_dir(), ".kilo/state missing on a fresh target"
 
 
 def test_write_if_absent_reports_new_skip_and_keep(tmp_path: Path) -> None:
