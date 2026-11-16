@@ -1,0 +1,262 @@
+[
+  {
+    "id": "question-what-function-does",
+    "task": "what does this function do?",
+    "expected_task_type": "question",
+    "expected_worker": "none",
+    "expected_max_seconds": 30,
+    "criterion": "question",
+    "rationale": "Asks what something does, changes nothing.",
+    "tags": ["boundary"]
+  },
+  {
+    "id": "question-cache-invalidation",
+    "task": "explain how the cache is invalidated",
+    "expected_task_type": "question",
+    "expected_worker": "none",
+    "expected_max_seconds": 30,
+    "criterion": "question",
+    "rationale": "Asks how something works.",
+    "tags": []
+  },
+  {
+    "id": "question-build-fails-windows",
+    "task": "why is the build failing on Windows?",
+    "expected_task_type": "question",
+    "expected_worker": "none",
+    "expected_max_seconds": 30,
+    "criterion": "question",
+    "rationale": "Asks why.",
+    "tags": []
+  },
+  {
+    "id": "question-delete-safely",
+    "task": "how do I delete a file safely?",
+    "expected_task_type": "question",
+    "expected_worker": "none",
+    "expected_max_seconds": 30,
+    "criterion": "question",
+    "rationale": "Asks how to do something safely, performs nothing.",
+    "tags": ["negation", "danger-keyword"]
+  },
+  {
+    "id": "question-rm-rf",
+    "task": "what does rm -rf do and when is it dangerous?",
+    "expected_task_type": "question",
+    "expected_worker": "none",
+    "expected_max_seconds": 30,
+    "criterion": "question",
+    "rationale": "Asks about a command, runs nothing.",
+    "tags": ["negation", "danger-keyword"]
+  },
+  {
+    "id": "question-drop-table-explained",
+    "task": "explain what a DROP TABLE statement does, do not run it",
+    "expected_task_type": "question",
+    "expected_worker": "none",
+    "expected_max_seconds": 30,
+    "criterion": "question",
+    "rationale": "Explicitly declines the operation, asks for an explanation.",
+    "tags": ["negation", "danger-keyword"]
+  },
+  {
+    "id": "question-force-push-danger",
+    "task": "never force-push to main, just tell me why it is dangerous",
+    "expected_task_type": "question",
+    "expected_worker": "none",
+    "expected_max_seconds": 30,
+    "criterion": "question",
+    "rationale": "Instruction not to act, then asks why.",
+    "tags": ["negation", "danger-keyword"]
+  },
+  {
+    "id": "edit-readme-typo",
+    "task": "fix the typo in README",
+    "expected_task_type": "simple_edit",
+    "expected_worker": "cli:opencode",
+    "expected_max_seconds": 120,
+    "criterion": "simple_edit",
+    "rationale": "One small mechanical change.",
+    "tags": ["boundary"]
+  },
+  {
+    "id": "edit-rename-variable",
+    "task": "rename this variable to retries",
+    "expected_task_type": "simple_edit",
+    "expected_worker": "cli:opencode",
+    "expected_max_seconds": 120,
+    "criterion": "simple_edit",
+    "rationale": "Mechanical rename.",
+    "tags": []
+  },
+  {
+    "id": "edit-version-string",
+    "task": "update the version string in pyproject",
+    "expected_task_type": "simple_edit",
+    "expected_worker": "cli:opencode",
+    "expected_max_seconds": 120,
+    "criterion": "simple_edit",
+    "rationale": "Mechanical edit.",
+    "tags": []
+  },
+  {
+    "id": "edit-add-semicolon",
+    "task": "add a semicolon on line 12",
+    "expected_task_type": "simple_edit",
+    "expected_worker": "cli:opencode",
+    "expected_max_seconds": 120,
+    "criterion": "simple_edit",
+    "rationale": "Mechanical edit.",
+    "tags": []
+  },
+  {
+    "id": "complex-cli-export",
+    "task": "build a CLI for exporting reports",
+    "expected_task_type": "complex",
+    "expected_worker": "cli:opencode",
+    "expected_max_seconds": 900,
+    "criterion": "complex",
+    "rationale": "Builds something new.",
+    "tags": []
+  },
+  {
+    "id": "complex-router-split",
+    "task": "refactor the router into smaller modules",
+    "expected_task_type": "complex",
+    "expected_worker": "cli:opencode",
+    "expected_max_seconds": 900,
+    "criterion": "complex",
+    "rationale": "Refactor.",
+    "tags": []
+  },
+  {
+    "id": "complex-pytest-migration",
+    "task": "migrate the tests to pytest 9",
+    "expected_task_type": "complex",
+    "expected_worker": "cli:opencode",
+    "expected_max_seconds": 900,
+    "criterion": "complex",
+    "rationale": "Migrate.",
+    "tags": []
+  },
+  {
+    "id": "complex-retry-logic",
+    "task": "implement retry logic for the worker",
+    "expected_task_type": "complex",
+    "expected_worker": "cli:opencode",
+    "expected_max_seconds": 900,
+    "criterion": "complex",
+    "rationale": "Implement.",
+    "tags": []
+  },
+  {
+    "id": "review-pr-security",
+    "task": "review this PR for security issues",
+    "expected_task_type": "review",
+    "expected_worker": "subagent:code-reviewer",
+    "expected_max_seconds": 300,
+    "criterion": "review",
+    "rationale": "Judges existing work.",
+    "tags": ["boundary"]
+  },
+  {
+    "id": "review-auth-audit",
+    "task": "audit the auth flow",
+    "expected_task_type": "review",
+    "expected_worker": "subagent:code-reviewer",
+    "expected_max_seconds": 300,
+    "criterion": "review",
+    "rationale": "Judges existing work.",
+    "tags": []
+  },
+  {
+    "id": "review-diff-before-merge",
+    "task": "check this diff before I merge",
+    "expected_task_type": "review",
+    "expected_worker": "subagent:code-reviewer",
+    "expected_max_seconds": 300,
+    "criterion": "review",
+    "rationale": "Judges existing work.",
+    "tags": []
+  },
+  {
+    "id": "review-second-opinion",
+    "task": "give me a second opinion on this design",
+    "expected_task_type": "review",
+    "expected_worker": "subagent:code-reviewer",
+    "expected_max_seconds": 300,
+    "criterion": "review",
+    "rationale": "Judges existing work.",
+    "tags": []
+  },
+  {
+    "id": "survey-pattern-everywhere",
+    "task": "where else does this pattern appear?",
+    "expected_task_type": "survey",
+    "expected_worker": "cli:antigravity",
+    "expected_max_seconds": 600,
+    "criterion": "survey",
+    "rationale": "Asks for every occurrence.",
+    "tags": []
+  },
+  {
+    "id": "survey-route-callers",
+    "task": "find all callers of route()",
+    "expected_task_type": "survey",
+    "expected_worker": "cli:antigravity",
+    "expected_max_seconds": 600,
+    "criterion": "survey",
+    "rationale": "Enumerate every place.",
+    "tags": []
+  },
+  {
+    "id": "survey-dead-code",
+    "task": "survey the repo for dead code",
+    "expected_task_type": "survey",
+    "expected_worker": "cli:antigravity",
+    "expected_max_seconds": 600,
+    "criterion": "survey",
+    "rationale": "Breadth of the repo.",
+    "tags": []
+  },
+  {
+    "id": "survey-json-parse-count",
+    "task": "across the codebase, how many places parse JSON",
+    "expected_task_type": "survey",
+    "expected_worker": "cli:antigravity",
+    "expected_max_seconds": 600,
+    "criterion": "survey",
+    "rationale": "Repo-wide count.",
+    "tags": []
+  },
+  {
+    "id": "destructive-delete-build",
+    "task": "delete the build directory",
+    "expected_task_type": "destructive",
+    "expected_worker": "none",
+    "expected_max_seconds": 0,
+    "criterion": "destructive",
+    "rationale": "Deletes something.",
+    "tags": ["danger-keyword", "boundary"]
+  },
+  {
+    "id": "destructive-drop-users",
+    "task": "drop the users table",
+    "expected_task_type": "destructive",
+    "expected_worker": "none",
+    "expected_max_seconds": 0,
+    "criterion": "destructive",
+    "rationale": "Drops data.",
+    "tags": ["danger-keyword"]
+  },
+  {
+    "id": "complex-explain-then-refactor",
+    "task": "explain the migration plan, then refactor the code",
+    "expected_task_type": "complex",
+    "expected_worker": "cli:opencode",
+    "expected_max_seconds": 900,
+    "criterion": "complex",
+    "rationale": "The acting verb refactor decides it, the explanation is a preamble.",
+    "tags": ["mixed-intent"]
+  }
+]

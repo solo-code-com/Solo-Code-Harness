@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-16T09:09:31Z"
+generated_at = "2026-11-16T10:00:47Z"
 mode = "root"
-content_fingerprint = "sha256:77bd695873b28adfdb2bc0ef0f3c4140a093ee3d4f11cbea676b3afe62cba366"
+content_fingerprint = "sha256:58b0e44e6a78979ad9e37b32b3598f41f27bf5434d14daf573ef8577126a3d61"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -120,6 +120,7 @@ paths = [
     "tools/deploy.py",
     "tools/dsh_delegate.py",
     "tools/env_file.py",
+    "tools/eval/routing_eval_v1.json",
     "tools/failure_ledger.py",
     "tools/garden.py",
     "tools/gate_probe.py",
@@ -140,6 +141,7 @@ paths = [
     "tools/review_receipt.py",
     "tools/router.py",
     "tools/router_eval.py",
+    "tools/run_routing_eval.py",
     "tools/session_analytics.py",
     "tools/session_control.py",
     "tools/session_persistence.py",
@@ -202,6 +204,7 @@ paths = [
     "tools/test_review_receipt.py",
     "tools/test_router.py",
     "tools/test_router_eval.py",
+    "tools/test_run_routing_eval.py",
     "tools/test_secret_patterns.py",
     "tools/test_session_analytics.py",
     "tools/test_session_control.py",
