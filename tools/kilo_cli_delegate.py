@@ -322,11 +322,19 @@ def parse_json_events(output: str) -> dict[str, Any]:
         "error": None,
     }
 
+    invalid_payload = None
     for line in output.strip().split("\n"):
         if not line.strip():
             continue
         try:
             event = json.loads(line)
+            if not isinstance(event, dict):
+                invalid_payload = "expected a JSON object event"
+                continue
+            if "part" in event and not isinstance(event["part"], dict):
+                return _error_result(
+                    "invalid JSON event payload: part must be an object"
+                )
             result["events"].append(event)
 
             # Extract session ID from first event
@@ -352,7 +360,11 @@ def parse_json_events(output: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             # Skip non-JSON lines (banner, warnings)
             continue
+        except (AttributeError, TypeError) as exc:
+            return _error_result(f"invalid JSON event payload: {exc}")
 
+    if invalid_payload and not result["events"]:
+        return _error_result(f"invalid JSON event payload: {invalid_payload}")
     return result
 
 
@@ -452,7 +464,10 @@ def run_kilo_cli(
         return _error_result(f"kilo CLI exit code {exit_code}")
 
     # Parse JSON events from stdout
-    return parse_json_events(stdout)
+    try:
+        return parse_json_events(stdout)
+    except (AttributeError, TypeError) as exc:
+        return _error_result(f"invalid JSON event payload: {exc}")
 
 
 def log_start(model: str, prompt_len: int, run_id: str) -> None:

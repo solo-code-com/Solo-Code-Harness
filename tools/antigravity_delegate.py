@@ -152,6 +152,7 @@ def parse_ndjson_events(output: str) -> dict[str, Any]:
     deltas: list[str] = []
     saw_result = False
 
+    invalid_payload = None
     for line in output.splitlines():
         if not line.strip():
             continue
@@ -159,6 +160,12 @@ def parse_ndjson_events(output: str) -> dict[str, Any]:
             event = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(event, dict):
+            invalid_payload = "expected a JSON object event"
+            continue
+        if "part" in event and not isinstance(event["part"], dict):
+            result["error"] = "invalid NDJSON event payload: part must be an object"
+            return result
         result["events"].append(event)
         result["conversation_id"] = result["conversation_id"] or event.get(
             "conversation_id"
@@ -166,11 +173,20 @@ def parse_ndjson_events(output: str) -> dict[str, Any]:
 
         if event.get("event") == "step_update":
             step = event.get("step_update", {})
+            if not isinstance(step, dict):
+                result["error"] = "invalid step_update payload: expected an object"
+                return result
             text_delta = step.get("text_delta")
             if isinstance(text_delta, str):
                 deltas.append(text_delta)
             if step.get("step_type") == "tool" and step.get("state") == "ERROR":
-                tool_error = step.get("tool_info", {}).get("error", {})
+                tool_info = step.get("tool_info", {})
+                if not isinstance(tool_info, dict) or not isinstance(
+                    tool_info.get("error", {}), dict
+                ):
+                    result["error"] = "invalid tool payload"
+                    return result
+                tool_error = tool_info.get("error", {})
                 result["tool_errors"].append(
                     {
                         "tool": step.get("tool_name"),
@@ -183,6 +199,9 @@ def parse_ndjson_events(output: str) -> dict[str, Any]:
         if event.get("event") == "result":
             saw_result = True
             final = event.get("result", {})
+            if not isinstance(final, dict):
+                result["error"] = "invalid result payload: expected an object"
+                return result
             result["response"] = final.get("response")
             result["status"] = final.get("status")
             result["usage"] = final.get("usage")
@@ -196,7 +215,9 @@ def parse_ndjson_events(output: str) -> dict[str, Any]:
     result["text"] = "".join(deltas)
     if not result["text"] and isinstance(result["response"], str):
         result["text"] = result["response"]
-    if not result["events"]:
+    if invalid_payload and not result["events"]:
+        result["error"] = f"invalid NDJSON event payload: {invalid_payload}"
+    elif not result["events"]:
         result["error"] = "Antigravity produced no NDJSON events"
     elif not saw_result:
         result["error"] = "Antigravity stream ended without a result event"
@@ -328,7 +349,10 @@ def run_agy_cli(
     if timed_out:
         return {"text": "", "error": f"Timeout after {timeout_s}s"}, 124
 
-    parsed = parse_ndjson_events(stdout)
+    try:
+        parsed = parse_ndjson_events(stdout)
+    except (AttributeError, TypeError) as exc:
+        return {"text": "", "error": f"invalid NDJSON event payload: {exc}"}, 1
     parsed["stderr"] = stderr or ""
     if process.returncode != 0:
         parsed["error"] = (

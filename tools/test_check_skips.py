@@ -74,6 +74,31 @@ def test_skip_platform_constant_is_allowed(tmp_path):
     assert mod.check_file(f) == []
 
 
+def test_skip_reasons_require_a_keyword_and_markers_are_exact(tmp_path):
+    mod = _load()
+    f = tmp_path / "test_x.py"
+    for arguments, allowed in (
+        ('reason="x"', True),
+        ('reason = "x"', True),
+        ('"because reasons"', False),
+        ('"no reason given"', False),
+        ('"reason=x"', False),
+        ('True, # reason="x"\n', False),
+        ('"SKIP_PLATFORM"', False),
+        ("True, # SKIP_PLATFORM\n", False),
+        ('other_reason="x"', False),
+        ("SKIP_PLATFORM", True),
+        ("KNOWN_GAP", True),
+        ("NOT_SKIP_PLATFORM", False),
+        ("KNOWN_GAP_SUFFIX", False),
+    ):
+        f.write_text(
+            f"{_BARE_SKIP}({arguments})\ndef test_a():\n    pass\n",
+            encoding="utf-8",
+        )
+        assert (mod.check_file(f) == []) == allowed, arguments
+
+
 def test_known_gap_marker_is_allowed(tmp_path):
     mod = _load()
     f = tmp_path / "test_x.py"

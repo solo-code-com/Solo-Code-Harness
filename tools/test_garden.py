@@ -264,6 +264,34 @@ def test_live_repo_claude_md_matches_template():
     assert garden.check_claude_md_regenerable() == []
 
 
+def _normalise_dashes(text: str) -> str:
+    """AGENTS.md uses an em dash where the CLAUDE.md template uses two hyphens."""
+    return text.replace("\u2014", "--")
+
+
+def test_native_auto_memory_paragraphs_match_claude_template():
+    """The two rulebooks carry one auto-memory policy; this catches drift.
+
+    The files differ in dash style on purpose, so the comparison normalises
+    that first. Without this test the policy can be edited in one place only.
+    """
+    agents = _normalise_dashes((ROOT / "AGENTS.md").read_text(encoding="utf-8"))
+    template = _normalise_dashes(
+        (ROOT / "tools" / "claude_engine.py").read_text(encoding="utf-8")
+    )
+    paragraphs = (
+        "Claude Code writes its own auto memory per repository alongside this harness's\n"
+        "custom memory system (`memory/` dir + `MEMORY.md` index). Both load every\n"
+        "session and serve different purposes -- they coexist, not compete.",
+        "**Rule:** Let native auto memory hold preferences and corrections. Write to\n"
+        "`memory/` only for project facts with stable structure. Run\n"
+        "`/doctor prompt-audit` quarterly to catch drift between the two.",
+    )
+    for paragraph in paragraphs:
+        assert paragraph in agents
+        assert paragraph in template
+
+
 def test_claude_md_drift_is_detected():
     """The check must actually fail on divergence -- a drift check that can
     never fail is what let the template fall behind unnoticed."""

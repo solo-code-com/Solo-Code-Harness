@@ -69,6 +69,19 @@ WORKERS: tuple[Worker, ...] = (
     Worker("gemini", "tools/antigravity_delegate.py", 4),
 )
 
+ROUTER_WORKERS = {
+    "cli:opencode": "opencode",
+    "cli:kilo": "kilo",
+    "cli:antigravity": "gemini",
+}
+
+
+def provider_id_for_router_worker(worker_id: str) -> str | None:
+    """Translate a router worker id to a CLI provider, if it has one."""
+    if worker_id == "none" or worker_id.startswith(("subagent:", "in_process:")):
+        return None
+    return ROUTER_WORKERS[worker_id]
+
 
 def build_argv(worker: str, request: SubagentRequest) -> list[str]:
     """Map a request to the delegate wrapper argv. Pure — tested directly."""

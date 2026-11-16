@@ -12,6 +12,7 @@ Usage:
     python .github/scripts/check_skips.py <test_dir>
 """
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -60,7 +61,22 @@ def check_file(file_path: Path) -> list[str]:
     for match in _MARKER.finditer(content):
         full = _skip_call(content, match.start())
         line_num = content[: match.start()].count("\n") + 1
-        if "reason" in full or "SKIP_PLATFORM" in full or "KNOWN_GAP" in full:
+        has_reason = False
+        has_marker = False
+        try:
+            call = ast.parse(full[1:], mode="eval").body
+        except SyntaxError:
+            pass
+        else:
+            has_marker = any(
+                isinstance(node, ast.Name) and node.id in {"SKIP_PLATFORM", "KNOWN_GAP"}
+                for node in ast.walk(call)
+            )
+            if re.search(r"\breason\s*=", full):
+                has_reason = isinstance(call, ast.Call) and any(
+                    keyword.arg == "reason" for keyword in call.keywords
+                )
+        if has_reason or has_marker:
             continue
         violations.append(
             f"  {file_path.name}:{line_num}: "

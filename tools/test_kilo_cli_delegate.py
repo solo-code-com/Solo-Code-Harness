@@ -117,6 +117,28 @@ def test_parse_json_events_extracts_text_and_session():
     assert result["tokens"] == {"total": 5}
 
 
+@pytest.mark.parametrize(
+    "payload",
+    ["[]", "[1,2]", "null", '{"type":"text","part":null}'],
+)
+def test_parse_json_events_returns_error_for_invalid_payload(payload, monkeypatch):
+    result = kilo_cli_delegate.parse_json_events(payload)
+    assert result["error"]
+    assert "payload" in result["error"]
+    result = _run(monkeypatch, kilo_cli_delegate, _FakePopen(stdout=payload))
+    assert result == kilo_cli_delegate._error_result(result["error"])
+    assert "payload" in result["error"]
+
+
+def test_parse_json_events_skips_non_object_lines_before_valid_events():
+    result = kilo_cli_delegate.parse_json_events(
+        '[]\n[1,2]\nnull\n{"type":"text","part":{"text":"PONG"}}'
+    )
+    assert result["text"] == "PONG"
+    assert len(result["events"]) == 1
+    assert result["error"] is None
+
+
 def test_make_streams_encoding_safe_relaxes_errors(monkeypatch):
     calls = {}
 

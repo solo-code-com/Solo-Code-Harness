@@ -33,6 +33,25 @@ def test_every_worker_wrapper_exists():
         assert (ROOT / worker.wrapper).is_file(), worker.wrapper
 
 
+def test_router_cli_worker_ids_map_to_cli_providers():
+    mod = _load()
+    from tools import router
+
+    provider_ids = {worker.id for worker in mod.WORKERS}
+    cli_ids = {
+        worker_id
+        for worker_id in router.DECLARED_WORKERS
+        if worker_id.startswith("cli:")
+    }
+    assert {
+        mod.provider_id_for_router_worker(worker_id) for worker_id in cli_ids
+    } <= provider_ids
+    assert mod.provider_id_for_router_worker("cli:antigravity") == "gemini"
+    assert mod.provider_id_for_router_worker("none") is None
+    assert mod.provider_id_for_router_worker("subagent:explore") is None
+    assert mod.provider_id_for_router_worker("in_process:solo-code-engineer") is None
+
+
 def test_provider_is_a_runtime_and_advertises_read_bash_only():
     mod = _load()
     for worker in mod.WORKERS:

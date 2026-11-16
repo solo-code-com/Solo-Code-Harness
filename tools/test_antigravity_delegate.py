@@ -98,6 +98,46 @@ def test_parse_ndjson_events_reports_unsuccessful_result():
     assert result["error"] == "bad request"
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "[]",
+        "[1,2]",
+        "null",
+        '{"type":"text","part":null}',
+        '{"event":"step_update","step_update":null}',
+        '{"event":"result","result":null}',
+    ],
+)
+def test_parse_ndjson_events_returns_error_for_invalid_payload(
+    payload, monkeypatch, tmp_path
+):
+    result = antigravity_delegate.parse_ndjson_events(payload)
+    assert result["error"]
+    assert "payload" in result["error"]
+
+    class Completed:
+        returncode = 0
+        stdout = payload
+        stderr = ""
+
+    monkeypatch.setattr(antigravity_delegate.subprocess, "Popen", _as_popen(Completed))
+    parsed, code = antigravity_delegate.run_agy_cli(
+        prompt="x", model="m", target_dir=tmp_path, agy_binary="agy"
+    )
+    assert parsed == {**result, "stderr": ""}
+    assert code == 0
+
+
+def test_parse_ndjson_events_skips_non_object_lines_before_valid_events():
+    result = antigravity_delegate.parse_ndjson_events(
+        '[]\n[1,2]\nnull\n{"event":"result","result":{"status":"SUCCESS","response":"PONG"}}'
+    )
+    assert result["text"] == "PONG"
+    assert len(result["events"]) == 1
+    assert result["error"] is None
+
+
 def test_resolve_allowed_directory_rejects_path_outside_workspace(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
