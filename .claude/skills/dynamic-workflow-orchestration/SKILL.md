@@ -17,9 +17,15 @@ verification.
 
 Templates live in `.claude/workflows/` and run as slash commands, one per file
 stem: `/crud-module`, `/api-from-spec`, `/data-migration`, `/compliance-audit`,
-`/adversarial-implementation`. You invoke one by name and describe the input in
-the same message; Claude passes it to the script as the `args` global. If `args`
-is omitted the script sees `undefined`.
+`/adversarial-implementation`. The script reads its input from the `args`
+global, and `args` must be an object, not the sentence typed after the command:
+passed as one string, a run fails with "missing required arg". Name the keys
+explicitly when you ask, and if that error appears, ask for the arguments as an
+object. When `args` is omitted the script sees `undefined`.
+
+The `api-from-spec` and `crud-module` templates emit Express routes, so the
+target project needs `express` installed. Their tests use the built-in
+`node:test` runner, which needs no install.
 
 ### /crud-module
 

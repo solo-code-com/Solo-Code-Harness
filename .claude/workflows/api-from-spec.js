@@ -90,7 +90,9 @@ const generated = await pipeline(selected, async (endpoint) => {
 
   const route = await agent(
     [
-      'Write the route for ' + target + ' at ' + baseDir + 'routes/' + slug + '.js. Import the handler from ../handlers/' + slug + '.js, which exports one named function called handle, and register it for this method and path.',
+      'Write the route descriptor for ' + target + ' at ' + baseDir + 'routes/' + slug + '.js.',
+      'Export a plain object with module.exports = { method, path, handle }: method is this endpoint\'s lowercase HTTP method, path is its URL path, and handle is imported from ../handlers/' + slug + '.js as a named export.',
+      'Do not import a web framework, do not create a router, and do not register anything. The mount phase owns the framework wiring.',
       moduleRule,
     ].join('\n'),
     {
@@ -154,11 +156,13 @@ const generated = await pipeline(selected, async (endpoint) => {
   const tests = await agent(
     [
       'Write the tests for ' + target + ' at ' + baseDir + 'tests/' + slug + '.test.js.',
+      'Use the built-in node:test runner with node:assert/strict. Do not use jest, mocha or any package that has to be installed.',
       'Import the handler from ../handlers/' + slug + '.js as a named export called handle.',
       'Import validate and ValidationError from ../validation/' + slug + '.js as named exports.',
       'Cover the success path and each declared error response.',
       'Assert that validate returns the validated input for a good request, and that it throws a ValidationError for each bad case.',
-      'Assert that handle responds 400 when validate throws, and the success status on a valid request.',
+      'Exercise the 400 path by sending a request body that fails validation. Do not mock, patch, stub or reset modules: the validation function already throws on a bad body.',
+      'Assert that handle responds 400 on that bad body and the success status on a valid one.',
       moduleRule,
     ].join('\n'),
     {
@@ -190,11 +194,11 @@ const mounted =
     ? null
     : await agent(
         [
-          'These route files exist, and each exports a default function that takes a router and registers one endpoint:',
+          'These route descriptor files exist, and each exports an object with method, path and handle:',
           routeFiles.join('\n'),
           'Write ' + baseDir + 'routes/index.js.',
-          'Import each route module above, call each default export with the same router instance, and export that router as the default export of this index file.',
-          'Do not modify the route files themselves.',
+          'Use Express. Require express, create a router with express.Router(), then require each descriptor file above and call router[descriptor.method](descriptor.path, descriptor.handle) for each one. Export the router with module.exports.',
+          'Do not modify the descriptor files themselves.',
           moduleRule,
         ].join('\n'),
         {
@@ -214,10 +218,11 @@ phase('Verify')
 
 const verification = await agent(
   [
-    'Run the test suite and the API contract check for the endpoints generated from ' + specFile + '.',
+    'Run the tests with node --test, and run the API contract check, for the endpoints generated from ' + specFile + '.',
+    'The project needs express installed for the routes to load. If express is missing, report that as a missing dependency, not as a failing test.',
     'Route files written this run:',
     routeFiles.length > 0 ? routeFiles.join('\n') : '(no route file was written)',
-    'The mount index is ' + baseDir + 'routes/index.js: check it imports each route and calls each default export.',
+    'The mount index is ' + baseDir + 'routes/index.js: check it requires each descriptor file and wires each one onto one shared Express router with router[descriptor.method](descriptor.path, descriptor.handle).',
     'A failure in one generated endpoint must not hide the others: report every failing check.',
     'Do not edit any file.',
   ].join('\n'),

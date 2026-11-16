@@ -661,8 +661,10 @@ delegation, not an instruction to always delegate.
 ## Using workflow templates
 
 Templates live in `.claude/workflows/` and run as slash commands, one per file
-stem. Describe the input in the same message and Claude passes it to the script
-as the `args` global.
+stem. Pass the arguments as an object, not as a sentence: name each key
+explicitly (`specFile`, `outputDir`, `entityName`) and ask for them as an object.
+Passed as one string, the run fails with "missing required arg" before any agent
+starts.
 
 Generate a CRUD module:
 
@@ -675,6 +677,10 @@ Implement a feature and have it reviewed adversarially:
 ```text
 /adversarial-implementation specs/user-authentication.md, into src/auth/, rules docs/security-policy.md
 ```
+
+The `api-from-spec` and `crud-module` templates emit Express routes, so the
+target project needs `express` installed. Their tests use the built-in
+`node:test` runner, which needs no install.
 
 A template throws before any agent runs when a required argument is missing, so
 a malformed invocation fails fast rather than generating half a module. Read
