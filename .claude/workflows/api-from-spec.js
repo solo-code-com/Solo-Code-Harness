@@ -114,6 +114,7 @@ const generated = await pipeline(selected, async (endpoint) => {
       'Export one named function called handle that takes (req, res).',
       'Import validate and ValidationError from ../validation/' + slug + '.js. That module exports both by name.',
       'Call validate(req), passing the whole request object. On success it returns the validated input object; continue with the returned value.',
+      'Every path must send a response. The success path must end with res.status with the endpoint success code and res.json with the payload. A handler that reaches the end of the function without calling res.status and res.json is a bug, even if it returns no error.',
       'Wrap the call in try/catch. When the caught error is a ValidationError, respond with status 400 and the error message. Any other thrown error is a server fault: respond with status 500 and do not leak the stack.',
       'Do not validate anything inline.',
       moduleRule,
@@ -162,7 +163,8 @@ const generated = await pipeline(selected, async (endpoint) => {
       'Cover the success path and each declared error response.',
       'Assert that validate returns the validated input for a good request, and that it throws a ValidationError for each bad case.',
       'Exercise the 400 path by sending a request body that fails validation. Do not mock, patch, stub or reset modules: the validation function already throws on a bad body.',
-      'Assert that handle responds 400 on that bad body and the success status on a valid one.',
+      'Assert the success path positively: the success status code and the JSON body that was sent. Asserting only that a 400 was not sent is not enough, because a handler that never responds passes that check.',
+      'Assert that handle responds 400 on that bad body.',
       moduleRule,
     ].join('\n'),
     {
@@ -218,8 +220,9 @@ phase('Verify')
 
 const verification = await agent(
   [
-    'Run the tests with node --test, and run the API contract check, for the endpoints generated from ' + specFile + '.',
+    'Run the tests for the endpoints generated from ' + specFile + ' with node --test from the project root. Node does not accept a directory as an argument, so run it from the root or pass the test files explicitly, and run the API contract check as well.',
     'The project needs express installed for the routes to load. If express is missing, report that as a missing dependency, not as a failing test.',
+    'Read every generated handler and confirm each path sends a response. A handler whose success path never calls res.status and res.json is a failure even when every test passes.',
     'Route files written this run:',
     routeFiles.length > 0 ? routeFiles.join('\n') : '(no route file was written)',
     'The mount index is ' + baseDir + 'routes/index.js: check it requires each descriptor file and wires each one onto one shared Express router with router[descriptor.method](descriptor.path, descriptor.handle).',
