@@ -79,6 +79,20 @@ if (endpoints.length > cap) {
 
 const selected = endpoints.slice(0, Math.min(maxEndpoints, cap))
 
+const MAX_ENDPOINTS_PER_RUN = 249
+
+if (selected.length > MAX_ENDPOINTS_PER_RUN) {
+  throw new Error(
+    'api-from-spec: ' +
+      selected.length +
+      ' endpoints need ' +
+      (selected.length * 4 + 3) +
+      ' agents, above the 1000-agent cap of one run. Set maxEndpoints to ' +
+      MAX_ENDPOINTS_PER_RUN +
+      ' or less, or split the spec.',
+  )
+}
+
 phase('Generate')
 
 const generated = await pipeline(selected, async (endpoint) => {

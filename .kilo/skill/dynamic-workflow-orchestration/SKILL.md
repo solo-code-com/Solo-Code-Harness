@@ -25,7 +25,8 @@ object. When `args` is omitted the script sees `undefined`.
 
 The `api-from-spec` and `crud-module` templates emit Express routes, so the
 target project needs `express` installed. Their tests use the built-in
-`node:test` runner, which needs no install.
+`node:test` runner, which needs no install. Run them from the project root with
+`node --test`; Node rejects a directory argument.
 
 ### /crud-module
 
