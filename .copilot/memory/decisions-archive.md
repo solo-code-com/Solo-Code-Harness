@@ -1410,3 +1410,14 @@ both earlier in this file; they moved only to reach the 7,900-character target.
   legitimate. A lock with no `mode` is treated as root. A target lock declares only the
   files deploy actually shipped. `failure_ledger --sweep` reports per-project fingerprint
   match.
+
+## Pruned 2026-11-17 (mem cap)
+
+- [measurement] WSL fence + worker Linux (2026-10-24/25, B4 pha 1):
+  `tools/wsl_sandbox.sh` **fail-open** nếu gọi ngoài `unshare -Urm` - đã sửa: exit 69,
+  có `WSL_SANDBOX_ALLOW_DEGRADED=1`. Gọi đúng: chặn `/mnt/c` và `$HOME` (cả `mkdir`),
+  `/tmp` riêng, DNS+HTTPS sống; fence 0.14s ấm (cold ~14s). Đã chạy được worker thật
+  trong fence: `@opencode/cli` cài vào `~/.local` (không cần sudo), `run --standalone`
+  với `HOME`/XDG trỏ vào workspace + key qua `WSLENV` - echo 8.5s ấm (21s cold), ghi
+  1 file 56.5s, state 28 file nằm trong workspace. Còn chặn: binary Windows
+  (`opencode.exe`, `kilo.exe`, `cmd.exe`) không chạy được trong fence.

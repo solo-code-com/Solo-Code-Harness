@@ -67,6 +67,12 @@ High-signal context loaded at session start. Detailed history belongs in
 - [gotcha] `antigravity_delegate.py --allow-tools` (read-only) chay song song voi worker dang ghi cay se bao
   "read-only violation" cho chinh cac file nguoi khac sua - snapshot khong quy duoc chu. Chi chay review agy
   khi cay da dung yen.
+- [gotcha] Goi Claude CLI trong repo nay: `claude -p` tran se dinh 401 "Insufficient
+  balance" vi no lay ANTHROPIC_API_KEY/ANTHROPIC_BASE_URL cua gateway trong shell. Goi qua
+  launcher: `powershell -NoProfile -ExecutionPolicy Bypass -File .\claude-env.ps1 --profile
+  native -p "<prompt>"`. Launcher cat `--profile` chu khong chuyen tiep, va `--allowedTools`
+  bi guard chan ("Portable shell scanner cannot analyze command") - mo ta viec can lam
+  trong prompt thay vi liet ke tool.
 
 ## Decisions
 - [decision] Router co ledger (2026-11-12): `tools/router.py` phan loai task bang bang rule (6 loai,
@@ -78,14 +84,6 @@ High-signal context loaded at session start. Detailed history belongs in
   thi worker khong con quyen ghi. `gemini-decision-1` la decision API (`outputTokenLimit: 1`,
   `POST /v1beta/decisions`), khong phai chat model.
 
-- [measurement] WSL fence + worker Linux (2026-10-24/25, B4 pha 1):
-  `tools/wsl_sandbox.sh` **fail-open** nếu gọi ngoài `unshare -Urm` - đã sửa: exit 69,
-  có `WSL_SANDBOX_ALLOW_DEGRADED=1`. Gọi đúng: chặn `/mnt/c` và `$HOME` (cả `mkdir`),
-  `/tmp` riêng, DNS+HTTPS sống; fence 0.14s ấm (cold ~14s). Đã chạy được worker thật
-  trong fence: `@opencode/cli` cài vào `~/.local` (không cần sudo), `run --standalone`
-  với `HOME`/XDG trỏ vào workspace + key qua `WSLENV` - echo 8.5s ấm (21s cold), ghi
-  1 file 56.5s, state 28 file nằm trong workspace. Còn chặn: binary Windows
-  (`opencode.exe`, `kilo.exe`, `cmd.exe`) không chạy được trong fence.
 - [decision] Giu `.kilo/` lam goc sinh (2026-11-16): van sinh `.claude`, `.opencode`, `.copilot`,
   `.gemini`. Do: 1.684 lan ".kilo" tren 250 file (~778 ".kilo/" tren 179); garden neo
   `engines[".kilo"]`; deploy co `DIRS_KILO`. Phan bien doc lap (agy): KEEP, don rename vao
@@ -112,3 +110,12 @@ High-signal context loaded at session start. Detailed history belongs in
   negation chet -> `.solocode/*`. `executor-config.json` track lai (deploy doc lam template
   sau `if exists()`); `executor-mode` giu ignore vi noi dung `off` va deploy copy vao moi
   target. Guard: `test_repo_ignore_rules.py`, mutation-checked.
+
+- [decision] Dong bo tai lieu CLI bang 3 reviewer doc lap (2026-11-17): Codex phu hop dong
+  wrapper, Claude (`--profile native`) phu mo hinh enforcement, agy phu claim theo engine.
+  13 claim sai da sua: `--timeout` help 120->900, xoa `--no-json` chet, sandbox default
+  `auto`, exit-69 wording, conversation id in ca khi loi, "three workers", executor-mode
+  "khong bypass duoc" (OpenCode bypass duoc bang `run --auto` tran), python3->python (stub
+  Windows exit 9009), shared-state/Copilot chi Claude hook ghi SQLite, `/doctor`->garden.
+  False positive bi chan: flash-free la `DEEPSEEK_V41_FLASH_CHAIN[0]`, Kilo 3-segment id
+  dung, commandcode con cau hinh. Coverage ratchet do -> xanh bang 32 test, khong ha budget.
