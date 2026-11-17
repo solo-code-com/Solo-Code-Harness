@@ -692,6 +692,100 @@ _COMMANDCODE_MODELS: dict[str, dict[str, Any]] = {
     },
 }
 
+# Silk Compute provider (https://silkcompute.com): an "abliterated" API -- the
+# same open-weight models with their refusal behaviour removed, served over an
+# OpenAI-compatible route. Only the key is secret, so the endpoint is the public
+# constant below (same rationale as _OPENROUTER_BASE_URL). The OpenAI-compatible
+# provider POSTs to `<baseURL>/chat/completions`, and Silk serves that route at
+# the host root, so no `/v1` segment belongs in the base URL.
+# Specs verified 2026-11-17 against https://silkcompute.com/llms.txt and each
+# model page: all six ids report a 1,048,576-token context, output caps are
+# 131,072 except hy4 at 65,536, every model accepts reasoning_effort
+# low/high/max and returns reasoning in `reasoning_content`, only
+# kimi-k3.1-pro takes video, and glm-5.3 is text-only. `cost` is omitted on
+# purpose: the docs and the price table disagreed on Kimi by 2x the same day,
+# so any number here would be a guess.
+_SILK_BASE_URL = "https://api.silkcompute.com"
+_SILK_EFFORT_VARIANTS: list[dict[str, Any]] = [
+    {"id": "low", "body": {"reasoning_effort": "low"}},
+    {"id": "high", "body": {"reasoning_effort": "high"}},
+    {"id": "max", "body": {"reasoning_effort": "max"}},
+]
+_SILK_MODELS: dict[str, dict[str, Any]] = {
+    "kimi-k3.1-pro-uncensored": {
+        "modelID": "kimi-k3.1-pro-uncensored",
+        "name": "Kimi K3.1 Pro Uncensored (Silk)",
+        "limit": {"context": 1048576, "output": 131072},
+        "capabilities": {
+            "tools": True,
+            "input": ["text", "image", "video"],
+            "output": ["text"],
+        },
+        "compatibility": {"reasoningField": "reasoning_content"},
+        "variants": _SILK_EFFORT_VARIANTS,
+    },
+    "deepseek-v4.1-flash-1017-uncensored": {
+        "modelID": "deepseek-v4.1-flash-1017-uncensored",
+        "name": "DeepSeek V4.1 Flash 1017 Uncensored (Silk)",
+        "limit": {"context": 1048576, "output": 131072},
+        "capabilities": {
+            "tools": True,
+            "input": ["text", "image"],
+            "output": ["text"],
+        },
+        "compatibility": {"reasoningField": "reasoning_content"},
+        "variants": _SILK_EFFORT_VARIANTS,
+    },
+    "deepseek-v4.1-flash-1017-fast-uncensored": {
+        "modelID": "deepseek-v4.1-flash-1017-fast-uncensored",
+        "name": "DeepSeek V4.1 Flash 1017 Fast Uncensored (Silk)",
+        "limit": {"context": 1048576, "output": 131072},
+        "capabilities": {
+            "tools": True,
+            "input": ["text", "image"],
+            "output": ["text"],
+        },
+        "compatibility": {"reasoningField": "reasoning_content"},
+        "variants": _SILK_EFFORT_VARIANTS,
+    },
+    "glm-5.3-uncensored": {
+        "modelID": "glm-5.3-uncensored",
+        "name": "GLM-5.3 Uncensored (Silk)",
+        "limit": {"context": 1048576, "output": 131072},
+        "capabilities": {
+            "tools": True,
+            "input": ["text"],
+            "output": ["text"],
+        },
+        "compatibility": {"reasoningField": "reasoning_content"},
+        "variants": _SILK_EFFORT_VARIANTS,
+    },
+    "glm-5.3-flash-uncensored": {
+        "modelID": "glm-5.3-flash-uncensored",
+        "name": "GLM-5.3 Flash Uncensored (Silk)",
+        "limit": {"context": 1048576, "output": 131072},
+        "capabilities": {
+            "tools": True,
+            "input": ["text", "image"],
+            "output": ["text"],
+        },
+        "compatibility": {"reasoningField": "reasoning_content"},
+        "variants": _SILK_EFFORT_VARIANTS,
+    },
+    "hy4-uncensored": {
+        "modelID": "hy4-uncensored",
+        "name": "Hy4 Uncensored (Silk)",
+        "limit": {"context": 1048576, "output": 65536},
+        "capabilities": {
+            "tools": True,
+            "input": ["text", "image"],
+            "output": ["text"],
+        },
+        "compatibility": {"reasoningField": "reasoning_content"},
+        "variants": _SILK_EFFORT_VARIANTS,
+    },
+}
+
 # The Jev agent runs on the model named Jev: TypeSafe's `typesafe/jev-router` on
 # OpenRouter, which picks a model and reasoning effort per request (verified live
 # 2026-10-15 -- it answered and reported routing to deepseek/deepseek-v4.1-flash).
@@ -1186,6 +1280,15 @@ def generate_opencode_json(
                 "package": "@opencode/ai/providers/openai-compatible",
                 "settings": {"baseURL": "${COMMANDCODE_BASE_URL}"},
                 "models": _COMMANDCODE_MODELS,
+            },
+            "silkcompute": {
+                "name": "Silk Compute",
+                # Only the key is secret, so the endpoint is the public
+                # constant above rather than a .env variable.
+                "env": ["SILK_API_KEY"],
+                "package": "@opencode/ai/providers/openai-compatible",
+                "settings": {"baseURL": _SILK_BASE_URL},
+                "models": _SILK_MODELS,
             },
         },
     }
