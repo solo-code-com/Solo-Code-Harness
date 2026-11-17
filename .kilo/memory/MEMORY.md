@@ -69,34 +69,6 @@ High-signal context loaded at session start. Detailed history belongs in
   khi cay da dung yen.
 
 ## Decisions
-- [decision] Pipeline 4 vai trò (2026-10-16): Jev (agent trên **model JEV**
-  `openrouter/jev-router`) điều phối; **Codex** ra đề bài + **verify** (`gpt-6.1-sol`,
-  effort `medium`, đổi bằng `--model`/`--effort`); **DeepSeek V4.1 Flash** (OpenCode CLI,
-  + `dsh`) code sâu; **Gemini 3.8 Flash** (Antigravity CLI) việc nhanh nhẹ. Fallback:
-  Codex không ổn định → DeepSeek viết brief + thẩm định lại Gemini. Jev `edit: deny` và
-  wrapper chạy agent này **không `--auto`** để deny có hiệu lực. Gotcha: timeout mặc định
-  của wrapper opencode/agy là **120s** → job dài bị giết oan (đã nâng 900/600); `.ps1` tải
-  về bị mark-of-the-web → phải `Unblock-File`. Catalog **80 model / 4 provider**.
-- [decision] Parity launcher ↔ delegate về biến môi trường (2026-10-16): chỉ cắt `/v1` ở biến mà
-  config sinh ra **thêm** `/v1` — hiện chỉ `OPENAI_BASE_URL`; `DEEPSEEK_BASE_URL` dùng **nguyên văn**.
-  (Cắt `/v1` của một gateway từng làm mọi call delegate hỏng: A/B cùng call `Unknown error` → `OK` 8.2s.)
-  `tools/test_env_file.py` suy luật **từ chính** `.opencode/opencode.json`, nên thêm provider có template
-  `/v1` là test đỏ ngay. Ghi chú: launcher xuất **mọi** key `.env` bằng vòng lặp chung nên nó và
-  `env_file.py` đã ngang nhau — audit chỉ grep `$env:NAME =` sẽ báo thiếu biến oan.
-- [decision] Khoi phuc Command Code provider (2026-10-27): tich hop provider `commandcode`
-  vao OpenCode v2 (`.opencode/opencode.json`), `tools/env_file.py`, `tools/model_api.py`,
-  va `tools/check_model_catalog.py`. Endpoint OpenAI-compatible `https://api.commandcode.ai/provider/v1`,
-  xac thuc qua `COMMANDCODE_API_KEY`. Da probe live thanh cong 94 model, do latency thuc te
-  cho `deepseek/deepseek-v4.1-flash` (3.6s), `deepseek-v4-pro` (2.8s), `deepseek-v4.1-flash-fast` (2.5s).
-  Luu y: model Claude yeu cau `/messages` (Anthropic format), khong goi qua `/chat/completions`.
-- Harness content fingerprint (2026-10-21): .harness.lock records `content_fingerprint`,
-  a sha256 over the sorted (path, content) pairs of [shared_files], BOM stripped and
-  CRLF->LF. A `[harness] mode` is recorded too. `root` is enforced: a harness edit
-  without `python tools/deploy.py --root-lock` fails garden. `target` is advisory, so
-  garden prints a WARN and does not fail, because customising harness files there is
-  legitimate. A lock with no `mode` is treated as root. A target lock declares only the
-  files deploy actually shipped. `failure_ledger --sweep` reports per-project fingerprint
-  match.
 - [decision] Router co ledger (2026-11-12): `tools/router.py` phan loai task bang bang rule (6 loai,
   khong goi LLM), tra ve `{task_type, brain, worker, model, reason, budget, evidence}` va ghi
   `.solocode/route-decisions.jsonl` khi `--dry-run`. Brain ghi `rules` cho moi route cho den khi
@@ -114,3 +86,29 @@ High-signal context loaded at session start. Detailed history belongs in
   với `HOME`/XDG trỏ vào workspace + key qua `WSLENV` - echo 8.5s ấm (21s cold), ghi
   1 file 56.5s, state 28 file nằm trong workspace. Còn chặn: binary Windows
   (`opencode.exe`, `kilo.exe`, `cmd.exe`) không chạy được trong fence.
+- [decision] Giu `.kilo/` lam goc sinh (2026-11-16): van sinh `.claude`, `.opencode`, `.copilot`,
+  `.gemini`. Do: 1.684 lan ".kilo" tren 250 file (~778 ".kilo/" tren 179); garden neo
+  `engines[".kilo"]`; deploy co `DIRS_KILO`. Phan bien doc lap (agy): KEEP, don rename vao
+  breaking release.
+- [decision] Noi gate hook-reference, do hau qua (2026-11-16): `check_hook_references` tra `[]`
+  khi `hooks.json` vang. Do 4 ca: vang 1->0; thieu script / trung id / JSON hong giu 1->1.
+  Mat bat xoa nham; file duoc git track nen xoa hien trong diff.
+- [decision] `select_provider` hoi router (2026-11-16): ca 5 worker cung capability
+  `{read,bash}` nen `min(capable, key=rank)` luon tra opencode. Khong co `--worker` thi goi
+  `router.route()` + `provider_id_for_router_worker`; survey->gemini, simple_edit->opencode;
+  loi route fall-through.
+- [decision] Tu choi contract `worker-response/1` (2026-11-16): Codex verify in-memory.
+  `"event" in obj` sai voi opencode/kilo (dung key `type`) va bo sot terminal
+  `{"event":"result"}` cua antigravity -> run thanh cong bi bao loi. Khong co field cho
+  partial output; trung `SubagentResult` (`subagent_seam.py:59`).
+- [decision] Evidence loi giu ca hai kenh (2026-11-16): `subagent_cli.py` gop `err` + `out`
+  (cat 2000) thay vi `err or out`; antigravity/codex in fragment timeout ra stdout nen truoc
+  do bi nuot.
+- [decision] Checklist Observability het false PASS (2026-11-16): 5 dong tro artifact chi
+  `.kilo/hooks/*` sinh ra. `.kilo/state/` la ban copy tu `D:\Project\Solo-Code-Harness`
+  (9 file, noi dung 6/2026, mtime 10/2026) -> da xoa; `.gitkeep` duoc track de
+  `eval_harness` `is_dir()` khong do (thieu dir -> context 11/12).
+- [decision] Ignore rule `.solocode` (2026-11-16): `.solocode/` loai ca thu muc nen moi
+  negation chet -> `.solocode/*`. `executor-config.json` track lai (deploy doc lam template
+  sau `if exists()`); `executor-mode` giu ignore vi noi dung `off` va deploy copy vao moi
+  target. Guard: `test_repo_ignore_rules.py`, mutation-checked.

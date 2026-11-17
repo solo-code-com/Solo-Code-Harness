@@ -1379,3 +1379,34 @@ both earlier in this file; they moved only to reach the 7,900-character target.
 - `.env` needs `COMMANDCODE_API_KEY` and `COMMANDCODE_BASE_URL=https://api.commandcode.ai/provider/v1` — no
   `/chat/completions` suffix; the code appends the path. Gotcha: a stale shell `COMMANDCODE_API_KEY` shadows
   `.env` (`user_5...` -> 401 vs `user_4...` -> 200) and only the new one-line stderr warning says so.
+
+## Pruned 2026-11-16 (mem cap)
+
+- [decision] Pipeline 4 vai trò (2026-10-16): Jev (agent trên **model JEV**
+  `openrouter/jev-router`) điều phối; **Codex** ra đề bài + **verify** (`gpt-6.1-sol`,
+  effort `medium`, đổi bằng `--model`/`--effort`); **DeepSeek V4.1 Flash** (OpenCode CLI,
+  + `dsh`) code sâu; **Gemini 3.8 Flash** (Antigravity CLI) việc nhanh nhẹ. Fallback:
+  Codex không ổn định → DeepSeek viết brief + thẩm định lại Gemini. Jev `edit: deny` và
+  wrapper chạy agent này **không `--auto`** để deny có hiệu lực. Gotcha: timeout mặc định
+  của wrapper opencode/agy là **120s** → job dài bị giết oan (đã nâng 900/600); `.ps1` tải
+  về bị mark-of-the-web → phải `Unblock-File`. Catalog **80 model / 4 provider**.
+- [decision] Parity launcher ↔ delegate về biến môi trường (2026-10-16): chỉ cắt `/v1` ở biến mà
+  config sinh ra **thêm** `/v1` — hiện chỉ `OPENAI_BASE_URL`; `DEEPSEEK_BASE_URL` dùng **nguyên văn**.
+  (Cắt `/v1` của một gateway từng làm mọi call delegate hỏng: A/B cùng call `Unknown error` → `OK` 8.2s.)
+  `tools/test_env_file.py` suy luật **từ chính** `.opencode/opencode.json`, nên thêm provider có template
+  `/v1` là test đỏ ngay. Ghi chú: launcher xuất **mọi** key `.env` bằng vòng lặp chung nên nó và
+  `env_file.py` đã ngang nhau — audit chỉ grep `$env:NAME =` sẽ báo thiếu biến oan.
+- [decision] Khoi phuc Command Code provider (2026-10-27): tich hop provider `commandcode`
+  vao OpenCode v2 (`.opencode/opencode.json`), `tools/env_file.py`, `tools/model_api.py`,
+  va `tools/check_model_catalog.py`. Endpoint OpenAI-compatible `https://api.commandcode.ai/provider/v1`,
+  xac thuc qua `COMMANDCODE_API_KEY`. Da probe live thanh cong 94 model, do latency thuc te
+  cho `deepseek/deepseek-v4.1-flash` (3.6s), `deepseek-v4-pro` (2.8s), `deepseek-v4.1-flash-fast` (2.5s).
+  Luu y: model Claude yeu cau `/messages` (Anthropic format), khong goi qua `/chat/completions`.
+- Harness content fingerprint (2026-10-21): .harness.lock records `content_fingerprint`,
+  a sha256 over the sorted (path, content) pairs of [shared_files], BOM stripped and
+  CRLF->LF. A `[harness] mode` is recorded too. `root` is enforced: a harness edit
+  without `python tools/deploy.py --root-lock` fails garden. `target` is advisory, so
+  garden prints a WARN and does not fail, because customising harness files there is
+  legitimate. A lock with no `mode` is treated as root. A target lock declares only the
+  files deploy actually shipped. `failure_ledger --sweep` reports per-project fingerprint
+  match.
