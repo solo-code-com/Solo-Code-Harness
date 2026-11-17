@@ -14,13 +14,26 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from claude_engine import (
     _build_tools_allowlist,
     _parse_kilo_permissions,
     _split_frontmatter,
+    generate_agents,
+    generate_commands,
+    generate_instructions,
+    generate_memory,
+    generate_skills,
 )
+
+
+def _write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
 
 # ── _split_frontmatter ───────────────────────────────────────────────────
 
@@ -119,6 +132,7 @@ def test_tools_allowlist_deterministic_order():
 
 # ── memory + manifest parity (feat-008, feat-010) ─────────────────────────
 
+
 def test_claude_memory_generated():
     """feat-008: .claude/memory/ mirrors .kilo/memory/."""
     root = Path(__file__).resolve().parent.parent
@@ -158,3 +172,54 @@ def test_garden_manifest_check_clean():
 
     root = Path(__file__).resolve().parent.parent
     assert garden.check_manifest(root) == []
+
+
+# ── generators ───────────────────────────────────────────────────────────
+
+
+def test_split_frontmatter_requires_a_closing_marker():
+    assert _split_frontmatter("---\nname: x") is None
+
+
+def test_generate_instructions_scopes_rules_and_prunes_stale_copies(tmp_path):
+    """A path-scoped source lands in .claude/rules/ with `paths:` frontmatter;
+    neither copy of the other form survives the run."""
+    kilo = tmp_path / ".kilo"
+    claude = tmp_path / ".claude"
+    _write(kilo / "instruction" / "rules-typescript.md", "RULE BODY\n")
+    _write(kilo / "instruction" / "behavior-rules.md", "PLAIN BODY\n")
+    # Artifacts from the previous layout: a plain copy of a now-scoped source
+    # and a rule copy of a now-plain one.
+    _write(claude / "instruction" / "rules-typescript.md", "STALE\n")
+    _write(claude / "rules" / "behavior-rules.md", "STALE\n")
+
+    assert generate_instructions(kilo, claude) == 0
+
+    scoped = (claude / "rules" / "rules-typescript.md").read_text(encoding="utf-8")
+    assert scoped.startswith('---\npaths:\n  - "**/*.ts"\n  - "**/*.tsx"\n---\n')
+    assert "RULE BODY" in scoped
+    assert not (claude / "instruction" / "rules-typescript.md").exists()
+
+    plain = claude / "instruction" / "behavior-rules.md"
+    assert plain.read_text(encoding="utf-8") == "PLAIN BODY\n"
+    assert not (claude / "rules" / "behavior-rules.md").exists()
+
+
+@pytest.mark.parametrize(
+    "generate",
+    [
+        generate_agents,
+        generate_skills,
+        generate_commands,
+        generate_instructions,
+        generate_memory,
+    ],
+    ids=["agents", "skills", "commands", "instructions", "memory"],
+)
+def test_generators_report_a_missing_source_directory(tmp_path, capsys, generate):
+    """A missing source fails the generator instead of writing an empty mirror."""
+    assert generate(tmp_path / ".kilo", tmp_path / ".claude") == 1
+
+    out = capsys.readouterr().out
+    assert "[ERROR]" in out
+    assert "not found" in out

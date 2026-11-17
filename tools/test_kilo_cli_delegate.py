@@ -18,6 +18,7 @@ import json
 import subprocess
 import sys
 import time
+import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -361,6 +362,47 @@ def test_server_healthy_is_false_for_a_closed_port_without_raising():
     assert time.monotonic() - start < 10
 
 
+class _FakeResponse:
+    def __init__(self, status: int) -> None:
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+
+def test_server_healthy_is_true_when_doc_answers(monkeypatch):
+    seen: dict[str, str] = {}
+
+    def fake_urlopen(url, timeout=None):
+        seen["url"] = url
+        return _FakeResponse(200)
+
+    monkeypatch.setattr(kilo_cli_delegate.urllib.request, "urlopen", fake_urlopen)
+
+    assert kilo_cli_delegate._server_healthy("http://127.0.0.1:14096/") is True
+    assert seen["url"] == "http://127.0.0.1:14096/doc"
+
+
+def test_server_healthy_is_false_when_doc_answers_an_error(monkeypatch):
+    def fake_urlopen(url, timeout=None):
+        raise urllib.error.HTTPError(url, 404, "not found", None, None)
+
+    monkeypatch.setattr(kilo_cli_delegate.urllib.request, "urlopen", fake_urlopen)
+
+    assert kilo_cli_delegate._server_healthy("http://127.0.0.1:14096") is False
+
+
+def test_server_port_reads_a_named_port():
+    assert kilo_cli_delegate._server_port("http://127.0.0.1:14137") == 14137
+
+
+def test_server_port_is_none_when_the_url_names_no_valid_port():
+    assert kilo_cli_delegate._server_port("http://127.0.0.1:notaport") is None
+
+
 def test_ensure_server_passes_a_custom_port_to_the_manager(monkeypatch, capsys):
     _reach_the_runner(monkeypatch)
     probes = iter([False, True])
@@ -679,3 +721,259 @@ def test_main_keeps_the_scope_report_on_one_line(monkeypatch, tmp_path, capsys):
         "escaped.md"
     )
     assert any(expected in line for line in capsys.readouterr().err.splitlines())
+
+
+def test_snapshot_is_none_when_the_root_is_not_a_directory(tmp_path):
+    assert kilo_cli_delegate._snapshot(tmp_path / "absent") is None
+
+
+def test_snapshot_is_none_when_the_tree_cannot_be_read(tmp_path, monkeypatch):
+    def boom(_root):
+        raise OSError("unreadable")
+
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "_load_sibling",
+        lambda _name: SimpleNamespace(snapshot_workspace=boom),
+    )
+
+    assert kilo_cli_delegate._snapshot(tmp_path) is None
+
+
+def test_report_scope_accepts_a_target_outside_the_repository(
+    monkeypatch, tmp_path, capsys
+):
+    """A --directory above ROOT still reports what changed inside ROOT."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "escaped.md").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(kilo_cli_delegate, "ROOT", ws)
+
+    kilo_cli_delegate._report_scope({}, str(tmp_path / "outside"), _ok_result())
+
+    err = capsys.readouterr().err
+    assert "scope: 1 path(s) changed outside --directory" in err
+    assert "escaped.md" in err
+
+
+def test_report_scope_stops_when_the_after_snapshot_is_unavailable(monkeypatch, capsys):
+    monkeypatch.setattr(kilo_cli_delegate, "_snapshot", lambda _root: None)
+
+    kilo_cli_delegate._report_scope({"a.py": "h"}, ".", _ok_result())
+
+    assert "scope:" not in capsys.readouterr().err
+
+
+def test_report_scope_summarises_more_than_ten_paths(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(kilo_cli_delegate, "ROOT", tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "_snapshot",
+        lambda _root: {f"f{i}.py": "h" for i in range(11)},
+    )
+
+    kilo_cli_delegate._report_scope({}, str(tmp_path / "src"), _ok_result())
+
+    err = capsys.readouterr().err
+    assert "scope: 11 path(s) changed outside" in err
+    assert "(+1 more)" in err
+
+
+def test_real_kilo_candidates_prefers_the_extension_install(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    exe = (
+        tmp_path
+        / ".antigravity-ide"
+        / "extensions"
+        / "kilocode.kilo-code-1.2.3"
+        / "bin"
+        / "kilo.exe"
+    )
+    exe.parent.mkdir(parents=True)
+    exe.write_text("", encoding="utf-8")
+
+    candidates = kilo_cli_delegate._real_kilo_candidates()
+
+    assert candidates[0] == exe
+    assert candidates[-1] == tmp_path / ".local" / "share" / "kilo" / "bin" / "kilo"
+
+
+def test_real_kilo_candidates_falls_back_to_the_posix_install(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+
+    assert kilo_cli_delegate._real_kilo_candidates() == [
+        tmp_path / ".local" / "share" / "kilo" / "bin" / "kilo"
+    ]
+
+
+def test_find_kilo_binary_falls_back_to_the_shim(tmp_path, monkeypatch):
+    """A shim that wraps nothing is still better than reporting no binary."""
+    shim = tmp_path / "kilo.cmd"
+    shim.write_text("", encoding="utf-8")
+    monkeypatch.setattr(kilo_cli_delegate.shutil, "which", lambda name: str(shim))
+    monkeypatch.setattr(kilo_cli_delegate, "_real_kilo_candidates", list)
+
+    assert kilo_cli_delegate.find_kilo_binary(platform="win32") == str(shim)
+
+
+def test_find_kilo_binary_returns_none_when_nothing_is_installed(monkeypatch):
+    monkeypatch.setattr(kilo_cli_delegate.shutil, "which", lambda name: None)
+    monkeypatch.setattr(kilo_cli_delegate, "_real_kilo_candidates", list)
+
+    assert kilo_cli_delegate.find_kilo_binary() is None
+
+
+def test_parse_json_events_skips_blank_lines():
+    result = kilo_cli_delegate.parse_json_events(
+        '{"type":"step_start","sessionID":"ses_kilo"}\n'
+        "\n"
+        '{"type":"text","part":{"text":"PONG"}}'
+    )
+
+    assert result["text"] == "PONG"
+    assert len(result["events"]) == 2
+
+
+def test_parse_json_events_reports_a_worker_error_event():
+    result = kilo_cli_delegate.parse_json_events(
+        '{"type":"error","part":{"message":"provider refused the request"}}'
+    )
+
+    assert result["error"] == "provider refused the request"
+
+
+def test_parse_json_events_defaults_an_error_event_without_a_message():
+    """An error event with no message must still fail the run."""
+    result = kilo_cli_delegate.parse_json_events('{"type":"error","part":{}}')
+
+    assert result["error"] == "Unknown error"
+
+
+def test_parse_json_events_reports_a_non_string_text_part():
+    result = kilo_cli_delegate.parse_json_events('{"type":"text","part":{"text":5}}')
+
+    assert "invalid JSON event payload" in result["error"]
+
+
+def test_run_kilo_cli_hands_an_oversized_prompt_over_as_a_file(monkeypatch, tmp_path):
+    """A brief-sized prompt goes in a file: on the command line it hangs the CLI."""
+    seen: dict[str, list[str]] = {}
+
+    def fake_popen(cmd, **_kwargs):
+        seen["cmd"] = cmd
+        return _FakePopen(stdout='{"type":"text","part":{"text":"PONG"}}')
+
+    monkeypatch.setattr(kilo_cli_delegate.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(kilo_cli_delegate, "TOOLS_DIR", tmp_path / "tools")
+
+    prompt = "x" * (kilo_cli_delegate.INLINE_PROMPT_LIMIT + 1)
+    result = kilo_cli_delegate.run_kilo_cli(
+        prompt=prompt,
+        model="m",
+        server_url="http://127.0.0.1:1",
+        directory=".",
+        kilo_binary="kilo",
+        timeout_s=5,
+    )
+
+    assert result["text"] == "PONG"
+    written = list((tmp_path / ".solocode" / "kilo-briefs").glob("*/brief.md"))
+    assert len(written) == 1
+    assert written[0].read_text(encoding="utf-8") == prompt
+    assert str(written[0]) in seen["cmd"][2]
+
+
+def test_run_kilo_cli_settles_a_broken_pipe_as_failed(monkeypatch, tmp_path):
+    registry = _registry()
+
+    class BrokenPopen(_FakePopen):
+        def communicate(self, timeout=None):
+            raise RuntimeError("pipe closed")
+
+    result = _run(monkeypatch, kilo_cli_delegate, BrokenPopen())
+
+    assert result["error"] == "pipe closed"
+    assert registry.list_sessions(session_dir=tmp_path)[0]["state"] == "failed"
+
+
+def test_run_kilo_cli_reports_an_unparseable_event_stream(monkeypatch):
+    def explode(_output):
+        raise TypeError("event is not an object")
+
+    monkeypatch.setattr(kilo_cli_delegate, "parse_json_events", explode)
+
+    result = _run(monkeypatch, kilo_cli_delegate, _FakePopen(stdout="not json"))
+
+    assert result["error"] == "invalid JSON event payload: event is not an object"
+
+
+def test_run_kilo_cli_timeout_survives_an_unparseable_fragment(monkeypatch):
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "_load_sibling",
+        lambda name: (
+            SimpleNamespace(kill_tree=lambda pid: [pid])
+            if name == "session_control"
+            else session_registry
+        ),
+    )
+
+    def explode(_output):
+        raise AttributeError("no events field")
+
+    monkeypatch.setattr(kilo_cli_delegate, "parse_json_events", explode)
+    partial = '{"type":"text","part":'
+
+    result = _run(
+        monkeypatch, kilo_cli_delegate, _FakePopen(stdout=partial, timeout=True)
+    )
+
+    assert result["timed_out"] is True
+    assert result["text"] == partial
+    assert result["error"] == "Timeout after 5s"
+
+
+def test_main_returns_one_when_the_kilo_binary_is_missing(monkeypatch, capsys):
+    _reach_the_runner(monkeypatch)
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
+    monkeypatch.setattr(kilo_cli_delegate, "find_kilo_binary", lambda: None)
+
+    assert kilo_cli_delegate.main(["hello", "--no-guardrail"]) == 1
+    assert "Kilo binary not found" in capsys.readouterr().err
+
+
+def test_main_prints_the_partial_output_of_a_timed_out_run(
+    monkeypatch, tmp_path, capsys
+):
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **_kw: {
+            **kilo_cli_delegate._error_result("Timeout after 5s"),
+            "text": "half an answer",
+            "timed_out": True,
+        },
+    )
+
+    assert kilo_cli_delegate.main(["x", "--no-guardrail"]) == 2
+
+    err = capsys.readouterr().err
+    assert "partial output before the timeout" in err
+    assert "half an answer" in err
+
+
+def test_main_reports_token_usage(monkeypatch, capsys):
+    _reach_the_runner(monkeypatch)
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **_kw: {
+            **_ok_result(),
+            "tokens": {"input": 3, "output": 4, "total": 7},
+        },
+    )
+
+    assert kilo_cli_delegate.main(["x", "--no-guardrail"]) == 0
+    assert "tokens: in=3 out=4 total=7" in capsys.readouterr().err

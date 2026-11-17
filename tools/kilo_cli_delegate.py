@@ -568,11 +568,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Skip prepending the strict guardrail preamble",
     )
     parser.add_argument(
-        "--no-json",
-        action="store_true",
-        help="Disable JSON format request (use default text)",
-    )
-    parser.add_argument(
         "--kilo-bin",
         help="Path to kilo binary (auto-detected if not provided)",
     )

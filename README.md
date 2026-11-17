@@ -166,16 +166,20 @@ visible on purpose — hiding it kills DNS. The Windows ACL restricted-token pat
 rejected: it breaks TLS (`SEC_E_NO_CREDENTIALS`), so no worker that calls an API can run inside it.
 
 The fence is now selectable instead of mandatory: `tools/opencode_delegate.py` accepts
-`--sandbox {win,wsl}` (default `win`). In `wsl` mode the worker runs inside
+`--sandbox {auto,win,wsl}` (default `auto`). `auto` resolves to `wsl` only on Windows where the
+probe passes (`wsl`, `unshare` and `$HOME/.local/bin/opencode` all present), and to `win`
+otherwise. In `wsl` mode the worker runs inside
 `tools/wsl_sandbox.sh` with HOME and the XDG directories redirected to `.solocode/sandbox-home`
 inside the workspace. Keys are carried by `WSLENV`, and the default model switches from
 `opencode-go/beam-free` to `deepseek/deepseek-flash`, because the Go plan is not authenticated
-in WSL. The fence fails closed: a missing mount or an unshare-less invocation exits 69 instead
-of running unfenced. Measured on this machine: 8.5 s warm / 16.7 s cold for a one-shot brief,
-56.5 s for a one-file task. State and output land only inside the workspace. What still cannot
-run inside the fence: the Windows binaries (`opencode.exe`, `kilo.exe`, `cmd.exe`). Interop is
-gone once `/mnt/*` is overlaid, so the Linux builds must be installed first
-(`npm i -g --prefix ~/.local @opencode/cli`, verified v2.1.4).
+in WSL. The fence fails closed: a missing mount or an unshare-less invocation makes the fence
+script itself exit 69, and the wrapper surfaces that as its ordinary non-zero worker failure
+(exit 2, `Error: opencode CLI exit code 69`) instead of running unfenced. A fenced run that
+produced no output is therefore a fence failure, not a model failure. Measured on this machine:
+8.5 s warm / 16.7 s cold for a one-shot brief, 56.5 s for a one-file task. State and output land
+only inside the workspace. What still cannot run inside the fence: the Windows binaries
+(`opencode.exe`, `kilo.exe`, `cmd.exe`). Interop is gone once `/mnt/*` is overlaid, so the Linux
+builds must be installed first (`npm i -g --prefix ~/.local @opencode/cli`, verified v2.1.4).
 
 Measured: two commands inside the fence in 10.9 s (pytest 9.1.1, ruff 0.17.1), writes outside the
 workspace refused, TLS 200. Agreed but not built: a docker fence (daemon not running) and dsh

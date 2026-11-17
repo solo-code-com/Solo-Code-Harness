@@ -237,8 +237,10 @@ A "MANDATORY" 9-step session protocol used to be documented here with
 nothing verifies only teaches agents to trust something that isn't real.
 
 ### Session start / end
-Nothing to do by hand — hooks read the last `session_log` rows for context
-and write the session summary back.
+Those rows are written by Claude Code's lifecycle hooks (`session_end.py`,
+`pre_compact.py`), or by an explicit `SharedState.add_session_entry` call -
+`tools/codex_session.py` line 46 is a working example. A Copilot session
+leaves no row by itself.
 
 ### When locks DO matter
 Before delegating a **write** to a worker editing the tree concurrently

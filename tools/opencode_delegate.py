@@ -981,7 +981,7 @@ def main(argv: list[str] | None = None) -> int:
         "--timeout",
         type=int,
         default=900,
-        help="Timeout in seconds (default: 120)",
+        help="Timeout in seconds (default: 900)",
     )
     parser.add_argument(
         "--free",

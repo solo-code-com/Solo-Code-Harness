@@ -629,8 +629,9 @@ session and serve different purposes -- they coexist, not compete.
 | Custom memory (`memory/`) | You or Claude deliberately | Structured project facts: goals, constraints, external pointers not derivable from code |
 
 **Rule:** Let native auto memory hold preferences and corrections. Write to
-`memory/` only for project facts with stable structure. Run
-`/doctor prompt-audit` quarterly to catch drift between the two.
+`memory/` only for project facts with stable structure. `python tools/garden.py`
+keeps the `memory/` mirrors in sync across engines; no gate inspects Claude's
+native auto memory, so audit that one by hand.
 
 ## Choosing a worker engine (routing table)
 

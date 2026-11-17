@@ -37,7 +37,7 @@ call adds a permission round-trip.
 | 3 | Pass the prompt as a **single line**. PowerShell mangles multi-line arguments, and an embedded `"` makes argparse split the prompt into extra args. | Measured failure: `unrecognized arguments` |
 | 4 | Use `--allow-tools` only when the task truly must run commands; down it with `--target-dir` narrowed to the smallest directory and list the exact commands. | Avoids traversing a huge tree |
 | 5 | Timeout: 180s for generation-only, 900s for a tool-using run. | 400s was too short for tool runs, needlessly long for generation |
-| 6 | On timeout resume with `--continue-latest` (or `--conversation <id>`). | The wrapper prints the id only on success |
+| 6 | On timeout resume with `--continue-latest` (or `--conversation <id>`). | The wrapper prints `conversation=<id>` whenever the run reports one, so a failed or timed-out run still prints it |
 
 Measured: generation-only 18.2s and 31.6s; `--allow-tools` 400s timeout (×2).
 

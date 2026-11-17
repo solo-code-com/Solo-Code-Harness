@@ -19,14 +19,14 @@ Antigravity acts as the central coordinator: planning, formulating self-containe
 - **DeepSeek V4.1 Flash (Command Code / OpenCode Engine)** for narrow coding, mechanical edits, or test writing:
   ```bash
   # Targeted one-shot generation
-  python3 tools/model_api.py "<brief>" --model commandcode/deepseek/deepseek-v4.1-flash
+  python tools/model_api.py "<brief>" --model commandcode/deepseek/deepseek-v4.1-flash
 
   # Headless execution
-  python3 tools/opencode_delegate.py "<brief>" --model commandcode/deepseek/deepseek-v4.1-flash
+  python tools/opencode_delegate.py "<brief>" --model commandcode/deepseek/deepseek-v4.1-flash
   ```
 - **Codex (GPT-6.1 Sol)** for independent logic review, security auditing, and design critique:
   ```bash
-  python3 tools/codex_delegate.py "<review brief>" --model gpt-6.1-sol --effort medium
+  python tools/codex_delegate.py "<review brief>" --model gpt-6.1-sol --effort medium
   ```
 
 ## Phase 3: Verification & Quality Gates
@@ -36,9 +36,9 @@ Antigravity acts as the central coordinator: planning, formulating self-containe
 2. Re-run all evidence commands reported by workers. Never trust self-reported confidence.
 3. Execute standard repository gates:
    ```bash
-   python3 tools/garden.py
-   python3 tools/check_stdlib_only.py
-   python3 .github/scripts/security_scan.py .
+   python tools/garden.py
+   python tools/check_stdlib_only.py
+   python .github/scripts/security_scan.py .
    ```
 
 ## Rules

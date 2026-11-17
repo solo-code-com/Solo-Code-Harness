@@ -123,7 +123,7 @@ Configured models are defined in `.vscode/settings.json` under `github.copilot.c
 |----------|----------|-------|
 | **Architecture design** | OpenCode | `opencode-go/claude-opus-5` or `opencode-go/claude-sonnet-5` |
 | **Code review** | OpenCode | `opencode-go/claude-sonnet-5` or `opencode-go/gpt-5.5` |
-| **Harness default (OpenCode / Kilo orchestrator)** | OpenCode | `opencode-go/deepseek-v4-pro` |
+| **Recommended for deep code work** | OpenCode | `opencode-go/deepseek-v4-pro` |
 | **Free-tier worker default** | OpenCode | `opencode-go/beam-free` |
 | **WSL-fenced worker** | OpenCode (Linux build in WSL) | `deepseek/deepseek-flash` (via `--sandbox wsl`; requires `@opencode/cli` installed in WSL and keys passed through `WSLENV`) |
 | **Refactoring** | OpenCode | `opencode-go/deepseek-v4-pro` |
@@ -134,7 +134,7 @@ Configured models are defined in `.vscode/settings.json` under `github.copilot.c
 | **Long-context analysis** | OpenCode | `opencode-go/gemini-3.5-flash` or `opencode-go/kimi-k3` |
 | **Direct DeepSeek API** | DeepSeek | `deepseek-flash` or `deepseek-v4-pro` |
 
-The fence is opt-in: `tools/opencode_delegate.py --sandbox wsl` (default `win`). It is fail-closed - a mount that cannot be built exits 69 instead of running unfenced.
+The fence is opt-in: `tools/opencode_delegate.py --sandbox {auto,win,wsl}` defaults to `auto`, which picks `wsl` when the fence is usable and `win` otherwise. It is fail-closed - a mount that cannot be built makes the fence script itself exit 69, and the wrapper surfaces that as its ordinary non-zero worker failure instead of running unfenced.
 
 ## Error Handling
 

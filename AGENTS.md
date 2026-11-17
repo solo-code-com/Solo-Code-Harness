@@ -233,13 +233,17 @@ absent or unreadable state file means the gate is active — fail closed, not
 open, so a fresh clone or a deleted toggle cannot silently disable it. Bash
 is never gated — the orchestrator still runs its own verification gates.
 
-Enforced independently by each engine's own hook so neither can bypass it
-by switching engines:
+What enforces the orchestrator/worker split differs per engine:
 
 - Claude Code: `.claude/hooks/guard.py` (`PreToolUse`, matcher
   `Edit|Write|MultiEdit`).
 - Kilo Code: `.kilo/hooks/pre-tool-use/executor-mode.js` (same matcher,
   wired into every `hooks.json` profile except `minimal`).
+- OpenCode: no hook layer, so `.solocode/executor-mode` does nothing there.
+  The split is the agent's own permission block: `.opencode/agents/jev.md`
+  declares `edit: deny`, and `tools/opencode_delegate.py` lines 676-677 and
+  698-699 omit `--auto` for that agent because `--auto` auto-approves past
+  the deny. A bare `opencode run --auto` outside the wrapper bypasses it.
 
 When ON, a write attempt is blocked (exit 2) with a reminder to verify the
 result of any delegated work (`git status`/`git diff`) rather than trust a
@@ -254,7 +258,7 @@ gate closed.
 
 ### Choosing a worker engine (routing table)
 
-Three workers are available. Propose one **proactively** when the work fits —
+Several worker engines are available. Propose one **proactively** when the work fits —
 the user should not have to remember they exist. `session_start.py` announces
 each engine's availability at session start; treat that as a prompt to
 consider delegation, not an instruction to always delegate.
@@ -297,11 +301,11 @@ Antigravity acts as primary Orchestrator maintaining global context, task decomp
 
 1. **OpenCode CLI (Primary Narrow Executor)**:
    ```bash
-   python3 tools/opencode_delegate.py "<task>" --model opencode/deepseek-v4.1-flash-free
+   python tools/opencode_delegate.py "<task>" --model opencode/deepseek-v4.1-flash-free
    ```
 2. **Codex CLI (Independent Verification)**:
    ```bash
-   python3 tools/codex_delegate.py "<brief>" --model gpt-6.1-sol --effort medium
+   python tools/codex_delegate.py "<brief>" --model gpt-6.1-sol --effort medium
    ```
 3. **Antigravity CLI (Headless Read-Heavy / Survey)**:
    ```bash
@@ -339,8 +343,9 @@ session and serve different purposes — they coexist, not compete.
 | Custom memory (`memory/`) | You or Claude deliberately | Structured project facts: goals, constraints, external pointers not derivable from code |
 
 **Rule:** Let native auto memory hold preferences and corrections. Write to
-`memory/` only for project facts with stable structure. Run
-`/doctor prompt-audit` quarterly to catch drift between the two.
+`memory/` only for project facts with stable structure. `python tools/garden.py`
+keeps the `memory/` mirrors in sync across engines; no gate inspects Claude's
+native auto memory, so audit that one by hand.
 
 ---
 

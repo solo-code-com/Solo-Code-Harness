@@ -284,8 +284,9 @@ def test_native_auto_memory_paragraphs_match_claude_template():
         "custom memory system (`memory/` dir + `MEMORY.md` index). Both load every\n"
         "session and serve different purposes -- they coexist, not compete.",
         "**Rule:** Let native auto memory hold preferences and corrections. Write to\n"
-        "`memory/` only for project facts with stable structure. Run\n"
-        "`/doctor prompt-audit` quarterly to catch drift between the two.",
+        "`memory/` only for project facts with stable structure. `python tools/garden.py`\n"
+        "keeps the `memory/` mirrors in sync across engines; no gate inspects Claude's\n"
+        "native auto memory, so audit that one by hand.",
     )
     for paragraph in paragraphs:
         assert paragraph in agents
@@ -426,6 +427,26 @@ def test_check_doc_counts_unnamed_line_falls_back_to_kilo(tmp_path):
 
     issues = garden.check_doc_counts(root=tmp_path)
     assert any("claimed 2 commands, but ground truth is 1" in i for i in issues), issues
+
+
+def test_check_doc_counts_reports_an_unreadable_doc_file(tmp_path, monkeypatch):
+    """An unreadable doc file is one issue naming it, never a traceback."""
+    _make_engines(tmp_path)
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text("Harness active: 1 skill.", encoding="utf-8")
+    real_read_text = Path.read_text
+
+    def _deny(self, *args, **kwargs):
+        if self == agents:
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", _deny)
+
+    issues = garden.check_doc_counts(root=tmp_path)
+
+    assert len(issues) == 1, issues
+    assert "Could not read file AGENTS.md" in issues[0]
 
 
 def test_count_pattern_reads_a_thousands_separator():
@@ -1617,6 +1638,43 @@ def test_check_hook_references_absent_file_is_not_an_issue(tmp_path):
     """An absent hooks.json is optional, not drift: removing the Kilo hook
     layer must not fail the gate."""
     assert garden.check_hook_references(tmp_path) == []
+
+
+def test_check_hook_references_rejects_a_payload_without_a_hooks_object(tmp_path):
+    """A present but wrongly shaped file is one issue, never a traceback."""
+    root = _hooks_fixture(tmp_path, {"profiles": {}})
+
+    issues = garden.check_hook_references(root)
+
+    assert len(issues) == 1, issues
+    assert "no `hooks` object" in issues[0]
+
+
+def test_check_hook_references_rejects_a_non_list_event(tmp_path):
+    root = _hooks_fixture(tmp_path, {"hooks": {"PreToolUse": "not a list"}})
+
+    issues = garden.check_hook_references(root)
+
+    assert len(issues) == 1, issues
+    assert "hooks.PreToolUse is not a list" in issues[0]
+
+
+def test_check_hook_references_rejects_a_non_object_entry(tmp_path):
+    root = _hooks_fixture(tmp_path, {"hooks": {"PreToolUse": ["not an object"]}})
+
+    issues = garden.check_hook_references(root)
+
+    assert len(issues) == 1, issues
+    assert "has a non-object entry" in issues[0]
+
+
+def test_check_hook_references_rejects_an_entry_without_a_command(tmp_path):
+    root = _hooks_fixture(tmp_path, {"hooks": {"PreToolUse": [{"id": "pre:gate"}]}})
+
+    issues = garden.check_hook_references(root)
+
+    assert len(issues) == 1, issues
+    assert "entry pre:gate has no `hook` command string" in issues[0]
 
 
 def test_live_repo_hook_references_resolve():

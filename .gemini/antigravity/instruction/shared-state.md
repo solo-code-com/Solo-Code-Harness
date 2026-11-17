@@ -1,6 +1,9 @@
 # Shared State — Cross-Engine Collaboration (Local-Only)
 
-> Auto-loaded at session start. Tất cả engine đọc/ghi `.solocode/shared-state.db` (SQLite).
+> Auto-loaded at session start. Mọi engine **đọc** được `.solocode/shared-state.db` (SQLite).
+> Chỉ hook lifecycle hoặc một lệnh gọi `SharedState` tường minh mới **ghi** vào đó. Kilo có hook
+> nhưng chỉ ghi `.kilo/state/*.json`; OpenCode, Copilot và Gemini không có lifecycle hook, nên
+> session của chúng không để lại row nào.
 > File này KHÔNG được commit vào git — chỉ tồn tại local trên máy đang chạy các engine.
 
 ## Cái gì đang thực sự chạy (snapshot 2026-09-26)
@@ -20,11 +23,19 @@ Một bản mô tả "Session Protocol (MANDATORY)" 9 bước từng nằm ở �
 trong đó **0/9 bước thực sự được chạy**. Nó đã bị gỡ: một quy trình
 bắt buộc mà không gì kiểm chứng chỉ dạy agent tin vào thứ không có thật.
 
-### Session start / end — không cần làm gì thủ công
-Hook Claude lo phần này, nhưng ghi vào **hai store khác nhau** (xem bảng dưới).
+### Session start / end — chỉ tự động ở engine có lifecycle hook
+
+Claude Code có hook vòng đời và ghi vào **hai store khác nhau** (xem bảng dưới):
 `session_start.py` đọc `.solocode/sessions.db` và bơm bối cảnh; `session_end.py`
 ghi vào `.solocode/sessions.db`; `pre_compact.py` ghi checkpoint vào
 `.solocode/shared-state.db` và nhắc ghi `.solocode/context-checkpoint.json`.
+Kilo Code có hook vòng đời riêng nhưng chỉ ghi file JSON trong `.kilo/state/`,
+không đụng tới hai store đó.
+
+OpenCode, Copilot và Gemini **không** có lifecycle hook, nên phiên của chúng không
+tự động được ghi lại: đừng giả định có dòng mới trong bảng session sau một phiên như
+vậy. Nếu cần lưu, gọi `SharedState.add_session_entry` từ code —
+`tools/codex_session.py` dòng 46 là ví dụ đang chạy.
 
 ### Hai SQLite store — đừng nhầm
 
