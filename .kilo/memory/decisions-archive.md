@@ -1421,3 +1421,7 @@ both earlier in this file; they moved only to reach the 7,900-character target.
   với `HOME`/XDG trỏ vào workspace + key qua `WSLENV` - echo 8.5s ấm (21s cold), ghi
   1 file 56.5s, state 28 file nằm trong workspace. Còn chặn: binary Windows
   (`opencode.exe`, `kilo.exe`, `cmd.exe`) không chạy được trong fence.
+- [decision] Tu choi contract `worker-response/1` (2026-11-16): Codex verify in-memory.
+  `"event" in obj` sai voi opencode/kilo (dung key `type`) va bo sot terminal
+  `{"event":"result"}` cua antigravity -> run thanh cong bi bao loi. Khong co field cho
+  partial output; trung `SubagentResult` (`subagent_seam.py:59`).

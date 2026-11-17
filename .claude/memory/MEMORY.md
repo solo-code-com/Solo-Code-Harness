@@ -95,10 +95,6 @@ High-signal context loaded at session start. Detailed history belongs in
   `{read,bash}` nen `min(capable, key=rank)` luon tra opencode. Khong co `--worker` thi goi
   `router.route()` + `provider_id_for_router_worker`; survey->gemini, simple_edit->opencode;
   loi route fall-through.
-- [decision] Tu choi contract `worker-response/1` (2026-11-16): Codex verify in-memory.
-  `"event" in obj` sai voi opencode/kilo (dung key `type`) va bo sot terminal
-  `{"event":"result"}` cua antigravity -> run thanh cong bi bao loi. Khong co field cho
-  partial output; trung `SubagentResult` (`subagent_seam.py:59`).
 - [decision] Evidence loi giu ca hai kenh (2026-11-16): `subagent_cli.py` gop `err` + `out`
   (cat 2000) thay vi `err or out`; antigravity/codex in fragment timeout ra stdout nen truoc
   do bi nuot.
