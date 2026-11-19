@@ -290,34 +290,19 @@ consider delegation, not an instruction to always delegate.
 
 ## Using workflow templates
 
-Templates live in `.claude/workflows/` and run as slash commands, one per file
-stem. Pass the arguments as an object, not as a sentence: name each key
-explicitly (`specFile`, `outputDir`, `entityName`) and ask for them as an object.
-Passed as one string, the run fails with "missing required arg" before any agent
-starts.
-
-Generate a CRUD module:
+Templates live in `.claude/workflows/`, one slash command per file stem. Pass
+arguments as an object keyed by name (`specFile`, `outputDir`, `entityName`); a
+single string fails with "missing required arg" before any agent starts.
 
 ```text
 /crud-module Product, fields id uuid, name string, price decimal, into src/modules/product/
-```
-
-Implement a feature and have it reviewed adversarially:
-
-```text
 /adversarial-implementation specs/user-authentication.md, into src/auth/, rules docs/security-policy.md
 ```
 
-The `api-from-spec` and `crud-module` templates emit Express routes, so the
-target project needs `express` installed. Their tests use the built-in
-`node:test` runner, which needs no install. Run them from the project root with
-`node --test`; Node rejects a directory argument. Pass `includeTests: false` to
-skip the test stage: three agents per endpoint instead of four, and no test files.
-
-A template throws before any agent runs when a required argument is missing, so
-a malformed invocation fails fast rather than generating half a module. Read
-`.claude/skills/dynamic-workflow-orchestration/SKILL.md` for all five templates,
-their arguments and the runtime limits.
+`api-from-spec` and `crud-module` emit Express routes (needs `express`); their
+tests use `node:test`, so run `node --test` from the project root. Pass
+`includeTests: false` to skip the test stage. All five templates, their
+arguments and the runtime limits: `.claude/skills/dynamic-workflow-orchestration/SKILL.md`.
 
 OpenCode CLI, Kilo CLI, and Antigravity CLI are headless. **OpenCode CLI is the
 primary narrow executor and the orchestrator that plans and routes work**;
@@ -339,33 +324,21 @@ Full decision guide: `.kilo/skill/gemini-delegation/SKILL.md`.
 
 ### Antigravity as Orchestrator & CLI Worker Delegation
 
-Antigravity acts as primary Orchestrator maintaining global context, task decomposition, and diff verification. Three headless workers are available:
+Antigravity holds the global context, splits the task and verifies the diff; the
+workers it can reach are in the routing table above. Three facts that table does not
+carry:
 
-1. **OpenCode CLI (Primary Narrow Executor)**:
-   ```bash
-   python tools/opencode_delegate.py "<task>" --model opencode/deepseek-v4.1-flash-free
-   ```
-2. **Codex CLI (Independent Verification)**:
-   ```bash
-   python tools/codex_delegate.py "<brief>" --model gpt-6.1-sol --effort medium
-   ```
-3. **Antigravity CLI (Headless Read-Heavy / Survey)**:
-   ```bash
-   python tools/antigravity_delegate.py "<task>" --allow-tools --model gemini-3.8-flash-medium
-   # Writes require explicit directory fence: --allow-dir src --auto-approve
-   ```
 - `--auto-approve` and `--allow-tools` are mutually exclusive; combining them exits 2.
 - `--allow-dir` is resolved relative to `--target-dir`, not the repo root, and must be a
   proper subdirectory of it; `.` is rejected.
-- Tier matters more than model family: `gemini-3.8-flash-low` finished a 100-line module in
-  99s and passed, while `gemini-3.8-flash-medium` timed out at 200s and 280s on the same
-  task, so medium is not a safe default for implementation work.
-4. **Antigravity GUI Handoff (Visual Verification)**:
-   File-based handoff via `.gemini/antigravity/handoff/inbox/<slug>-plan.md`.
+- Tier matters more than model family: `gemini-3.8-flash-low` finished a 100-line module
+  in 99s and passed, while `gemini-3.8-flash-medium` timed out at 200s and 280s on the
+  same task, so medium is not a safe default for implementation work.
 
-**Verification Protocol (Mandatory):**
-The orchestrator never blindly trusts worker summaries. Always re-run commands, run verification gates (`garden.py`, `checklist.py`), and inspect `git diff`.
-Full reference: `.gemini/antigravity/orchestrators/cli-worker-delegation.md` and `.kilo/skill/gemini-delegation/SKILL.md`.
+GUI handoff, for rendered UI only: write the plan to
+`.gemini/antigravity/handoff/inbox/<slug>-plan.md`. Full guide:
+`.gemini/antigravity/orchestrators/cli-worker-delegation.md` and
+`.kilo/skill/gemini-delegation/SKILL.md`.
 
 ## Git Commit Convention
 

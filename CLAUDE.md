@@ -196,34 +196,19 @@ delegation, not an instruction to always delegate.
 
 ## Using workflow templates
 
-Templates live in `.claude/workflows/` and run as slash commands, one per file
-stem. Pass the arguments as an object, not as a sentence: name each key
-explicitly (`specFile`, `outputDir`, `entityName`) and ask for them as an object.
-Passed as one string, the run fails with "missing required arg" before any agent
-starts.
-
-Generate a CRUD module:
+Templates live in `.claude/workflows/`, one slash command per file stem. Pass
+arguments as an object keyed by name (`specFile`, `outputDir`, `entityName`); a
+single string fails with "missing required arg" before any agent starts.
 
 ```text
 /crud-module Product, fields id uuid, name string, price decimal, into src/modules/product/
-```
-
-Implement a feature and have it reviewed adversarially:
-
-```text
 /adversarial-implementation specs/user-authentication.md, into src/auth/, rules docs/security-policy.md
 ```
 
-The `api-from-spec` and `crud-module` templates emit Express routes, so the
-target project needs `express` installed. Their tests use the built-in
-`node:test` runner, which needs no install. Run them from the project root with
-`node --test`; Node rejects a directory argument. Pass `includeTests: false` to
-skip the test stage: three agents per endpoint instead of four, and no test files.
-
-A template throws before any agent runs when a required argument is missing, so
-a malformed invocation fails fast rather than generating half a module. Read
-`.claude/skills/dynamic-workflow-orchestration/SKILL.md` for all five templates,
-their arguments and the runtime limits.
+`api-from-spec` and `crud-module` emit Express routes (needs `express`); their
+tests use `node:test`, so run `node --test` from the project root. Pass
+`includeTests: false` to skip the test stage. All five templates, their
+arguments and the runtime limits: `.claude/skills/dynamic-workflow-orchestration/SKILL.md`.
 
 Kilo CLI, OpenCode CLI, and Antigravity CLI are headless. Use
 `tools/antigravity_delegate.py` for broad scopes; writes require both
@@ -241,42 +226,16 @@ real gates, and mutation-test any new check they write.
 # Read-only
 python tools/antigravity_delegate.py "<task>"
 
-# Scoped write
-python tools/antigravity_delegate.py "<task>" --allow-dir src --auto-approve
+# Scoped write: --allow-dir resolves against --target-dir and must be narrower
+python tools/antigravity_delegate.py "<task>" --target-dir src --allow-dir module --auto-approve
 ```
 
-Inspect `git diff` and rerun the real gates after every worker run. The post-run
-scope check audits `--target-dir` only: it cannot see writes outside that
-directory and cannot undo a write. `--auto-approve` still passes
-`--dangerously-skip-permissions` to `agy.exe`, so `--allow-dir` is the fence, not
-a sandbox.
-
-## Antigravity GUI handoff fallback
-
-Use the file-based handoff protocol only when the task requires the GUI:
-1. Write the plan to `.gemini/antigravity/handoff/inbox/<slug>-plan.md`.
-2. Tell the user the one line to relay to Antigravity.
-3. `session_start.py` auto-detects new `outbox/*-report.md` files at the
-   next session start and announces them once.
-
-Writing the brief -- four rules, each from an observed failure:
-1. **Fence the scope, and predict the red gate.** If a correct result will
-   make a check fail, say so ("that failure is the expected outcome") --
-   otherwise Gemini fixes what it was told only to detect.
-2. **Demand evidence, not confidence.** Use `| Claim | Command run |
-   Output |`; add "do not write a claim you did not run a command for".
-   A "Confident? Y/N" column came back 22-for-22 "Yes", one of them wrong.
-3. **Name every writable path, including the plan file** -- it is
-   read-only, `status:` included.
-4. **Give the measurement, never the answer** (`ls .kilo/skill | wc -l`,
-   not "there are 51").
-
-For headless writes, do not bypass the wrapper's directory lock or guardrail.
-
-The `google-antigravity` SDK and `antigravity-ide chat` remain unsuitable for
-this workflow. Use `agy.exe --print --output-format stream-json` through the
-wrapper. Full guide:
-`.claude/skills/gemini-delegation/SKILL.md`.
+Inspect `git diff` and rerun the real gates after every worker run. The scope check
+audits `--target-dir` only: it cannot see or undo a write outside it, so `--allow-dir`
+is the fence, not a sandbox. GUI handoff (rendered UI only) writes a plan to
+`.gemini/antigravity/handoff/inbox/<slug>-plan.md`; `session_start.py` announces the
+matching `outbox/*-report.md` once. Brief-writing rules, the SDK verdict and the
+runtime limits: `.claude/skills/gemini-delegation/SKILL.md`.
 
 
 ## Language
