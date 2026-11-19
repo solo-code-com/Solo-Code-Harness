@@ -96,3 +96,20 @@ def test_circuit_breaker_cli(tmp_path: Path, monkeypatch, capsys):
     code = circuit_breaker.main(["status", "--task", task_id])
     assert code == 0
     assert "CLOSED" in capsys.readouterr().out
+
+
+def test_default_report_lands_under_solocode(tmp_path: Path, monkeypatch):
+    """A tripped breaker must not write project content into the repo root."""
+    target = tmp_path / ".solocode" / "TASK_FAILURE_REPORT.md"
+    monkeypatch.setattr(circuit_breaker, "DEFAULT_REPORT_FILE", target)
+    written = circuit_breaker.emit_failure_report("cli-task", 2, "boom")
+    assert written == target
+    assert target.is_file()
+    assert "cli-task" in target.read_text(encoding="utf-8")
+
+
+def test_default_report_path_is_under_solocode():
+    """The default must not point at the repo root, where it dirties the tree."""
+    assert circuit_breaker.DEFAULT_REPORT_FILE.parent == (
+        circuit_breaker.ROOT / ".solocode"
+    )

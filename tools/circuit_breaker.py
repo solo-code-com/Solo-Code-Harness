@@ -7,7 +7,7 @@ tokens). This module enforces a deterministic Stop Rule:
   - Tracks consecutive failures per task/session
   - When the consecutive failure budget is exhausted (default: 3 iterations),
     it TRIPS the circuit breaker
-  - Automatically emits a TASK_FAILURE_REPORT.md containing the failure evidence
+  - Automatically emits .solocode/TASK_FAILURE_REPORT.md containing the failure evidence
   - DOES NOT destructively rollback or delete the user's uncommitted work
   - Exits with code 5 (CIRCUIT_BREAKER_TRIPPED), stopping further agent writes
     and escalating to the human engineer
@@ -28,6 +28,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_STATE_FILE = ROOT / ".solocode" / "circuit-breaker-state.json"
+# The report is an artefact, not project content: keep it beside the state file,
+# which .gitignore already excludes, so a tripped breaker never dirties the tree.
+DEFAULT_REPORT_FILE = ROOT / ".solocode" / "TASK_FAILURE_REPORT.md"
 DEFAULT_MAX_ATTEMPTS = 3
 CIRCUIT_BREAKER_EXIT_CODE = 5
 
@@ -79,7 +82,7 @@ def emit_failure_report(
     output_path: Path | None = None,
 ) -> Path:
     """Generate a clean TASK_FAILURE_REPORT.md for human review."""
-    target = output_path or (ROOT / "TASK_FAILURE_REPORT.md")
+    target = output_path or DEFAULT_REPORT_FILE
     report = [
         "# TASK FAILURE REPORT (Circuit Breaker Tripped)",
         f"- **Task ID**: `{task_id}`",
@@ -99,6 +102,7 @@ def emit_failure_report(
         f"   `python tools/circuit_breaker.py reset --task {task_id}`",
         "",
     ]
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("\n".join(report), encoding="utf-8")
     return target
 
