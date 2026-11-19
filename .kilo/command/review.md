@@ -44,7 +44,7 @@ declarative — nothing verifies that those agents actually ran.
    output to look cleaner than it was.
 
 6. **Record the receipt** with the reviewer and model actually used:
-   `python tools/review_receipt.py record --reviewer codex --model gpt-6.1-sol`
+   `python tools/review_receipt.py record --reviewer codex --model gpt-6.2-sol`
    It writes one file per tree hash under the policy's `receipt_dir`,
    `.solocode/reviews` by default, and prints the path.
 

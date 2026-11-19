@@ -30,7 +30,7 @@ must still re-run the commands itself; worker self-assessment is not evidence.
 Usage:
     python tools/codex_delegate.py "add a test for foo()" --dry-run
     python tools/codex_delegate.py "add a test for foo()"
-    python tools/codex_delegate.py "refactor x" --allow-write --model gpt-6.1-sol
+    python tools/codex_delegate.py "refactor x" --allow-write --model gpt-6.2-sol
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ TOOLS_DIR = Path(__file__).resolve().parent
 LAUNCHER = ROOT / "codex-env.ps1"
 USAGE_LOG = ROOT / ".solocode" / "codex-delegate-usage.jsonl"
 DEFAULT_TIMEOUT = 900
-DEFAULT_MODEL = "gpt-6.1-sol"
+DEFAULT_MODEL = "gpt-6.2-sol"
 # Codex accepts `-c key=value` overrides; this is the reasoning effort the harness
 # asks for by default. Both values are CLI-changeable, so the routing table can
 # name a different model or effort without touching this file.

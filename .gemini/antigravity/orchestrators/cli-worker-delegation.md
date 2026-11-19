@@ -24,9 +24,9 @@ Antigravity acts as the central coordinator: planning, formulating self-containe
   # Headless execution
   python tools/opencode_delegate.py "<brief>" --model commandcode/deepseek/deepseek-v4.1-flash
   ```
-- **Codex (GPT-6.1 Sol)** for independent logic review, security auditing, and design critique:
+- **Codex (GPT-6.2 Sol)** for independent logic review, security auditing, and design critique:
   ```bash
-  python tools/codex_delegate.py "<review brief>" --model gpt-6.1-sol --effort medium
+  python tools/codex_delegate.py "<review brief>" --model gpt-6.2-sol --effort medium
   ```
 
 ## Phase 3: Verification & Quality Gates

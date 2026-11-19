@@ -179,7 +179,7 @@ When acting as the orchestrator, Antigravity plans, decomposes tasks, and delega
   - Command Code API: `python3 tools/opencode_delegate.py "<task brief>" --model commandcode/deepseek/deepseek-v4.1-flash-fast`
   - Direct API / one-shot: `python3 tools/model_api.py "<task brief>" --model commandcode/deepseek/deepseek-v4.1-flash`
 - **Codex CLI** (Independent Verification & Logic Review):
-  - `python3 tools/codex_delegate.py "<task brief>" --model gpt-6.1-sol --effort medium`
+  - `python3 tools/codex_delegate.py "<task brief>" --model gpt-6.2-sol --effort medium`
 - **Verification Rule**: Never trust a worker's self-assessment. Inspect `git diff`, re-run checks, and run quality gates (`garden.py`, `check_stdlib_only.py`, `security_scan.py`).
 
 ---
