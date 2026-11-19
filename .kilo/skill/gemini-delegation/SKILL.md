@@ -270,6 +270,19 @@ drill directory can inspect a sibling `verifier/` folder: during benchmarking, a
 Codex arm located and executed the external test suite itself, leaving only the
 arm strictly fenced to its own subdirectory blind to the tests.
 
+### Re-count every number in an evidence table
+
+A table with the right columns can still contain invented rows. Measured
+2026-11-19: a Codex review returned `VERDICT: PASS` with a real command in every
+row, yet reported `10 passed` for a file holding 5 tests, `35 passed` for three
+files holding 46, and a constant's value as a path that does not exist on disk.
+The verdict was right; the numbers were rebuilt from expectation rather than read
+off an execution.
+
+So the first rule above is not sufficient by itself: re-run the command, then
+compare the count. Reading a table and agreeing with its verdict is not
+verification.
+
 ## Concurrent-Edit Safety
 
 Gemini edits the same working tree at the same time as this session. Before

@@ -319,6 +319,9 @@ run the real gates, and mutation-test any new check they write.
   worker rooted at the drill directory can read a sibling `verifier/` folder (measured:
   a Codex arm found and ran the external suite itself, so only the arm fenced to its own
   subdirectory stayed blind).
+- Re-count the numbers in a worker's evidence table, not just its verdict. A review that
+  returned PASS with a real command per row still reported 10 tests for a 5-test file and
+  35 for three files holding 46 (measured 2026-11-19).
 
 Full decision guide: `.kilo/skill/gemini-delegation/SKILL.md`.
 
