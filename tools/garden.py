@@ -1744,7 +1744,8 @@ MEMORY_MD_CHAR_LIMIT = 8_000
 def check_instruction_caps(root: Path = ROOT) -> list[str]:
     """Flag always-on instruction files that are past their size caps.
 
-    The 90%..cap band is a printed warning, not an issue: garden stays green
+    The AGENTS_MD_WARN_RATIO..cap band is a printed warning, not an issue: garden
+    stays green
     while the file is still under the cap. An unreadable file fails closed with
     one issue, so a size check can never abort the later garden checks with a
     traceback.
@@ -1766,9 +1767,9 @@ def check_instruction_caps(root: Path = ROOT) -> list[str]:
             )
         elif size > AGENTS_MD_BYTE_LIMIT * AGENTS_MD_WARN_RATIO:
             print(
-                f"WARN: AGENTS.md is {size:,} bytes, above 90% of the "
-                f"{AGENTS_MD_BYTE_LIMIT:,}-byte cap at which Codex truncates "
-                "it silently"
+                f"WARN: AGENTS.md is {size:,} bytes, above "
+                f"{AGENTS_MD_WARN_RATIO:.0%} of the {AGENTS_MD_BYTE_LIMIT:,}-byte "
+                "cap at which Codex truncates it silently"
             )
 
     memory_md = root / ".kilo" / "memory" / "MEMORY.md"

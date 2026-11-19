@@ -169,99 +169,80 @@ Key enforcement points:
 ## Session State Lifecycle (shared state)
 
 Cross-engine session state lives in `.solocode/shared-state.db` (SQLite, local-only,
-never committed). Engines read/write it via `tools/shared_state.py`'s `SharedState`
-class. Claude Code hooks write to it automatically (`pre_compact.py` logs a
-compaction checkpoint); engines without a lifecycle hook call `tools/shared_state.py`
-directly (for example `tools/codex_session.py` for Codex).
+never committed), read and written through `tools/shared_state.py`'s `SharedState`
+class. Engines with a lifecycle hook write it automatically; the rest call the module
+directly (`tools/codex_session.py` for Codex).
 
-**Feature/task tracking is NOT in SQLite.** The `features` and `shared_memory_*`
-tables remain for backward compatibility but are unused: no hook or engine calls
-`set_feature_status()`. Track tasks with `git log` and record conventions, gotchas
-and decisions in `.kilo/memory/MEMORY.md`. `set_feature_status()` still exists as an
-API but is not part of the current workflow.
+**Feature/task tracking is NOT in SQLite.** The `features` and `shared_memory_*` tables
+remain for compatibility but nothing calls `set_feature_status()`. Track tasks with
+`git log`; record conventions, gotchas and decisions in `.kilo/memory/MEMORY.md`.
 
 ### Startup
 
-1. `session_start.py` injects a summary into context: git branch/sha/dirty count,
-   recent sessions, any unseen Gemini/Antigravity handoff report, and a PreCompact
-   recovery checkpoint (`.solocode/context-checkpoint.json`) if one was left.
-2. Read `git log --oneline -10` and `.kilo/memory/MEMORY.md` to see what is in
-   progress. Do not wait for an `in-progress` feature row — there is none.
+1. `session_start.py` injects a summary: git branch/sha/dirty count, recent sessions,
+   any unseen Gemini/Antigravity handoff report, and a PreCompact checkpoint
+   (`.solocode/context-checkpoint.json`) if one was left.
+2. Read `git log --oneline -10` and `.kilo/memory/MEMORY.md` for what is in progress.
+   There is no `in-progress` feature row to wait for.
 
 ### Wrap-Up (before ending session)
 
-1. **Log the session**: `state.add_session_entry(engine=..., model=..., summary="...")`
-   (newest entries are read first at next session start). `pre_compact.py` does this
-   automatically on Claude Code; other engines call `tools/shared_state.py` directly
-   if no lifecycle hook exists for that engine.
-2. **Record settled decisions** in `.kilo/memory/MEMORY.md`'s `## Decisions` section
-   (see the compaction section below).
+1. Log the session: `state.add_session_entry(engine=..., model=..., summary="...")` -
+   the newest entries are read first next session. `pre_compact.py` does this on Claude
+   Code; other engines call `tools/shared_state.py` themselves.
+2. Record settled decisions in `.kilo/memory/MEMORY.md`'s `## Decisions` section.
 
-### Context Compaction Continuity (CRITICAL — read this before/after any compaction)
+### Context Compaction Continuity (CRITICAL)
 
-Long sessions eventually get their context auto-summarized ("compacted"). A
-compaction summary lives only in the current session's context — it is NOT
-automatically written into the project's durable memory. **Any settled
-architectural/scope decision must be appended to `.kilo/memory/MEMORY.md`'s
-`## Decisions` section (source of truth) BEFORE it would only exist inside a
-soon-to-be-compacted summary.** Do this proactively, not just when reminded:
+A compaction summary lives only in the current context - it is NOT written to durable
+memory. **Append any settled architectural or scope decision to
+`.kilo/memory/MEMORY.md`'s `## Decisions` BEFORE it exists only inside a
+soon-to-be-compacted summary.**
 
-1. Whenever a real decision is settled (not just "in progress" work) —
-   architecture choice, engine/tool adoption, a fix that changes established
-   behavior, a policy change — append a one-entry bullet to `.kilo/memory/MEMORY.md`
-   `## Decisions` immediately, don't wait until end of session.
-2. Regenerate/sync after: one run of `python tools/generate_harness.py` (any
-   `--harness` value) updates `.claude/memory/` via the engine generator and
-   `.copilot/memory/` via `sync_memory_mirrors` — there is nothing to copy by
-   hand. `.gemini/` has no comparable memory mirror (see `tools/garden.py`'s
-   `check_gemini()`).
-3. Claude Code has a `PreCompact` hook (`.claude/hooks/pre_compact.py`) that
-   fires right before compaction: it logs an objective checkpoint (git
-   branch/sha, trigger type, timestamp) to `.solocode/shared-state.db` and
-   emits a reminder — but it CANNOT write your decision prose for you (a
-   hook is a deterministic script, not the model). Treat its reminder as a
-   prompt to check step 1, not a substitute for it.
-4. Other engines without a compaction-specific hook should apply this rule
-   manually: whenever a session naturally runs long, checkpoint decisions to
-   `MEMORY.md` rather than relying on the engine's own summarization.
+1. A real decision - architecture choice, engine/tool adoption, a fix that changes
+   established behavior, a policy change - gets one bullet immediately, not at end of
+   session.
+2. One run of `python tools/generate_harness.py` (any `--harness` value) syncs
+   `.claude/memory/` via the engine generator and `.copilot/memory/` via
+   `sync_memory_mirrors`; nothing is copied by hand. `.gemini/` has no memory mirror
+   (see `check_gemini()` in `tools/garden.py`).
+3. Claude Code's `PreCompact` hook (`.claude/hooks/pre_compact.py`) logs an objective
+   checkpoint (git branch/sha, trigger type, timestamp) and reminds you - a hook is a
+   deterministic script, so it cannot write the decision prose. Treat the reminder as a
+   prompt to do step 1.
+4. Engines without such a hook apply the rule by hand: when a session runs long,
+   checkpoint to `MEMORY.md` instead of trusting the engine's own summarization.
 
 ### Executor mode (write gate, default ON)
 
-`.solocode/executor-mode` toggles whether the orchestrator (Claude Code or
-Kilo Code) may call `Edit`/`Write`/`MultiEdit` directly. **Default is ON**:
-absent or unreadable state file means the gate is active — fail closed, not
-open, so a fresh clone or a deleted toggle cannot silently disable it. Bash
-is never gated — the orchestrator still runs its own verification gates.
+`.solocode/executor-mode` toggles whether the orchestrator may call
+`Edit`/`Write`/`MultiEdit` directly. **Default is ON**: an absent or unreadable state
+file keeps the gate active - fail closed, so a fresh clone or a deleted toggle cannot
+disable it. Bash is never gated; the orchestrator still runs its own verification gates.
 
-What enforces the orchestrator/worker split differs per engine:
+Enforcement differs per engine:
 
-- Claude Code: `.claude/hooks/guard.py` (`PreToolUse`, matcher
-  `Edit|Write|MultiEdit`).
-- Kilo Code: `.kilo/hooks/pre-tool-use/executor-mode.js` (same matcher,
-  wired into every `hooks.json` profile except `minimal`).
-- OpenCode: no hook layer, so `.solocode/executor-mode` does nothing there.
-  The split is the agent's own permission block: `.opencode/agents/jev.md`
-  declares `edit: deny`, and `tools/opencode_delegate.py` lines 676-677 and
-  698-699 omit `--auto` for that agent because `--auto` auto-approves past
-  the deny. A bare `opencode run --auto` outside the wrapper bypasses it.
+- **Claude Code**: `.claude/hooks/guard.py` (`PreToolUse`, matcher `Edit|Write|MultiEdit`).
+- **Kilo Code**: `.kilo/hooks/pre-tool-use/executor-mode.js` (same matcher, in every
+  `hooks.json` profile except `minimal`).
+- **OpenCode**: no hook layer, so the state file does nothing. The split is
+  `.opencode/agents/jev.md` declaring `edit: deny`, and `tools/opencode_delegate.py`
+  omitting `--auto` for that agent because `--auto` approves past the deny. A bare
+  `opencode run --auto` bypasses the wrapper.
 
-When ON, a write attempt is blocked (exit 2) with a reminder to verify the
-result of any delegated work (`git status`/`git diff`) rather than trust a
-worker's own report of what it wrote. `.gemini/antigravity/handoff/inbox/`
-and `.solocode/executor-mode` itself are exempt — delegating a plan and
-toggling the gate off must both stay possible from inside a gated session.
+When ON, a write attempt exits 2 with a reminder to verify delegated work
+(`git status`/`git diff`) instead of trusting a worker's report. `.gemini/antigravity/handoff/inbox/`
+and `.solocode/executor-mode` itself are exempt, so a gated session can still delegate a
+plan and switch the gate off.
 
-To disable: `echo off > .solocode/executor-mode`. Accepted off-values:
-`off`, `0`, `disabled`, `false`, `no` (case-insensitive, trailing `#
-comment` ignored). Any other value, including an empty file, keeps the
-gate closed.
+Disable with `echo off > .solocode/executor-mode`. Accepted off-values: `off`, `0`,
+`disabled`, `false`, `no` (case-insensitive, trailing `# comment` ignored). Anything
+else, including an empty file, keeps the gate closed.
 
 ### Choosing a worker engine (routing table)
 
-Several worker engines are available. Propose one **proactively** when the work fits —
-the user should not have to remember they exist. `session_start.py` announces
-each engine's availability at session start; treat that as a prompt to
-consider delegation, not an instruction to always delegate.
+Propose a worker **proactively** when the work fits; `session_start.py` announces which
+are available, which is a prompt to consider delegation, not to always delegate.
 
 | Work shape | Route to | Why |
 |---|---|---|
@@ -281,12 +262,7 @@ consider delegation, not an instruction to always delegate.
 
 - Claude Code as a worker must be launched through `claude-env.ps1`: bare `claude -p` returns HTTP 401, because the launcher loads `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` from `.env`.
 
-**Workflow vs CLI delegation.** A workflow run caps at 4,096 items per `parallel()` or `pipeline()` call, an agent cap of 1,000 per run, and 16 concurrent agents. Use it when the work fits Claude's context and benefits from structured output or independent reviewers. Delegate to the CLI when the work exceeds Claude's context, needs a different model, or needs UI verification. Running both is normal: the workflow does the work, a CLI worker reviews it. Invocation examples and the full template list are in `.claude/skills/dynamic-workflow-orchestration/SKILL.md`.
-
-**Workflow vs CLI thresholds:**
-- **Workflow:** <200 files/endpoints, fits Claude context (~1M tokens), need structured output or adversarial loops
-- **CLI delegation:** >200 items, exceeds context, need cross-engine perspective (Gemini breadth, DeepSeek free for mechanical), or UI verification
-- **Both:** Start Workflow for core work, delegate verification to CLI with different model
+**Workflow vs CLI.** A workflow run caps at 4,096 items per `parallel()`/`pipeline()`, an agent cap of 1,000 per run and 16 concurrent. Use it when the work fits Claude's context and benefits from structured output or independent reviewers; delegate to the CLI when the work exceeds that context, needs a different model, or needs UI verification. Running both is normal. Thresholds: **workflow** under 200 items at ~1M tokens; **CLI** above 200, or for cross-engine perspective or UI verification. Templates: `.claude/skills/dynamic-workflow-orchestration/SKILL.md`.
 
 ## Using workflow templates
 
