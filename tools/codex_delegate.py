@@ -130,6 +130,10 @@ STRICT OPERATING CONSTRAINTS (follow exactly):
    code and do not add dependencies unless the task says to.
 3. Match the surrounding code style exactly.
 4. End with a one-line self-check: what you changed, and which commands you ran.
+5. Modify ONLY the files the task names; touch nothing else.
+6. Do NOT run project test suites or repository gates unless the task explicitly asks.
+7. Stop as soon as the task is complete: reply with the final summary and end the turn.
+   Do not explore unrelated files.
 
 You are a worker: the orchestrator will re-run your commands and inspect the
 diff. Do not claim a result you did not verify.
@@ -152,6 +156,7 @@ def build_plan(
     brief_file: Path,
     out_file: Path,
     root: Path = ROOT,
+    work_root: Path | None = None,
     powershell: str = "powershell",
     confine: bool = False,
     confine_temp: Path | None = None,
@@ -163,8 +168,13 @@ def build_plan(
     token covers PowerShell, Codex, and every process Codex spawns. It requires
     ``confine_temp``: the private temp directory the runner grants (the delegate's
     own scratch dir, where the brief and the final message live).
+
+    ``work_root`` is what Codex gets as ``-C``: the launcher still comes from
+    ``root``, so a delegation aimed at a subdirectory no longer explores the
+    whole repository from the top.
     """
     sandbox = "workspace-write" if allow_write else "read-only"
+    work_dir = work_root or root
     if powershell == "bash" or powershell.endswith("sh"):
         argv = [
             powershell,
@@ -174,7 +184,7 @@ def build_plan(
             "-s",
             sandbox,
             "-C",
-            str(root),
+            str(work_dir),
             "-o",
             str(out_file),
         ]
@@ -191,7 +201,7 @@ def build_plan(
             "-s",
             sandbox,
             "-C",
-            str(root),
+            str(work_dir),
             "-o",
             str(out_file),
         ]
@@ -382,6 +392,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     parser.add_argument(
+        "--work-root",
+        default=None,
+        metavar="DIR",
+        help=("directory Codex runs in (-C), inside the repo; default: the repo root"),
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="print the plan and exit"
     )
     parser.add_argument("--json", action="store_true", help="print the result as JSON")
@@ -406,6 +422,16 @@ def main(argv: list[str] | None = None) -> int:
     if not powershell and not use_sh:
         print("ERROR: powershell/pwsh not found on PATH.", file=sys.stderr)
         return 1
+
+    work_root: Path | None = None
+    if args.work_root:
+        work_root = Path(args.work_root).resolve()
+        if not work_root.is_relative_to(ROOT):
+            print(
+                f"ERROR: --work-root must stay inside {ROOT}: {work_root}",
+                file=sys.stderr,
+            )
+            return 2
 
     confine_roots: list[str] = []
     if args.confine:
@@ -461,6 +487,7 @@ def main(argv: list[str] | None = None) -> int:
         allow_write=args.allow_write,
         brief_file=brief_file,
         out_file=out_file,
+        work_root=work_root,
         powershell=bash if use_sh else powershell,
         confine=args.confine,
         confine_temp=tmp,
@@ -476,6 +503,7 @@ def main(argv: list[str] | None = None) -> int:
                     "sandbox": plan["sandbox"],
                     "confined": plan["confined"],
                     "confine_also_write": confine_roots,
+                    "work_root": str(work_root or ROOT),
                     "brief": str(brief_file),
                 },
                 ensure_ascii=False,

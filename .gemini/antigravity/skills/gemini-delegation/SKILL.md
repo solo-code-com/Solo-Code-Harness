@@ -126,7 +126,8 @@ python tools/antigravity_delegate.py "<task>" --model gemini-3.8-flash-medium
 python tools/antigravity_delegate.py "<task>" --allow-tools --model gemini-3.8-flash-medium
 
 # Write task: narrow directory scope and explicit auto approval
-python tools/antigravity_delegate.py "<task>" --allow-dir src --auto-approve --model gemini-3.8-flash-high
+# Note: --allow-tools cannot be combined with --auto-approve; "." is rejected as not narrower
+python tools/antigravity_delegate.py "<task>" --target-dir <dir> --allow-dir <subdir> --auto-approve --model gemini-3.8-flash-low
 ```
 
 ### Tool permissions and silent failures
@@ -152,6 +153,12 @@ draw the same account quota, so spend the cheapest level that fits:
 | Low | `gemini-3.8-flash-low` | Mechanical, single-file, little reasoning |
 | Medium (default) | `gemini-3.8-flash-medium` | Multi-file summarize/compare, scoped refactor |
 | High | `gemini-3.8-flash-high` | Independent design review, subtle bug hunt |
+
+Measured evidence: in a ~100-line implementation benchmark, `gemini-3.8-flash-low`
+finished in 99.1s and passed 16/16 tests, whereas `gemini-3.8-flash-medium` timed out
+twice (200s and 280s) without producing code, and took 231.8s on a simpler task. Low is
+the right default for single-file implementation work, while medium fits multi-file
+reading/comparison. If a medium run times out, retry at low rather than high.
 
 ### Authentication, quota, and account rotation
 
@@ -255,6 +262,13 @@ self-assessment is not.** Never let a self-report substitute for a check.
    and confirm the check goes red. A check that cannot fail is not a check.
 4. For new code, re-derive the ground truth independently before accepting
    any list of "problems found" — false positives are the failure mode.
+
+### Verifier isolation in A/B drills
+
+Place the verifier outside every worker's readable tree. A worker rooted at the
+drill directory can inspect a sibling `verifier/` folder: during benchmarking, a
+Codex arm located and executed the external test suite itself, leaving only the
+arm strictly fenced to its own subdirectory blind to the tests.
 
 ## Concurrent-Edit Safety
 

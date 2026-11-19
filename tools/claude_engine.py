@@ -654,10 +654,15 @@ delegation, not an instruction to always delegate.
 | Small mechanical edit, boilerplate, one test | **Kilo CLI** or **OpenCode CLI** | Both headless -- cost the user nothing |
 | Scoped code writing behind an explicit fence | Antigravity CLI if broad, Kilo/OpenCode if narrow | All three need the fence in writing |
 | Free model experimentation, cache tracking | **OpenCode CLI** | Has free models + reasoning/cache token breakdown |
-| Architecture / product / security decisions | **Neither -- do it here** | Judgment is not delegable |
+| Architecture / product / security decisions | **Neither -- do it here** | Judgment is not delegable. The native advisor tool may be invoked for a second opinion; it pairs the main model with a stronger advisor model. |
 | Anything needing this conversation's history | **Neither -- do it here** | All workers are context-blind |
 
 **Workflow vs CLI delegation.** A workflow run caps at 4,096 items per `parallel()` or `pipeline()` call, an agent cap of 1,000 per run, and 16 concurrent agents. Use it when the work fits Claude's context and benefits from structured output or independent reviewers. Delegate to the CLI when the work exceeds Claude's context, needs a different model, or needs UI verification. Running both is normal: the workflow does the work, a CLI worker reviews it.
+
+**Workflow vs CLI thresholds:**
+- **Workflow:** <200 files/endpoints, fits Claude context (~1M tokens), need structured output or adversarial loops
+- **CLI delegation:** >200 items, exceeds context, need cross-engine perspective (Gemini breadth, DeepSeek free for mechanical), or UI verification
+- **Both:** Start Workflow for core work, delegate verification to CLI with different model
 
 ## Using workflow templates
 

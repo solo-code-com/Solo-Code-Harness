@@ -235,9 +235,15 @@ def resolve_allowed_directory(value: str, target_dir: Path) -> tuple[Path, str]:
     try:
         relative = resolved.relative_to(target_dir)
     except ValueError as exc:
-        raise ValueError("--allow-dir must stay inside --target-dir") from exc
+        raise ValueError(
+            "--allow-dir must stay inside --target-dir "
+            "(the path is resolved against --target-dir, not the repo root)"
+        ) from exc
     if not resolved.is_dir():
-        raise ValueError(f"--allow-dir is not a directory: {resolved}")
+        raise ValueError(
+            f"--allow-dir is not a directory: {resolved} "
+            f"(resolved against --target-dir {target_dir})"
+        )
     relative_path = relative.as_posix() or "."
     if relative_path == ".":
         raise ValueError("--allow-dir . is not permitted; choose a narrower directory")
@@ -440,7 +446,15 @@ def log_usage(
 def main(argv: list[str] | None = None) -> int:
     _make_streams_encoding_safe()
     parser = argparse.ArgumentParser(
-        description="Antigravity headless delegation wrapper"
+        description="Antigravity headless delegation wrapper",
+        epilog=(
+            "CLI contract:\n"
+            "  * --auto-approve and --allow-tools are mutually exclusive\n"
+            "  * --allow-dir is resolved relative to --target-dir, not the repo root\n"
+            '  * --allow-dir must be a proper subdirectory of --target-dir; "." is rejected\n'
+            "  * working example: --target-dir tmp/eval --allow-dir arm --auto-approve\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("prompt", help="Self-contained task for the worker")
     parser.add_argument(

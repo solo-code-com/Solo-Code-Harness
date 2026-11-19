@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "codex_session.py"
 
@@ -42,12 +44,37 @@ class _FakeState:
         self.entries.append(kwargs)
 
 
-def test_model_defaults_and_reads_env(monkeypatch):
+def test_model_defaults_and_reads_env(monkeypatch, tmp_path):
     mod = _load()
+    monkeypatch.setattr(mod, "CODEX_CONFIG", tmp_path / "config.toml")
     monkeypatch.delenv("CODEX_MODEL", raising=False)
-    assert mod._model() == "gpt-5.6-terra"
+    assert mod._model() == mod.FALLBACK_MODEL
     monkeypatch.setenv("CODEX_MODEL", "custom-model")
     assert mod._model() == "custom-model"
+
+
+def test_model_prefers_the_cli_argument(monkeypatch):
+    mod = _load()
+    monkeypatch.setenv("CODEX_MODEL", "custom-model")
+    assert mod._model("cli-model") == "cli-model"
+
+
+def test_model_falls_back_to_the_codex_config(monkeypatch, tmp_path):
+    mod = _load()
+    if mod._toml is None:
+        pytest.skip("tomllib requires Python 3.11+")
+    config = tmp_path / "config.toml"
+    config.write_text('model = "gpt-6.1-sol"\n', encoding="utf-8")
+    monkeypatch.setattr(mod, "CODEX_CONFIG", config)
+    monkeypatch.delenv("CODEX_MODEL", raising=False)
+    assert mod._model() == "gpt-6.1-sol"
+
+
+def test_model_falls_back_to_unknown(monkeypatch, tmp_path):
+    mod = _load()
+    monkeypatch.setattr(mod, "CODEX_CONFIG", tmp_path / "missing.toml")
+    monkeypatch.delenv("CODEX_MODEL", raising=False)
+    assert mod._model() == "unknown"
 
 
 def test_start_reports_the_session_and_recent(monkeypatch, capsys):
@@ -98,16 +125,19 @@ def test_end_survives_a_git_timeout(monkeypatch):
     assert captured["files_changed"] == []
 
 
-def test_main_dispatches_start_and_end(monkeypatch):
+def test_main_dispatches_start_and_end(monkeypatch, capsys):
     mod = _load()
     monkeypatch.setattr(mod, "SharedState", _FakeState)
     monkeypatch.setattr(
         mod.subprocess, "run", lambda *_a, **_k: SimpleNamespace(stdout="")
     )
     monkeypatch.setattr(
-        sys, "argv", ["codex_session.py", "start", "--session-id", "zzz"]
+        sys,
+        "argv",
+        ["codex_session.py", "start", "--session-id", "zzz", "--model", "cli-model"],
     )
     assert mod.main() == 0
+    assert "model=cli-model" in capsys.readouterr().out
     monkeypatch.setattr(
         sys,
         "argv",

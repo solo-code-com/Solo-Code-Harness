@@ -83,6 +83,32 @@ def test_build_plan_model_passthrough(tmp_path):
     assert argv[argv.index("-m") + 1] == "gpt-6.1-sol"
 
 
+def test_build_plan_work_root_drives_the_dash_c_flag(tmp_path):
+    mod = _load()
+    root, work_root = tmp_path / "root", tmp_path / "root" / "sub"
+    brief, out = tmp_path / "b", tmp_path / "o"
+    plan = mod.build_plan(
+        "x",
+        brief_file=brief,
+        out_file=out,
+        root=root,
+        work_root=work_root,
+        powershell="ps",
+    )
+    argv = list(plan["argv"])  # type: ignore[arg-type]
+    assert argv[argv.index("-C") + 1] == str(work_root)
+    # The launcher still comes from root: -C moves the worker, not the wrapper.
+    launcher = argv[argv.index("exec") - 1]
+    assert launcher.startswith(str(root))
+    assert launcher.endswith("codex-env.ps1")
+
+    default = mod.build_plan(
+        "x", brief_file=brief, out_file=out, root=root, powershell="ps"
+    )
+    argv = list(default["argv"])  # type: ignore[arg-type]
+    assert argv[argv.index("-C") + 1] == str(root)
+
+
 def test_build_plan_never_emits_a_dangerous_flag(tmp_path):
     mod = _load()
     for allow in (False, True):
@@ -378,6 +404,22 @@ def test_main_dry_run_prints_the_plan(monkeypatch, capsys):
     assert mod.main(["do x", "--dry-run"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["sandbox"] == "read-only"
+
+
+def test_main_rejects_a_work_root_outside_the_repo(monkeypatch, capsys, tmp_path):
+    """-C must stay inside the repo, or the worker leaves the audited tree."""
+    mod = _load()
+    monkeypatch.setattr(mod, "_find_powershell", lambda: "ps")
+    assert mod.main(["do x", "--dry-run", "--work-root", str(tmp_path)]) == 2
+    assert "--work-root must stay inside" in capsys.readouterr().err
+
+
+def test_main_dry_run_reports_the_work_root(monkeypatch, capsys):
+    mod = _load()
+    monkeypatch.setattr(mod, "_find_powershell", lambda: "ps")
+    assert mod.main(["do x", "--dry-run", "--work-root", "tools"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["work_root"] == str((mod.ROOT / "tools").resolve())
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="codex-env.ps1 is Windows-only")

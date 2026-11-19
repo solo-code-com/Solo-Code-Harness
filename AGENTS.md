@@ -276,10 +276,48 @@ consider delegation, not an instruction to always delegate.
 | UI verification, screenshots, recordings | **Antigravity GUI handoff** | The CLI cannot verify a rendered UI |
 | Small mechanical edit, boilerplate, one test | **OpenCode CLI** | Headless — costs the user nothing |
 | Scoped code writing behind an explicit fence | Antigravity CLI if broad, OpenCode CLI if narrow | Both need the fence stated in writing |
-| Architecture / product / security decisions | **Neither — do it here** | Judgment is not delegable |
+| Architecture / product / security decisions | **Neither — do it here** | Judgment is not delegable. The native advisor tool may be invoked for a second opinion; it pairs the main model with a stronger advisor model. |
 | Anything needing this conversation's history | **Neither — do it here** | Workers are context-blind |
 
+- Claude Code as a worker must be launched through `claude-env.ps1`: bare `claude -p` returns HTTP 401, because the launcher loads `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` from `.env`.
+
 **Workflow vs CLI delegation.** A workflow run caps at 4,096 items per `parallel()` or `pipeline()` call, an agent cap of 1,000 per run, and 16 concurrent agents. Use it when the work fits Claude's context and benefits from structured output or independent reviewers. Delegate to the CLI when the work exceeds Claude's context, needs a different model, or needs UI verification. Running both is normal: the workflow does the work, a CLI worker reviews it. Invocation examples and the full template list are in `.claude/skills/dynamic-workflow-orchestration/SKILL.md`.
+
+**Workflow vs CLI thresholds:**
+- **Workflow:** <200 files/endpoints, fits Claude context (~1M tokens), need structured output or adversarial loops
+- **CLI delegation:** >200 items, exceeds context, need cross-engine perspective (Gemini breadth, DeepSeek free for mechanical), or UI verification
+- **Both:** Start Workflow for core work, delegate verification to CLI with different model
+
+## Using workflow templates
+
+Templates live in `.claude/workflows/` and run as slash commands, one per file
+stem. Pass the arguments as an object, not as a sentence: name each key
+explicitly (`specFile`, `outputDir`, `entityName`) and ask for them as an object.
+Passed as one string, the run fails with "missing required arg" before any agent
+starts.
+
+Generate a CRUD module:
+
+```text
+/crud-module Product, fields id uuid, name string, price decimal, into src/modules/product/
+```
+
+Implement a feature and have it reviewed adversarially:
+
+```text
+/adversarial-implementation specs/user-authentication.md, into src/auth/, rules docs/security-policy.md
+```
+
+The `api-from-spec` and `crud-module` templates emit Express routes, so the
+target project needs `express` installed. Their tests use the built-in
+`node:test` runner, which needs no install. Run them from the project root with
+`node --test`; Node rejects a directory argument. Pass `includeTests: false` to
+skip the test stage: three agents per endpoint instead of four, and no test files.
+
+A template throws before any agent runs when a required argument is missing, so
+a malformed invocation fails fast rather than generating half a module. Read
+`.claude/skills/dynamic-workflow-orchestration/SKILL.md` for all five templates,
+their arguments and the runtime limits.
 
 OpenCode CLI, Kilo CLI, and Antigravity CLI are headless. **OpenCode CLI is the
 primary narrow executor and the orchestrator that plans and routes work**;
@@ -292,6 +330,10 @@ post-run workspace scope. Antigravity GUI handoff remains a fallback for UI work
 produced at least one error invisible in their own self-summary. Their
 evidence is reliable; their self-assessment is not. Re-run their commands,
 run the real gates, and mutation-test any new check they write.
+- When running an A/B drill, keep the verifier outside every worker's readable tree: a
+  worker rooted at the drill directory can read a sibling `verifier/` folder (measured:
+  a Codex arm found and ran the external suite itself, so only the arm fenced to its own
+  subdirectory stayed blind).
 
 Full decision guide: `.kilo/skill/gemini-delegation/SKILL.md`.
 
@@ -312,6 +354,12 @@ Antigravity acts as primary Orchestrator maintaining global context, task decomp
    python tools/antigravity_delegate.py "<task>" --allow-tools --model gemini-3.8-flash-medium
    # Writes require explicit directory fence: --allow-dir src --auto-approve
    ```
+- `--auto-approve` and `--allow-tools` are mutually exclusive; combining them exits 2.
+- `--allow-dir` is resolved relative to `--target-dir`, not the repo root, and must be a
+  proper subdirectory of it; `.` is rejected.
+- Tier matters more than model family: `gemini-3.8-flash-low` finished a 100-line module in
+  99s and passed, while `gemini-3.8-flash-medium` timed out at 200s and 280s on the same
+  task, so medium is not a safe default for implementation work.
 4. **Antigravity GUI Handoff (Visual Verification)**:
    File-based handoff via `.gemini/antigravity/handoff/inbox/<slug>-plan.md`.
 
