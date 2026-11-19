@@ -426,7 +426,27 @@ def check_memory(src: Path, dst: Path, dst_label: str) -> list[str]:
     return issues
 
 
-def check_commands(src: Path, dst: Path, dst_label: str) -> list[str]:
+def _command_body(path: Path) -> str:
+    """Return a command's text after its YAML frontmatter, line endings normalised.
+
+    Frontmatter differs per engine by design, so only the body is comparable.
+    A closing fence must be a line of exactly "---"; a line such as "---extra" is body.
+    """
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        # The fence must be a line by itself. A line like "---extra" is body text,
+        # so keep searching rather than swallowing what follows the dashes.
+        while end != -1 and text[end + 4 : end + 5] not in ("", "\n"):
+            end = text.find("\n---", end + 4)
+        if end != -1:
+            text = text[end + 4 :]
+    return text.lstrip("\n")
+
+
+def check_commands(
+    src: Path, dst: Path, dst_label: str, *, compare_body: bool = False
+) -> list[str]:
     """Check that every .kilo/command/*.md has a counterpart in dst/command/.
 
     `run_engine_checks` covered agents, skills, instructions and memory but
@@ -434,6 +454,12 @@ def check_commands(src: Path, dst: Path, dst_label: str) -> list[str]:
     reported -- the hardcoded "expect 13" in test_integration.py masked it
     from that side too. .claude/ has its own command check in check_claude()
     (it uses the plural `commands/` directory name).
+
+    With `compare_body`, the bodies of files present on both sides are compared
+    too. Names alone stayed green while .copilot/command/review.md kept
+    `--model gpt-6.1-sol` in its body after .kilo/command/review.md was updated
+    (measured 2026-11-19). Frontmatter is excluded because it legitimately
+    differs per engine (.kilo uses `task:`, Copilot uses `mode:`).
     """
     issues: list[str] = []
     src_cmd = src / "command"
@@ -450,6 +476,14 @@ def check_commands(src: Path, dst: Path, dst_label: str) -> list[str]:
         issues.append(f"Missing command: {dst_label}/command/{name}")
     for name in sorted(dst_names - src_names):
         issues.append(f"Stale command (no source): {dst_label}/command/{name}")
+    if compare_body:
+        for name in sorted(src_names & dst_names):
+            if _command_body(src_cmd / name) != _command_body(dst_cmd / name):
+                issues.append(
+                    f"Content drift: {dst_label}/command/{name} body differs from "
+                    f".kilo/command/{name} (out of sync - resync body from source of truth, "
+                    f"keep dst frontmatter)"
+                )
     return issues
 
 
@@ -911,6 +945,14 @@ def run_engine_checks(
         ),
         (f"Memory drift ({dst_label})", lambda: check_memory(src, dst, dst_label)),
         (f"Command parity ({dst_label})", lambda: check_commands(src, dst, dst_label)),
+        (
+            f"Command content drift ({dst_label})",
+            lambda: (
+                check_commands(src, dst, dst_label, compare_body=True)
+                if dst_label == ".copilot"
+                else []
+            ),
+        ),
         (
             f"Skill parity ({dst_label})",
             lambda: check_skill_parity(src, dst, dst_label, skip_set=skip_set),

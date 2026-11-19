@@ -91,6 +91,19 @@ def test_cost_priced_and_unpriced(tmp_path):
     )
 
 
+def test_delegate_default_model_is_priced():
+    """The model the Codex delegate runs by default must have a price, so a
+    future default bump cannot silently bring back "unpriced" sessions."""
+    spec = importlib.util.spec_from_file_location(
+        "codex_delegate_under_test", Path(__file__).with_name("codex_delegate.py")
+    )
+    assert spec and spec.loader
+    delegate = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = delegate
+    spec.loader.exec_module(delegate)
+    assert delegate.DEFAULT_MODEL in _load().PRICING
+
+
 # ── parsing ──────────────────────────────────────────────────────────────────
 
 

@@ -38,12 +38,16 @@ from pathlib import Path
 SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 
 # USD per 1,000,000 tokens: (input, output, cached_input_read).
-# Reference prices for the gpt-5.6 family, as published by other providers in
-# the models.dev catalog. FreeModel itself does not publish a price list.
+# Reference prices for the gpt-5.6 and gpt-6 families, as published by other
+# providers in the models.dev catalog. The gpt-6.2-sol figures were read from the
+# OpenAI, Azure and AWS Mantle entries on 2026-11-19: 2 / 10 / 0.1. FreeModel
+# itself does not publish a price list.
 PRICING: dict[str, tuple[float, float, float]] = {
     "gpt-5.6-terra": (2.0, 12.0, 0.2),
     "gpt-5.6-sol": (5.0, 30.0, 0.5),
     "gpt-5.6-luna": (0.2, 1.2, 0.02),
+    "gpt-6.2-sol": (2.0, 10.0, 0.1),
+    "gpt-6.1-sol": (2.0, 10.0, 0.1),
 }
 
 PER_MILLION = 1_000_000
@@ -170,7 +174,9 @@ def _fmt_cost(value: float | None) -> str:
     return "n/a" if value is None else f"${value:.4f}"
 
 
-def print_report(reports: list[SessionReport], pricing: dict[str, tuple[float, float, float]]) -> None:
+def print_report(
+    reports: list[SessionReport], pricing: dict[str, tuple[float, float, float]]
+) -> None:
     """Print a per-session table plus a grand total."""
     if not reports:
         print(f"No Codex sessions found under {SESSIONS_DIR}")
@@ -180,8 +186,10 @@ def print_report(reports: list[SessionReport], pricing: dict[str, tuple[float, f
     total_cost = 0.0
     priced = True
 
-    print(f"{'started':<20} {'model':<15} {'input':>9} {'cached':>9} "
-          f"{'cache%':>7} {'output':>8} {'cost':>10}")
+    print(
+        f"{'started':<20} {'model':<15} {'input':>9} {'cached':>9} "
+        f"{'cache%':>7} {'output':>8} {'cost':>10}"
+    )
     print("-" * 84)
 
     for report in reports:
@@ -270,14 +278,20 @@ def print_plan(
                 window_cost += cost
                 window_sessions += 1
 
-    print(f"FreeModel plan: ${PLAN_MONTHLY_FEE_USD:.0f}/month, "
-          f"${PLAN_WINDOW_VALUE_USD:.0f} per {window_hours}h window, "
-          f"${PLAN_WEEK_CAP_USD:.0f}/week cap")
+    print(
+        f"FreeModel plan: ${PLAN_MONTHLY_FEE_USD:.0f}/month, "
+        f"${PLAN_WINDOW_VALUE_USD:.0f} per {window_hours}h window, "
+        f"${PLAN_WEEK_CAP_USD:.0f}/week cap"
+    )
     print()
-    print(f"last {window_hours}h:  ${window_cost:>8.4f} of ${PLAN_WINDOW_VALUE_USD:<7.0f} "
-          f"({window_cost / PLAN_WINDOW_VALUE_USD:>6.1%})  over {window_sessions} session(s)")
-    print(f"last 7d:   ${week_cost:>8.4f} of ${PLAN_WEEK_CAP_USD:<7.0f} "
-          f"({week_cost / PLAN_WEEK_CAP_USD:>6.1%})  over {week_sessions} session(s)")
+    print(
+        f"last {window_hours}h:  ${window_cost:>8.4f} of ${PLAN_WINDOW_VALUE_USD:<7.0f} "
+        f"({window_cost / PLAN_WINDOW_VALUE_USD:>6.1%})  over {window_sessions} session(s)"
+    )
+    print(
+        f"last 7d:   ${week_cost:>8.4f} of ${PLAN_WEEK_CAP_USD:<7.0f} "
+        f"({week_cost / PLAN_WEEK_CAP_USD:>6.1%})  over {week_sessions} session(s)"
+    )
     if unpriced:
         print("NOTE: sessions from unpriced models are excluded.")
     print()
@@ -291,8 +305,10 @@ def print_plan(
     print(f"Subscription fee:       ${PLAN_MONTHLY_FEE_USD:,.2f}/month")
     net = monthly_value - PLAN_MONTHLY_FEE_USD
     if net >= 0:
-        print(f"Net saving vs list price: ${net:,.2f}/month "
-              f"({monthly_value / PLAN_MONTHLY_FEE_USD:.1f}x value)")
+        print(
+            f"Net saving vs list price: ${net:,.2f}/month "
+            f"({monthly_value / PLAN_MONTHLY_FEE_USD:.1f}x value)"
+        )
     else:
         print(f"Cheaper to buy list price this month by ${abs(net):,.2f}")
 
@@ -301,18 +317,28 @@ def print_plan(
     if week_cost > 0 and sessions_per_week:
         per_session = week_cost / sessions_per_week
         print()
-        print(f"Break-even: ${break_even_week:,.2f}/week of list-price value "
-              f"(~{break_even_week / per_session:.0f} sessions/week at "
-              f"${per_session:.4f} each)")
-        print(f"Monthly cap is ${PLAN_MONTH_CAP_USD:,.2f} of value for "
-              f"${PLAN_MONTHLY_FEE_USD:.2f}.")
+        print(
+            f"Break-even: ${break_even_week:,.2f}/week of list-price value "
+            f"(~{break_even_week / per_session:.0f} sessions/week at "
+            f"${per_session:.4f} each)"
+        )
+        print(
+            f"Monthly cap is ${PLAN_MONTH_CAP_USD:,.2f} of value for "
+            f"${PLAN_MONTHLY_FEE_USD:.2f}."
+        )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--last", type=int, default=10, help="newest N sessions (default: 10)")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--last", type=int, default=10, help="newest N sessions (default: 10)"
+    )
     parser.add_argument("--all", action="store_true", help="include every session")
-    parser.add_argument("--json", action="store_true", help="emit JSON instead of a table")
+    parser.add_argument(
+        "--json", action="store_true", help="emit JSON instead of a table"
+    )
     parser.add_argument(
         "--plan",
         action="store_true",

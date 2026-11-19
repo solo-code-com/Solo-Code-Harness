@@ -1410,6 +1410,41 @@ def test_check_gemini_commands_flag_undeclared_divergence(tmp_path, monkeypatch)
     ), issues
 
 
+# ─── check_commands (body comparison) ───────────────────────────────────────
+
+
+def test_command_body_drift_is_detected(tmp_path):
+    """Names alone stayed green while a mirror carried a stale body."""
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    _write(src / "command" / "one.md", "---\ntask: x\n---\nline one\n")
+    _write(dst / "command" / "one.md", "---\ntask: x\n---\nline one\nline two\n")
+
+    issues = garden.check_commands(src, dst, ".copilot", compare_body=True)
+
+    assert issues
+    assert any("Content drift" in i for i in issues)
+
+
+def test_command_frontmatter_difference_is_not_drift(tmp_path):
+    """Frontmatter legitimately differs per engine; identical bodies are clean."""
+    src, dst = tmp_path / "src", tmp_path / "dst"
+    _write(src / "command" / "one.md", "---\ntask: x\n---\nline one\n")
+    _write(dst / "command" / "one.md", "---\nmode: write\n---\nline one\n")
+
+    assert garden.check_commands(src, dst, ".copilot", compare_body=True) == []
+
+
+def test_command_body_keeps_text_after_a_fence_lookalike_line(tmp_path):
+    """A line starting with "---" is body text, not a closing fence."""
+    src = tmp_path / "src"
+    _write(src / "command" / "one.md", "---\ntask: x\n---extra\nbody\n")
+
+    assert (
+        garden._command_body(src / "command" / "one.md")
+        == "---\ntask: x\n---extra\nbody\n"
+    )
+
+
 # --- Instruction size caps -------------------------------------------------
 
 
