@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-19T15:35:28Z"
+generated_at = "2026-11-23T16:34:41Z"
 mode = "root"
-content_fingerprint = "sha256:384d36c5c88c21e6729a41c1447a71c40cbaa818767a221dbfda3380233905db"
+content_fingerprint = "sha256:9b327b65b525e668dca07b9622c76aa794635f8663395197b21b7c60f707e53b"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -138,6 +138,7 @@ paths = [
     "tools/opencode_delegate.py",
     "tools/opencode_engine.py",
     "tools/prose_lint.py",
+    "tools/provider_audit.py",
     "tools/review_receipt.py",
     "tools/router.py",
     "tools/router_eval.py",
@@ -199,8 +200,10 @@ paths = [
     "tools/test_kilo_usage_report.py",
     "tools/test_model_api.py",
     "tools/test_model_roles.py",
+    "tools/test_no_freemodel.py",
     "tools/test_opencode_delegate.py",
     "tools/test_prose_lint.py",
+    "tools/test_provider_audit.py",
     "tools/test_repo_ignore_rules.py",
     "tools/test_review_receipt.py",
     "tools/test_router.py",

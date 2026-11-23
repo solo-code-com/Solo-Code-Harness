@@ -44,13 +44,6 @@ RAW_ENV: dict[str, str] = env_file.parse_env_file(
 #: Paths assume the *raw* `.env` value (with its `/v1`), so the checker reads `.env` directly
 #: instead of exporting through the launcher's normaliser.
 PROVIDERS: dict[str, tuple[str | None, str, str, dict, bool]] = {
-    "freemodel": (
-        "OPENAI_BASE_URL",
-        "/v1/models",
-        "OPENAI_API_KEY",
-        engine._FREEMODEL_MODELS,
-        False,
-    ),
     "deepseek": ("DEEPSEEK_BASE_URL", "/models", "DEEPSEEK_API_KEY", {}, False),
     "openrouter": (
         "https://openrouter.ai/api/v1",
@@ -69,15 +62,11 @@ PROVIDERS: dict[str, tuple[str | None, str, str, dict, bool]] = {
 }
 
 #: Advertised by a provider but known dead; counted as informational, not drift.
-IGNORED_ADVERTISED: dict[str, set[str]] = {
-    "freemodel": {"gpt-6-luna"},  # listed, HTTP 404 when used
-}
+IGNORED_ADVERTISED: dict[str, set[str]] = {}
 
-#: Providers whose `/models` listing is not authoritative. FreeModel's is stale in both
-#: directions, measured 2026-10-16: it omits `gpt-6.1-sol`, which a real call answers
-#: (`FREEMODEL_OK`/`FM61_OK` through the OpenCode delegate), and it lists `gpt-6-luna`, which
-#: 404s. Differences for these providers are reported, never failed -- a call is the evidence.
-LISTING_UNRELIABLE: set[str] = {"freemodel"}
+#: Providers whose `/models` listing is not authoritative: differences for these providers are
+#: reported, never failed, because a call is the evidence.
+LISTING_UNRELIABLE: set[str] = set()
 
 #: `tools/config/model-roles.json` assigns each agent a role and each role a model id. A role
 #: pointing at an id no catalog declares is silent drift: the agent falls back to the session
@@ -145,7 +134,11 @@ def resolve(provider: str) -> tuple[str, str]:
     import os
 
     base_ref, _path, key_env, _catalog, _curated = PROVIDERS[provider]
-    base = base_ref if (base_ref and base_ref.startswith("http")) else RAW_ENV.get(base_ref or "", "")
+    base = (
+        base_ref
+        if (base_ref and base_ref.startswith("http"))
+        else RAW_ENV.get(base_ref or "", "")
+    )
     if not base and base_ref == "COMMANDCODE_BASE_URL":
         base = "https://api.commandcode.ai/provider/v1"
     key = RAW_ENV.get(key_env, "") or os.environ.get(key_env, "")
@@ -221,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         nargs="+",
         metavar="PROVIDER/MODEL",
         help="call each model once instead of comparing listings, e.g. "
-        "deepseek/deepseek-v4.1-flash freemodel/gpt-6.1-sol",
+        "deepseek/deepseek-v4.1-flash",
     )
     args = parser.parse_args(argv)
 

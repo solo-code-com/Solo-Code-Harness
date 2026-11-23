@@ -109,12 +109,15 @@ python tools/deploy.py
 
 ## Model Providers & the 4-Role Pipeline
 
-Three providers are generated into `.opencode/opencode.json` — `freemodel`, `deepseek`,
-`openrouter` — with **10 model ids** (freemodel 3, deepseek 2, openrouter 5) declared in
-`tools/opencode_engine.py`. The `opencode-go` catalog (**95 ids**) is not generated: those ids
-come from OpenCode's global config (`~/.config/opencode/opencode.json`). Base URLs come from
-`.env`, and only `freemodel`'s template appends a path (`${OPENAI_BASE_URL}/v1`). The others are
-interpolated verbatim, so nothing may strip a trailing `/v1` from them.
+Four providers are generated into `.opencode/opencode.json` — `deepseek`, `openrouter`,
+`commandcode` and `silkcompute` — with **18 model ids** (deepseek 2, openrouter 5, commandcode 5,
+silkcompute 6) declared in `tools/opencode_engine.py`. The `opencode-go` catalog (**95 ids**) is
+not generated: those ids come from OpenCode's global config (`~/.config/opencode/opencode.json`).
+`deepseek` and `commandcode` take their base URLs from `.env` (`DEEPSEEK_BASE_URL`,
+`COMMANDCODE_BASE_URL`) and are interpolated verbatim, so nothing may strip a trailing `/v1` or
+`/provider/v1` from them; `openrouter` and `silkcompute` use fixed public constants.
+FreeModel was removed on 2026-11-23: Claude Code now runs on DeepSeek's `/anthropic` endpoint, and
+Codex on CommandCode's `/responses` route.
 `tools/check_model_catalog.py` checks the declared ids against `GET /models` (plus `--probe`) and
 resolves each `opencode-go/...` role id against `_PROVIDER_MODELS`. Ids are never taken
 from memory.
@@ -322,12 +325,12 @@ not just filenames, so a silently out-of-sync mirror is always caught.
 python -m pytest tools/test_claude_guard.py tools/test_claude_hooks.py -q
 ```
 
-### Launch Claude Code via FreeModel
+### Launch Claude Code via a named provider
 
 `claude-env.ps1` loads `.env`, normalizes the gateway URL, and launches Claude Code
 with profile-based behavior:
 
-- `gateway` (default): FreeModel / third-party gateways via `ANTHROPIC_API_KEY` + `ANTHROPIC_BASE_URL`
+- `gateway` (default): a named provider — DeepSeek's `/anthropic` endpoint — via `ANTHROPIC_API_KEY` + `ANTHROPIC_BASE_URL`
 - `native`: prefer `ANTHROPIC_API_KEY` / `apiKeyHelper` if present
 - `kilo`: distinct profile name for IDE-integrated Kilo workflows
 
@@ -352,8 +355,8 @@ Copy-Item .env.template .env
 ./claude-env.ps1 --help
 ```
 
-`.env.template` ships with 3 FreeModel VIP tiers (`cc.freemodel.dev`, `api-cc.freemodel.dev`, `cc-t2.freemodel.dev`)
-alongside the `DEEPSEEK_API_KEY` and `OPENROUTER_API_KEY` entries. Your real `.env` is gitignored and never deployed. Full mode is the default for every profile, so hooks and auto-memory stay active; pass `--bare` explicitly if a future provider swap needs the reduced mode.
+`.env.template` ships `DEEPSEEK_BASE_URL` / `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `COMMANDCODE_BASE_URL` / `COMMANDCODE_API_KEY`
+and `SILK_API_KEY`, plus a commented block showing Claude Code on DeepSeek (`ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`, with `ANTHROPIC_API_KEY` set to the same value as `DEEPSEEK_API_KEY`). Your real `.env` is gitignored and never deployed. Full mode is the default for every profile, so hooks and auto-memory stay active; pass `--bare` explicitly if a future provider swap needs the reduced mode.
 
 ## Gemini/Antigravity workers (headless CLI + GUI fallback)
 
@@ -522,12 +525,15 @@ python tools/deploy.py
 
 ## Provider model & pipeline 4 vai trò
 
-Ba provider được sinh vào `.opencode/opencode.json` — `freemodel`, `deepseek`, `openrouter` — với
-**10 model id** (freemodel 3, deepseek 2, openrouter 5) khai trong `tools/opencode_engine.py`.
-Catalog `opencode-go` (**95 id**) không được sinh vào repo: nó nằm trong config global của OpenCode
-(`~/.config/opencode/opencode.json`). Base URL lấy từ `.env`, và **chỉ** template của `freemodel`
-thêm đường dẫn (`${OPENAI_BASE_URL}/v1`). Các cái còn lại dùng nguyên văn, nên không được cắt `/v1`
-của chúng. `tools/check_model_catalog.py` đối chiếu id đã khai với `GET /models` (kèm `--probe`),
+Bốn provider được sinh vào `.opencode/opencode.json` — `deepseek`, `openrouter`, `commandcode` và
+`silkcompute` — với **18 model id** (deepseek 2, openrouter 5, commandcode 5, silkcompute 6) khai trong
+`tools/opencode_engine.py`. Catalog `opencode-go` (**95 id**) không được sinh vào repo: nó nằm trong config
+global của OpenCode (`~/.config/opencode/opencode.json`). `deepseek` và `commandcode` lấy base URL từ `.env`
+(`DEEPSEEK_BASE_URL`, `COMMANDCODE_BASE_URL`) và dùng nguyên văn, nên không được cắt `/v1` hay `/provider/v1`
+của chúng; `openrouter` và `silkcompute` dùng hằng số công khai cố định.
+FreeModel đã bị gỡ ngày 2026-11-23: Claude Code nay chạy trên endpoint `/anthropic` của DeepSeek, Codex
+chạy trên route `/responses` của CommandCode.
+`tools/check_model_catalog.py` đối chiếu id đã khai với `GET /models` (kèm `--probe`),
 và resolve mọi role id `opencode-go/...` với `_PROVIDER_MODELS`. Id không bao giờ lấy từ trí nhớ.
 
 Việc được định tuyến qua 4 vai trò, khai ở `.kilo/agents/jev.md`:
@@ -656,7 +662,7 @@ cũng so khớp nội dung (không chỉ tên file) giữa `.claude/memory/` và
 python -m pytest tools/test_claude_guard.py tools/test_claude_hooks.py -q
 ```
 
-### Chạy Claude Code qua FreeModel
+### Chạy Claude Code qua một provider có tên
 
 ```powershell
 Copy-Item .env.template .env

@@ -44,8 +44,8 @@ Transform rules (source -> OpenCode v2):
               v2-only keys. Root `opencode.json` keeps only v1-safe keys
               (`$schema`, `model`, `small_model`, `default_agent`, `agents`,
               `permission`); `.opencode/opencode.json` carries the v2-only
-              self-contained `freemodel`, `deepseek` and `openrouter` provider
-              blocks. OpenCode v2 merges the
+              self-contained `deepseek`, `openrouter`, `commandcode` and
+              `silkcompute` provider blocks. OpenCode v2 merges the
               local file with higher precedence; Kilo's validator ignores it.
               The permission gate uses the legacy `permission` object for the
               same reason (v2 maps and enforces it).
@@ -80,28 +80,6 @@ _DISABLED_SKILL_PERMISSION = "ask"
 # tools/check_model_catalog.py still resolves role ids against this catalog.
 _DEFAULT_MODEL = "opencode-go/deepseek-v4-pro"
 _SMALL_MODEL = "opencode-go/deepseek-v4.1-flash"
-# FreeModel's `/v1/models` is stale: it still lists `gpt-6-luna` (now HTTP 404)
-# and omits `gpt-6.1-sol`. Verified 2026-10-03 by posting a chat completion to
-# each id: `gpt-6-sol` and `gpt-6-astra` answer as themselves, `gpt-6.1-sol`
-# answers (routed to gpt-6-sol), every other name falls back to gpt-6-sol too.
-# Limits mirror models.dev's `openai` catalog for the same ids.
-_FREEMODEL_MODELS: dict[str, dict[str, Any]] = {
-    "gpt-6-sol": {
-        "modelID": "gpt-6-sol",
-        "name": "GPT-6 Sol",
-        "limit": {"context": 1050000, "output": 128000},
-    },
-    "gpt-6-astra": {
-        "modelID": "gpt-6-astra",
-        "name": "GPT-6 Astra",
-        "limit": {"context": 1050000, "output": 128000},
-    },
-    "gpt-6.1-sol": {
-        "modelID": "gpt-6.1-sol",
-        "name": "GPT-6.1 Sol",
-        "limit": {"context": 1050000, "output": 128000},
-    },
-}
 _PROVIDER_MODELS: dict[str, dict[str, Any]] = {
     "deepseek-v4-pro": {
         "modelID": "deepseek/deepseek-v4-pro",
@@ -1207,8 +1185,9 @@ def generate_opencode_json(
         `small_model`, `default_agent`, `agents`, `permission`), so
         `kilo config check` stays clean.
       - `.opencode/opencode.json` -> the v2-only self-contained
-        `freemodel`, `deepseek` and `openrouter` provider blocks. OpenCode v2
-        merges this file with higher precedence; Kilo's validator ignores it.
+        `deepseek`, `openrouter`, `commandcode` and `silkcompute` provider
+        blocks. OpenCode v2 merges this file with higher precedence; Kilo's
+        validator ignores it.
 
     The gate uses the legacy `permission` object (not v2's `permissions`
     array) for the same reason: Kilo's bundled v1 rejects `permissions`, while
@@ -1241,20 +1220,6 @@ def generate_opencode_json(
     local_config: dict[str, Any] = {
         "$schema": "https://opencode.ai/config.json",
         "providers": {
-            "freemodel": {
-                "name": "FreeModel",
-                # A dedicated var, not OPENAI_API_KEY: OpenCode's built-in OpenAI
-                # provider also claims OPENAI_API_KEY, and a credential stored
-                # for `freemodel` overrides this env var entirely (the launcher
-                # clears the stored one each launch).
-                "env": ["FREEMODEL_API_KEY"],
-                "package": "@opencode/ai/providers/openai-compatible",
-                # `OPENAI_BASE_URL` is the bare host; the `/v1` path must be
-                # appended here because the OpenAI-compatible provider POSTs to
-                # `<baseURL>/chat/completions` verbatim (no /v1 auto-append).
-                "settings": {"baseURL": "${OPENAI_BASE_URL}/v1"},
-                "models": _FREEMODEL_MODELS,
-            },
             "deepseek": {
                 "name": "DeepSeek (official)",
                 # Direct DeepSeek API, not a proxy. Both vars come from .env via

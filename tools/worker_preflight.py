@@ -157,7 +157,7 @@ def check_model_api() -> dict[str, object]:
     credential into a terminal or a CI log is worse than no preflight.
     """
     configured_list: list[str] = []
-    for prov in ("deepseek", "commandcode", "openrouter", "freemodel"):
+    for prov in ("deepseek", "commandcode", "openrouter"):
         try:
             url, key = env_file.provider_endpoint(prov)
             if url and key:

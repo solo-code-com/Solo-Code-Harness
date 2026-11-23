@@ -47,12 +47,10 @@ foreach ($entry in $config.GetEnumerator()) {
     }
 }
 
-# Export OpenAI / FreeModel credentials. FREEMODEL_API_KEY is what the
-# `.opencode/opencode.json` freemodel provider reads; OPENAI_API_KEY stays for
-# Codex and OpenCode's built-in OpenAI provider.
+# Export the OpenAI-shaped credential. There is no derived alias any more: the
+# FreeModel provider that read FREEMODEL_API_KEY was removed on 2026-11-23.
 if ($config.ContainsKey("OPENAI_API_KEY") -and $config["OPENAI_API_KEY"]) {
     $env:OPENAI_API_KEY = $config["OPENAI_API_KEY"]
-    $env:FREEMODEL_API_KEY = $config["OPENAI_API_KEY"]
 }
 
 # Normalize OPENAI_BASE_URL: strip any trailing /v1 or slashes, because both the
@@ -71,15 +69,7 @@ if ($config.ContainsKey("ANTHROPIC_API_KEY") -and $config["ANTHROPIC_API_KEY"]) 
     $env:ANTHROPIC_API_KEY = $config["ANTHROPIC_API_KEY"]
 }
 if ($config.ContainsKey("ANTHROPIC_BASE_URL") -and $config["ANTHROPIC_BASE_URL"]) {
-    $antUrl = $config["ANTHROPIC_BASE_URL"].Trim().TrimEnd("/")
-    $freemodelDomains = @("api.freemodel.dev", "cc.freemodel.dev", "api-cc.freemodel.dev", "cc-t2.freemodel.dev")
-    foreach ($domain in $freemodelDomains) {
-        if ($antUrl -eq "https://${domain}/v1/messages") {
-            $antUrl = "https://${domain}"
-            break
-        }
-    }
-    $env:ANTHROPIC_BASE_URL = $antUrl
+    $env:ANTHROPIC_BASE_URL = $config["ANTHROPIC_BASE_URL"].Trim().TrimEnd("/")
 }
 
 # Resolve the OpenCode v2 executable.

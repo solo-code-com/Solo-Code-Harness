@@ -115,3 +115,4 @@ High-signal context loaded at session start. Detailed history belongs in
   Windows exit 9009), shared-state/Copilot chi Claude hook ghi SQLite, `/doctor`->garden.
   False positive bi chan: flash-free la `DEEPSEEK_V41_FLASH_CHAIN[0]`, Kilo 3-segment id
   dung, commandcode con cau hinh. Coverage ratchet do -> xanh bang 32 test, khong ha budget.
+- 2026-11-23: bo FreeModel; Claude Code->DeepSeek /anthropic, Codex->CommandCode /responses (deepseek-v4.1-flash); tier gate tools/tier_gate.py (thieu marker => client); Codex sandbox=workspace-write (da do chay duoc tren Windows).

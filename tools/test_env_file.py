@@ -51,20 +51,17 @@ def test_env_file_reads_and_strips_quotes(
     assert "EMPTY" in values
 
 
-def test_load_project_env_adds_the_launcher_aliases(
+def test_load_project_env_no_longer_derives_the_freemodel_alias(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The freemodel provider reads a variable only the launcher used to derive."""
+    """The freemodel provider is gone, so nothing may invent FREEMODEL_API_KEY any more."""
     (tmp_path / ".env").write_text(
         'OPENAI_API_KEY=sk-test\nOPENAI_BASE_URL="https://x/v1"\n', encoding="utf-8"
     )
     for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL", "FREEMODEL_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     env_file.load_project_env(tmp_path)
-    assert os.environ["FREEMODEL_API_KEY"] == "sk-test", "alias not derived"
-    assert os.environ["OPENAI_BASE_URL"] == "https://x", (
-        "the appending var keeps its /v1 stripped"
-    )
+    assert "FREEMODEL_API_KEY" not in os.environ, "alias must not be derived"
 
 
 def test_model_override_reads_the_env_name(monkeypatch: pytest.MonkeyPatch) -> None:

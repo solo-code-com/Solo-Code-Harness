@@ -18,17 +18,16 @@ import sys
 from pathlib import Path
 
 #: Variables the CLI config reads but `.env` does not define directly: the launcher derives
-#: them, and so does this module so a direct spawn behaves like the launcher.
-ALIASES: dict[str, str] = {
-    "FREEMODEL_API_KEY": "OPENAI_API_KEY",
-}
+#: them, and so does this module so a direct spawn behaves like the launcher. Empty today:
+#: every generated provider reads its own `.env` variable.
+ALIASES: dict[str, str] = {}
 
 #: Base URLs that must not carry a trailing `/v1`, because the generated provider config appends
-#: it (`"baseURL": "${OPENAI_BASE_URL}/v1"`). Only names whose template appends `/v1` belong here:
-#: providers whose template uses the base URL verbatim (no appended `/v1`) are excluded, since
-#: stripping their `/v1` would break those calls. A test asserts this
-#: list against the templates actually present in the generated config.
-NORMALIZE_BASE_URLS = ("OPENAI_BASE_URL",)
+#: it. Only names whose template appends `/v1` belong here: providers whose template uses the
+#: base URL verbatim (no appended `/v1`) are excluded, since stripping their `/v1` would break
+#: those calls. A test asserts this list against the templates actually present in the generated
+#: config. Empty today: no generated template appends `/v1`.
+NORMALIZE_BASE_URLS = ()
 
 #: Default models per role, so a provider outage is a one-line `.env` change instead of a code
 #: edit. The delegate's own constant is the fallback when the variable is unset.
@@ -96,12 +95,6 @@ def model_override(role: str) -> str | None:
 #: paths below keep their `/v1`). Consumed by `tools/check_model_catalog.py` and
 #: `tools/model_api.py`.
 PROVIDERS: dict[str, dict[str, str]] = {
-    "freemodel": {
-        "base_env": "OPENAI_BASE_URL",
-        "key_env": "FREEMODEL_API_KEY",
-        "models_path": "/v1/models",
-        "chat_path": "/v1/chat/completions",
-    },
     "anthropic": {
         "base_env": "ANTHROPIC_BASE_URL",
         "key_env": "ANTHROPIC_API_KEY",
@@ -151,9 +144,9 @@ def provider_endpoint(provider: str, kind: str = "chat") -> tuple[str, str]:
     """(url, api key) for a provider and an endpoint kind (`chat` or `models`).
 
     The base url comes from the raw `.env` value (falling back to the process environment), and
-    the key honours the aliases above, so a `freemodel` call works without the launcher. The
-    process environment wins for the key; when it disagrees with `.env`, one line naming the
-    variable goes to stderr so a stale export cannot masquerade as a bad key.
+    the key is read from the process environment or `.env`, so a delegate call works without the
+    launcher. The process environment wins for the key; when it disagrees with `.env`, one line
+    naming the variable goes to stderr so a stale export cannot masquerade as a bad key.
     """
     spec = PROVIDERS.get(provider)
     if not spec:
@@ -167,10 +160,6 @@ def provider_endpoint(provider: str, kind: str = "chat") -> tuple[str, str]:
     key = os.environ.get(spec["key_env"], "") or parse_env_file(env_path).get(
         spec["key_env"], ""
     )
-    if not key and spec["key_env"] == "FREEMODEL_API_KEY":
-        key = os.environ.get("OPENAI_API_KEY", "") or parse_env_file(env_path).get(
-            "OPENAI_API_KEY", ""
-        )
     _warn_key_conflict(
         spec["key_env"],
         os.environ.get(spec["key_env"], ""),

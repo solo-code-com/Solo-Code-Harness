@@ -3,7 +3,7 @@
 #
 # Bridges .env configuration to Codex CLI on Linux / macOS / WSL.
 # Loads OPENAI_BASE_URL and OPENAI_API_KEY from .env, passes base_url
-# via `-c model_providers.freemodel.base_url=...` and tracks session lifecycle.
+# via `-c model_providers.commandcode.base_url=...` and tracks session lifecycle.
 #
 # Usage:
 #   ./codex-env.sh                       # interactive Codex
@@ -89,7 +89,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [ -n "$BASE_URL" ]; then
-    codex -c "model_providers.freemodel.base_url=\"$BASE_URL\"" "$@"
+    codex -c "model_providers.commandcode.base_url=\"$BASE_URL\"" "$@"
 else
     codex "$@"
 fi

@@ -341,15 +341,7 @@ def test_generated_opencode_json_gates_disabled_skills(tmp_path):
         (tmp_path / ".opencode" / "opencode.json").read_text(encoding="utf-8")
     )
     assert "deepseek" in local["providers"]
-    assert "freemodel" in local["providers"]
-    freemodel = local["providers"]["freemodel"]
-    assert freemodel["models"]["gpt-6-sol"]["modelID"] == "gpt-6-sol"
-    assert "gpt-6.1-sol" in freemodel["models"]
-    assert "gpt-6-luna" not in freemodel["models"]
-    # baseURL must carry /v1 (the launcher strips it from the env var), and auth
-    # must use a dedicated var rather than OPENAI_API_KEY.
-    assert freemodel["settings"]["baseURL"] == "${OPENAI_BASE_URL}/v1"
-    assert freemodel["env"] == ["FREEMODEL_API_KEY"]
+    assert "freemodel" not in local["providers"]
     skill_rules = data["permission"]["skill"]
     assert list(skill_rules)[0] == "*"
     assert skill_rules["*"] == "allow"

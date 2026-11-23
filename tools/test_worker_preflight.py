@@ -327,7 +327,7 @@ def test_check_model_api_skips_a_provider_that_raises(monkeypatch):
     row = preflight.check_model_api()
 
     assert row["found"] is True
-    assert row["state"] == "configured (commandcode, openrouter, freemodel)"
+    assert row["state"] == "configured (commandcode, openrouter)"
     assert row["verdict"] == "ready"
 
 

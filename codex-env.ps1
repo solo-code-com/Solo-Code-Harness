@@ -1,14 +1,14 @@
-# codex-env.ps1 — Codex CLI launcher for the Solo-Code harness
+# codex-env.ps1 â€” Codex CLI launcher for the Solo-Code harness
 #
 # Why this exists: Codex CLI does NOT read .env files. It resolves its API key
 # from the environment variable named by `env_key` in ~/.codex/config.toml, and
 # its base URL from a static config value (Codex has no ${VAR} interpolation for
-# `base_url` — verified 2026-09-14: `base_url = "${OPENAI_BASE_URL}/v1"` fails
+# `base_url` â€” verified 2026-09-14: `base_url = "${OPENAI_BASE_URL}/v1"` fails
 # with "stream disconnected before completion: builder error").
 #
 # This launcher bridges the two: it loads OPENAI_BASE_URL / OPENAI_API_KEY from
 # .env, exports the key for `env_key`, and passes the base URL through
-# `-c model_providers.freemodel.base_url=...` so both really come from .env and
+# `-c model_providers.commandcode.base_url=...` so both really come from .env and
 # there is exactly one place to rotate credentials.
 #
 # Usage:
@@ -66,9 +66,15 @@ else {
 }
 
 $codexArgs = @($args)
+$pre = @()
 if ($baseUrl) {
-    $codexArgs = @("-c", "model_providers.freemodel.base_url=`"$baseUrl`"") + $codexArgs
+    $pre += @("-c", "model_providers.commandcode.base_url=`"$baseUrl`"")
 }
+$model = $config["CODEX_MODEL"]
+if ($model) {
+    $pre += @("-c", "model=`"$model`"")
+}
+$codexArgs = $pre + $codexArgs
 
 if (-not (Get-Command codex -ErrorAction SilentlyContinue)) {
     Write-Error "codex not found on PATH. Install with: npm install -g @openai/codex"
@@ -83,8 +89,15 @@ if (Test-Path -LiteralPath $sessionTool) {
 
 $exitCode = 1
 try {
+    # PowerShell 5.1 turns a native command's stderr into a terminating error
+    # while ErrorActionPreference is Stop. Codex writes progress to stderr, so
+    # the launch died before $LASTEXITCODE could be read. Success is read from
+    # the exit code instead.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     & codex @codexArgs
     $exitCode = $LASTEXITCODE
+    $ErrorActionPreference = $prevEap
 }
 finally {
     if (Test-Path -LiteralPath $sessionTool) {

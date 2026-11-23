@@ -1,7 +1,7 @@
 $claudeArgs = @($args)
 
 # Launcher profiles:
-# - gateway (default): FreeModel/3rd-party gateway auth. Full mode by default
+# - gateway (default): API-key auth against ANTHROPIC_BASE_URL (a named provider). Full mode by default
 #   (hooks, skills, auto-memory, CLAUDE.md auto-discovery all active).
 # - native: native Claude Code mode; prefers API key if present, otherwise lets
 #   Claude Code use its normal auth flow.
@@ -103,15 +103,6 @@ Get-Content $envFile | ForEach-Object {
     [Environment]::SetEnvironmentVariable($key, $value, "Process")
 }
 
-$freemodelDomains = @("api.freemodel.dev", "cc.freemodel.dev", "api-cc.freemodel.dev", "cc-t2.freemodel.dev")
-foreach ($domain in $freemodelDomains) {
-    $expected = "https://${domain}/v1/messages"
-    if ($env:ANTHROPIC_BASE_URL -eq $expected) {
-        $env:ANTHROPIC_BASE_URL = "https://${domain}"
-        break
-    }
-}
-
 $settingsPath = Join-Path $HOME ".claude\settings.json"
 $settings = $null
 if (Test-Path $settingsPath) {
@@ -141,7 +132,7 @@ if ((Test-Path $approver) -and $env:ANTHROPIC_API_KEY) {
         # through to its native OAuth login flow.
         & python $approver --apply
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "Could not approve the FreeModel API key for Claude Code."
+            Write-Error "Could not approve the ANTHROPIC_API_KEY for Claude Code."
             exit $LASTEXITCODE
         }
     }
@@ -155,7 +146,7 @@ if ($profile -eq "gateway") {
         Write-Warning "Profile gateway: running Claude Code with --bare (explicitly requested). Hooks, auto-memory, and CLAUDE.md auto-discovery are reduced; this launcher restores CLAUDE.md via --add-dir . only."
     }
     else {
-        Write-Host "Profile gateway: running Claude Code in full mode via ANTHROPIC_API_KEY/ANTHROPIC_BASE_URL (verified 2026-08-08, claude 2.1.222, freemodel gateway: no OAuth prompt). Hooks, skills, and auto-memory are active. Pass --bare if a provider swap ever needs it again."
+        Write-Host "Profile gateway: running Claude Code in full mode via ANTHROPIC_API_KEY/ANTHROPIC_BASE_URL (verified 2026-11-23, DeepSeek /anthropic: no OAuth prompt). Hooks, skills, and auto-memory are active. Pass --bare only if a provider swap needs it."
     }
 }
 elseif ($profile -eq "native") {
