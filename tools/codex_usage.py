@@ -2,7 +2,7 @@
 """
 codex_usage.py — measure Codex CLI token usage, cache hit rate, and cost.
 
-Why: Codex CLI prints only a single "tokens used" total, and the FreeModel
+Why: Codex CLI prints only a single "tokens used" total, and the
 gateway returns no cost field (its /v1/responses usage block carries tokens
 only, and /api/billing needs a browser session, not an API key). The one place
 the real numbers exist is Codex's own rollout log, which records a
@@ -13,7 +13,7 @@ This reads ~/.codex/sessions/**/rollout-*.jsonl and reports, per session:
   - cache hit rate (cached / input)
   - estimated cost, from the PRICING table below
 
-Pricing caveat: FreeModel publishes no price list (freemodel.dev is a SPA and
+Pricing caveat: no gateway publishes a price list for these model ids (their
 its API exposes models without cost metadata). PRICING therefore uses the
 reference prices other providers publish for the same model ids — treat the
 cost column as an estimate, and override the table if your invoice disagrees.
@@ -52,7 +52,7 @@ PRICING: dict[str, tuple[float, float, float]] = {
 
 PER_MILLION = 1_000_000
 
-# FreeModel subscription plan (confirmed 2026-09-14):
+# FreeModel prepay plan (confirmed 2026-09-14, RETIRED 2026-11-23 -- kept so
 #   - $20/month flat fee
 #   - each rolling 5-hour window allows $20 of list-price usage
 #   - a week is capped at $132 of list-price usage
@@ -224,7 +224,7 @@ def print_report(
     print(f"reasoning output: {total.reasoning_output_tokens:,} tokens")
     if not priced:
         print("NOTE: at least one model has no price entry — its cost is excluded.")
-    print("Cost is an ESTIMATE from reference prices (FreeModel publishes none).")
+    print("Cost is an ESTIMATE from reference prices (no gateway publishes them).")
 
 
 def _parse_timestamp(value: str) -> datetime | None:
@@ -246,7 +246,7 @@ def print_plan(
     *,
     window_hours: int = PLAN_WINDOW_HOURS,
 ) -> None:
-    """Report consumption against the FreeModel subscription caps.
+    """Report consumption against the retired FreeModel prepay caps.
 
     The plan sells a fixed fee worth of list-price usage inside a rolling
     5-hour window, capped per week. Both caps are only reachable when the
@@ -279,7 +279,7 @@ def print_plan(
                 window_sessions += 1
 
     print(
-        f"FreeModel plan: ${PLAN_MONTHLY_FEE_USD:.0f}/month, "
+        f"FreeModel prepay plan (retired): ${PLAN_MONTHLY_FEE_USD:.0f}/month, "
         f"${PLAN_WINDOW_VALUE_USD:.0f} per {window_hours}h window, "
         f"${PLAN_WEEK_CAP_USD:.0f}/week cap"
     )
@@ -342,7 +342,7 @@ def main() -> int:
     parser.add_argument(
         "--plan",
         action="store_true",
-        help="report consumption against the FreeModel subscription caps",
+        help="report consumption against the retired FreeModel prepay caps",
     )
     parser.add_argument(
         "--pricing",

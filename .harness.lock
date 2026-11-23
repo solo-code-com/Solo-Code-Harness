@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-23T16:34:41Z"
+generated_at = "2026-11-23T17:05:05Z"
 mode = "root"
-content_fingerprint = "sha256:9b327b65b525e668dca07b9622c76aa794635f8663395197b21b7c60f707e53b"
+content_fingerprint = "sha256:4e8abeebe536fec1682233db9e1e9a4b3c0ec725121acfaeb04e0a660c0c530f"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -115,6 +115,7 @@ paths = [
     "tools/config/model-roles.json",
     "tools/config/prose-budget.json",
     "tools/config/review-policy.json",
+    "tools/control_paths.py",
     "tools/coverage_gate.py",
     "tools/decision_probe.py",
     "tools/deploy.py",
@@ -125,6 +126,7 @@ paths = [
     "tools/garden.py",
     "tools/gate_probe.py",
     "tools/generate_harness.py",
+    "tools/guard_rules.py",
     "tools/gui/index.html",
     "tools/gui_server.py",
     "tools/harness_config.py",
@@ -176,6 +178,7 @@ paths = [
     "tools/test_codex_verify.py",
     "tools/test_compaction.py",
     "tools/test_compaction_pruner.py",
+    "tools/test_control_paths.py",
     "tools/test_coverage_gate.py",
     "tools/test_decision_probe.py",
     "tools/test_deploy.py",
@@ -189,6 +192,7 @@ paths = [
     "tools/test_generate_harness.py",
     "tools/test_generator_idempotency.py",
     "tools/test_guard.py",
+    "tools/test_guard_rules.py",
     "tools/test_gui_server.py",
     "tools/test_harness_config.py",
     "tools/test_hook_exit_claims.py",
@@ -222,11 +226,13 @@ paths = [
     "tools/test_subagent_seam.py",
     "tools/test_task_receipt.py",
     "tools/test_text_hygiene.py",
+    "tools/test_tier_gate.py",
     "tools/test_validate_schemas.py",
     "tools/test_win_sandbox.py",
     "tools/test_worker_preflight.py",
     "tools/test_worker_stats.py",
     "tools/test_workspace_snapshot.py",
+    "tools/tier_gate.py",
     "tools/validate_schemas.py",
     "tools/win_sandbox.py",
     "tools/worker_preflight.py",

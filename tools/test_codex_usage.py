@@ -240,7 +240,7 @@ def test_print_plan_projects_recent_sessions(capsys, tmp_path):
     now = datetime.now(timezone.utc).isoformat()
     mod.print_plan([_report(mod, tmp_path, started=now)], _PRICING)
     out = capsys.readouterr().out
-    assert "FreeModel plan" in out
+    assert "FreeModel prepay plan" in out
     assert "Projected at this rate" in out
 
 
@@ -262,7 +262,7 @@ def test_main_plan_mode(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(mod, "collect", lambda _limit: [])
     monkeypatch.setattr(sys, "argv", ["codex_usage.py", "--plan"])
     assert mod.main() == 0
-    assert "FreeModel plan" in capsys.readouterr().out
+    assert "FreeModel prepay plan" in capsys.readouterr().out
 
 
 def test_main_bad_pricing_exits_two(monkeypatch, capsys):

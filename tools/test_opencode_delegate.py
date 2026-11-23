@@ -426,7 +426,10 @@ def test_start_row_exists_before_the_worker_is_spawned(monkeypatch, tmp_path):
     seen_at_spawn = {}
 
     def fake_popen(cmd, **kwargs):
-        seen_at_spawn["rows"] = _usage_rows(log)
+        # The wrapper also shells out to `git status` for the control-path gate,
+        # so only the FIRST Popen is the worker; later calls would record a log
+        # that already has its finish row.
+        seen_at_spawn.setdefault("rows", _usage_rows(log))
         return _FakeProc(stdout='{"type":"text","part":{"text":"PONG"}}')
 
     monkeypatch.setattr(opencode_delegate.subprocess, "Popen", fake_popen)
@@ -1623,3 +1626,18 @@ def test_the_run_log_marks_auto_for_a_writable_agent():
 
     assert "--agent solo-code-engineer" in log
     assert "--auto" in log
+
+
+def test_destructive_prompt_is_refused_before_spawning(monkeypatch, tmp_path, capsys):
+    """A prompt naming a destructive command must cost nothing: no spawn."""
+    import opencode_delegate
+
+    def _must_not_spawn(**kwargs):
+        raise AssertionError("worker was spawned for a destructive prompt")
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", _must_not_spawn)
+    code = opencode_delegate.main(
+        ["please git push --force origin main", "--directory", str(tmp_path)]
+    )
+    assert code == 2
+    assert "refused" in capsys.readouterr().err

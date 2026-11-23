@@ -443,6 +443,19 @@ def log_usage(
         pass  # usage logging must never break a run
 
 
+def _blocked_prompt(prompt: str) -> str | None:
+    """Return the first destructive rule the prompt names, if any.
+
+    agy never meets .claude/hooks/guard.py, so the shared rule table is applied
+    to the prompt before a session is created or any quota is spent.
+    """
+    try:
+        import guard_rules
+    except ImportError:  # pragma: no cover - script-dir import path
+        from tools import guard_rules  # type: ignore[no-redef]
+    return guard_rules.match_prompt(prompt)
+
+
 def main(argv: list[str] | None = None) -> int:
     _make_streams_encoding_safe()
     parser = argparse.ArgumentParser(
@@ -468,6 +481,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--allow-dir",
         help="Writable directory inside --target-dir; required with --auto-approve",
+    )
+    parser.add_argument(
+        "--allow-control-paths",
+        action="store_true",
+        help="Allow the worker to edit harness control paths (only when maintaining the harness)",
     )
     parser.add_argument(
         "--auto-approve", action="store_true", help="Allow writes inside --allow-dir"
@@ -544,6 +562,12 @@ def main(argv: list[str] | None = None) -> int:
     before = (
         snapshot_workspace(target_dir) if args.auto_approve or args.allow_tools else {}
     )
+    _blocked = _blocked_prompt(prompt)
+    if _blocked:
+        _stderr(
+            "[control-path] refused: prompt names a blocked command (" + _blocked + ")"
+        )
+        return 2
     session_id = f"antigravity-{os.getpid()}-{time.monotonic_ns()}"
     locked = False
     started = time.monotonic()
@@ -595,7 +619,20 @@ def main(argv: list[str] | None = None) -> int:
                 _stderr(
                     "read-only violation; --allow-tools changed: " + ", ".join(changed)
                 )
-                return 4
+                return 4  # The harness that fences this worker is inside the workspace it can
+        # write, so a control-path edit is refused even when the write itself
+        # was allowed. agy never runs .claude/hooks/guard.py.
+        if not args.allow_control_paths:
+            try:
+                import control_paths
+            except ImportError:  # pragma: no cover - script-dir import path
+                from tools import control_paths  # type: ignore[no-redef]
+            control = control_paths.violations_in(
+                changed_workspace_paths(before, snapshot_workspace(target_dir))
+            )
+            if control:
+                _stderr("control-path violation; changed: " + ", ".join(control))
+                return 3
         if result.get("denied_actions"):
             names = ", ".join(
                 str(entry.get("action") or entry.get("display_name") or "unknown")

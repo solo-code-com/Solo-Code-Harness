@@ -1009,3 +1009,18 @@ def test_run_agy_cli_echoes_stderr_when_the_worker_fails(monkeypatch, tmp_path, 
 
     assert code == 3
     assert "fatal: credentials expired" in capsys.readouterr().err
+
+
+def test_destructive_prompt_is_refused_before_spawning(monkeypatch, capsys):
+    """agy has no hook layer, so the wrapper refuses the prompt itself."""
+    import antigravity_delegate
+
+    def _must_not_spawn(**kwargs):
+        raise AssertionError("worker was spawned for a destructive prompt")
+
+    monkeypatch.setattr(
+        antigravity_delegate, "run_antigravity", _must_not_spawn, raising=False
+    )
+    code = antigravity_delegate.main(["please run git reset --hard HEAD~1"])
+    assert code == 2
+    assert "refused" in capsys.readouterr().err

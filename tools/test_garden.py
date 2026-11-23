@@ -756,8 +756,10 @@ SECRET_PATTERNS: list[tuple[str, str]] = [
 
 def _pattern_fixture(tmp_path, doc: str):
     root = tmp_path
-    (root / ".claude" / "hooks").mkdir(parents=True)
-    (root / ".claude" / "hooks" / "guard.py").write_text(_GUARD_SRC, encoding="utf-8")
+    # The pattern lists moved to tools/guard_rules.py on 2026-11-23; the fixture
+    # follows the source of truth, not the old hook path.
+    (root / "tools").mkdir(parents=True)
+    (root / "tools" / "guard_rules.py").write_text(_GUARD_SRC, encoding="utf-8")
     (root / "README.md").write_text(doc, encoding="utf-8")
     return root
 

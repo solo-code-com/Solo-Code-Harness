@@ -237,6 +237,29 @@ def _snapshot(root: Path) -> dict[str, str] | None:
         return None
 
 
+def _git_porcelain(root: Path) -> str:
+    """`git status --porcelain` for `root`, or "" when it holds no repository.
+
+    Empty is the silent answer on purpose: a workspace without git metadata
+    cannot be judged this way, and a false failure would teach callers to pass
+    --allow-control-paths as a matter of habit, which is the gate switching
+    itself off.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+            ["git", "-C", str(root), "status", "--porcelain"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError, TypeError):
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return proc.stdout
+
+
 def _check_scope(
     before: dict[str, str] | None,
     directory: str,
@@ -599,7 +622,7 @@ def _wsl_ready_once(timeout: float) -> bool:
             timeout=timeout,
         )
         return probe.returncode == 0
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError, TypeError):
         # TimeoutExpired is a SubprocessError, so a hung probe lands here too.
         return False
 
@@ -941,6 +964,54 @@ def log_usage(
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 
+def _blocked_prompt(prompt: str) -> str | None:
+    """Return the first destructive rule the prompt names, if any.
+
+    The wrapper drives a worker that never meets .claude/hooks/guard.py, so the
+    same rule table is applied to the prompt before any tokens are spent.
+    """
+    try:
+        import guard_rules
+    except ImportError:  # pragma: no cover - script-dir import path
+        from tools import guard_rules  # type: ignore[no-redef]
+    return guard_rules.match_prompt(prompt)
+
+
+def _control_violations(directory: str) -> list[str]:
+    """Control paths the worker changed, read from git porcelain."""
+    try:
+        import control_paths
+    except ImportError:  # pragma: no cover - script-dir import path
+        from tools import control_paths  # type: ignore[no-redef]
+    return control_paths.violations(_git_porcelain(Path(directory)))
+
+
+def _new_control_violations(directory: str, before: str) -> list[str]:
+    """Control paths this run introduced, ignoring dirt that predates it."""
+    try:
+        import control_paths
+    except ImportError:  # pragma: no cover - script-dir import path
+        from tools import control_paths  # type: ignore[no-redef]
+    return control_paths.new_violations(before, _git_porcelain(Path(directory)))
+
+
+def _tier_refusal(directory: str) -> str | None:
+    """Return a refusal reason when the data tier forbids this provider.
+
+    The marker is read from ``directory`` upward; a missing marker resolves to
+    ``client``, the strictest tier. Imported lazily so the wrapper still runs
+    when it is copied without its sibling module.
+    """
+    try:
+        import tier_gate
+    except ImportError:  # pragma: no cover - script-dir import path
+        try:
+            from tools import tier_gate  # type: ignore[no-redef]
+        except ImportError:  # pragma: no cover - sibling missing
+            return None
+    return tier_gate.refusal_for_project(directory)
+
+
 def main(argv: list[str] | None = None) -> int:
     _make_streams_encoding_safe()
     parser = argparse.ArgumentParser(
@@ -967,6 +1038,11 @@ def main(argv: list[str] | None = None) -> int:
         "--enforce-scope",
         action="store_true",
         help="Fail with exit code 4 if any workspace path outside --directory is changed",
+    )
+    parser.add_argument(
+        "--allow-control-paths",
+        action="store_true",
+        help="Allow the worker to edit harness control paths (only when maintaining the harness)",
     )
     parser.add_argument(
         "--no-guardrail",
@@ -1010,7 +1086,12 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
-
+    _tier_reason = _tier_refusal(
+        getattr(args, "directory", None) or getattr(args, "workspace", None) or "."
+    )
+    if _tier_reason:
+        print("[tier-gate] refused: " + _tier_reason, file=sys.stderr)
+        return 2
     if args.enforce_scope:
         try:
             rel_dir = Path(args.directory).resolve().relative_to(ROOT).as_posix()
@@ -1096,7 +1177,14 @@ def main(argv: list[str] | None = None) -> int:
         detail = f" ({type(before_exc).__name__})" if before_exc else ""
         _stderr(f"scope: snapshot unavailable{detail}")
         return SCOPE_ERROR_EXIT_CODE
+    _blocked = _blocked_prompt(prompt)
+    if _blocked:
+        _stderr(
+            "[control-path] refused: prompt names a blocked command (" + _blocked + ")"
+        )
+        return 2
     log_start(model or f"agent:{args.agent}", len(prompt), run_id, agent=args.agent)
+    before_porcelain = _git_porcelain(Path(args.directory))
 
     result: dict[str, Any] = {}
     used_model = model
@@ -1142,6 +1230,17 @@ def main(argv: list[str] | None = None) -> int:
         enforce=args.enforce_scope,
         before_exc=before_exc,
     )
+    if not args.allow_control_paths:
+        _control = _new_control_violations(args.directory, before_porcelain)
+        if _control:
+            _stderr(
+                "[control-path] worker changed harness control paths: "
+                + ", ".join(_control)
+            )
+            if result.get("text"):
+                _stderr("--- worker output (control-path violation) ---")
+                _stderr(result["text"][-4000:])
+            return 3
 
     if getattr(args, "record_receipt", False):
         try:

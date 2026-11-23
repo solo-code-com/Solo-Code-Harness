@@ -358,6 +358,23 @@ def log_usage(
         pass  # usage logging must never break a run
 
 
+def _tier_refusal(directory: str) -> str | None:
+    """Return a refusal reason when the data tier forbids this provider.
+
+    The marker is read from ``directory`` upward; a missing marker resolves to
+    ``client``, the strictest tier. Imported lazily so the wrapper still runs
+    when it is copied without its sibling module.
+    """
+    try:
+        import tier_gate
+    except ImportError:  # pragma: no cover - script-dir import path
+        try:
+            from tools import tier_gate  # type: ignore[no-redef]
+        except ImportError:  # pragma: no cover - sibling missing
+            return None
+    return tier_gate.refusal_for_project(directory, ("OPENAI_BASE_URL",))
+
+
 def main(argv: list[str] | None = None) -> int:
     _make_streams_encoding_safe()
     parser = argparse.ArgumentParser(description="Codex (ChatGPT) worker delegate")
@@ -402,7 +419,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--json", action="store_true", help="print the result as JSON")
     args = parser.parse_args(argv)
-
+    _tier_reason = _tier_refusal(
+        getattr(args, "directory", None) or getattr(args, "workspace", None) or "."
+    )
+    if _tier_reason:
+        print("[tier-gate] refused: " + _tier_reason, file=sys.stderr)
+        return 2
     launcher_sh = ROOT / "codex-env.sh"
     if sys.platform != "win32" and not launcher_sh.is_file():
         print(

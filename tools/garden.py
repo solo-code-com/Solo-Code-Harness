@@ -939,9 +939,11 @@ def run_engine_checks(
         ),
         (
             f"Instruction content drift ({dst_label})",
-            lambda: []
-            if instruction_suffix
-            else check_instruction_content(src, dst, dst_label),
+            lambda: (
+                []
+                if instruction_suffix
+                else check_instruction_content(src, dst, dst_label)
+            ),
         ),
         (f"Memory drift ({dst_label})", lambda: check_memory(src, dst, dst_label)),
         (f"Command parity ({dst_label})", lambda: check_commands(src, dst, dst_label)),
@@ -1674,12 +1676,12 @@ _DOC_FILES_TO_SCAN: list[str] = [
 _PATTERN_COUNT_CLAIMS: list[tuple[re.Pattern[str], str, str]] = [
     (
         re.compile(r"(\d+)\s+destructive\s+patterns?", re.IGNORECASE),
-        ".claude/hooks/guard.py",
+        "tools/guard_rules.py",
         "BLOCK_PATTERNS",
     ),
     (
         re.compile(r"(\d+)\s+secret\s+patterns?", re.IGNORECASE),
-        ".claude/hooks/guard.py",
+        "tools/guard_rules.py",
         "SECRET_PATTERNS",
     ),
 ]
