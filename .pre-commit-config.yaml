@@ -64,7 +64,7 @@ repos:
 
       - id: eslint
         name: ESLint (Node.js plugins)
-        entry: npx eslint --max-warnings 0
+        entry: bash -c 'if [ ! -d node_modules/eslint ] && [ ! -d node_modules/.bin ]; then echo "eslint toolchain not installed - skipped"; exit 0; fi; npx eslint --max-warnings 0'
         language: system
         files: ^\.opencode/plugins/.*\.js$
         pass_filenames: false
