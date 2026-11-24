@@ -33,6 +33,7 @@ for _entry in (str(ROOT), str(TOOLS)):
 
 import failure_ledger  # noqa: E402
 import opencode_engine  # noqa: E402
+import protected_state  # noqa: E402
 import session_control  # noqa: E402
 import session_registry  # noqa: E402
 import worktree  # noqa: E402
@@ -2200,3 +2201,86 @@ def test_kilo_arm_refuses_the_orchestrator_agent(monkeypatch, capsys):
 
 def test_permission_denial_is_not_retryable():
     assert opencode_delegate._retryable_failure({"error": "permission denied"}) is False
+
+
+def test_protected_state_change_blocks_the_run(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    monkeypatch.setattr(
+        opencode_delegate, "run_opencode_cli", lambda **_kw: _ok_result()
+    )
+
+    calls = [0]
+    changed_path = ".solocode/reviews/forged.json"
+
+    def changing_fingerprint(_root):
+        calls[0] += 1
+        if calls[0] == 1:
+            return {".solocode/reviews": "<empty>"}
+        return {".solocode/reviews": "<empty>", changed_path: "forged_hash"}
+
+    monkeypatch.setattr(protected_state, "fingerprint", changing_fingerprint)
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--cascade",
+            "off",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "[control-path] worker changed protected state:" in err
+    assert changed_path in err
+
+
+def test_protected_state_unchanged_lets_the_run_finish(monkeypatch, tmp_path):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    monkeypatch.setattr(
+        opencode_delegate, "run_opencode_cli", lambda **_kw: _ok_result()
+    )
+
+    state = {".solocode/reviews": "<empty>"}
+    monkeypatch.setattr(protected_state, "fingerprint", lambda _root: dict(state))
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--cascade",
+            "off",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code == 0

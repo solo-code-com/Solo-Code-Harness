@@ -30,6 +30,11 @@ if str(ROOT) not in sys.path:
 from tools import workspace_snapshot  # noqa: E402
 from tools.shared_state import SharedState  # noqa: E402
 
+try:
+    import protected_state
+except ImportError:  # pragma: no cover - script-dir import path
+    from tools import protected_state  # noqa: E402
+
 DEFAULT_MODEL = "gemini-3.8-flash-medium"
 DEFAULT_TIMEOUT_SECONDS = 600
 DIRECTORY_LOCK_ENGINE = "gemini"
@@ -611,6 +616,10 @@ def main(argv: list[str] | None = None) -> int:
         run_id = uuid.uuid4().hex
         log_start(args.model, len(prompt), run_id)
         before_porcelain = _git_porcelain(Path(target_dir))
+        before_state = None
+        if not args.allow_control_paths:
+            with contextlib.suppress(Exception):
+                before_state = protected_state.fingerprint(Path(target_dir))
         if args.allow_control_paths:
             _stderr(
                 "[control-path] --allow-control-paths given: control-path gate disabled for this run"
@@ -664,6 +673,21 @@ def main(argv: list[str] | None = None) -> int:
             )
             if control:
                 _stderr("control-path violation; changed: " + ", ".join(control))
+                return 3
+        if not args.allow_control_paths:
+            if before_state is None:
+                _stderr(
+                    "[control-path] could not fingerprint protected state before the run"
+                )
+                return 3
+            state_violations = protected_state.new_violations(
+                before_state, protected_state.fingerprint(Path(target_dir))
+            )
+            if state_violations:
+                _stderr(
+                    "[control-path] worker changed protected state: "
+                    + ", ".join(state_violations)
+                )
                 return 3
         try:
             import post_run_checks

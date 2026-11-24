@@ -1401,6 +1401,11 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # noqa: BLE001 - report only by default
         before = None
         before_exc = exc
+    before_state = None
+    if not args.allow_control_paths:
+        protected = _load_sibling("protected_state")
+        with contextlib.suppress(Exception):
+            before_state = protected.fingerprint(ROOT)
     before_target = None
     if len(models_to_try) > 1 or getattr(args, "cascade", "auto") != "off":
         # Only the cascade needs this second baseline; a single-arm run should
@@ -1475,12 +1480,27 @@ def main(argv: list[str] | None = None) -> int:
         else:
             after_root = _snapshot(ROOT)
             after_target = _snapshot(Path(args.directory))
+            state_changes: list[str] = []
+            if before_state is not None:
+                state_changes = protected.new_violations(
+                    before_state, protected.fingerprint(ROOT)
+                )
             if None in (before, before_target, after_root, after_target):
                 _stderr("[cascade] skipped: the tree state could not be read")
-            elif changed_workspace_paths(before, after_root) or changed_workspace_paths(
-                before_target, after_target
+            elif (
+                state_changes
+                or changed_workspace_paths(before, after_root)
+                or changed_workspace_paths(before_target, after_target)
             ):
-                _stderr("[cascade] skipped: the failed arm already changed the tree")
+                if state_changes:
+                    _stderr(
+                        "[cascade] skipped: the failed arm changed protected state: "
+                        + ", ".join(state_changes)
+                    )
+                else:
+                    _stderr(
+                        "[cascade] skipped: the failed arm already changed the tree"
+                    )
             else:
                 if deadline is not None and (deadline - time.monotonic()) < 30:
                     _stderr("[cascade] skipped: budget exhausted")
@@ -1527,6 +1547,22 @@ def main(argv: list[str] | None = None) -> int:
             if result.get("text"):
                 _stderr("--- worker output (control-path violation) ---")
                 _stderr(result["text"][-4000:])
+            return 3
+    if not args.allow_control_paths:
+        if before_state is None:
+            _stderr(
+                "[control-path] could not fingerprint protected state before the run"
+            )
+            return 3
+        protected_now = _load_sibling("protected_state")
+        state_violations = protected_now.new_violations(
+            before_state, protected_now.fingerprint(ROOT)
+        )
+        if state_violations:
+            _stderr(
+                "[control-path] worker changed protected state: "
+                + ", ".join(state_violations)
+            )
             return 3
     # The six Claude Code session hooks are gone with that engine; the checks
     # they performed still apply, and the wrapper is the one place that can run

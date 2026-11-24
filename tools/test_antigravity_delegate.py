@@ -17,6 +17,7 @@ TOOLS = Path(__file__).resolve().parent
 for _entry in (str(ROOT), str(TOOLS)):
     sys.path.insert(0, _entry)
 
+import protected_state  # noqa: E402
 import session_registry  # noqa: E402
 
 from tools import antigravity_delegate, shared_state  # noqa: E402
@@ -1026,3 +1027,23 @@ def test_destructive_prompt_is_refused_before_spawning(monkeypatch, capsys):
     code = antigravity_delegate.main(["please run git reset --hard HEAD~1"])
     assert code == 2
     assert "refused" in capsys.readouterr().err
+
+
+def test_protected_state_change_blocks_the_run(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    calls = 0
+
+    def fake_fingerprint(root):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {".solocode/executor-mode": "orig"}
+        return {".solocode/executor-mode": "tampered"}
+
+    monkeypatch.setattr(protected_state, "fingerprint", fake_fingerprint)
+    code = _run_main(monkeypatch, ws, ({"text": "done", "error": None}, 0))
+
+    assert code == 3
+    err = capsys.readouterr().err
+    assert ".solocode/executor-mode" in err
+    assert "[control-path] worker changed protected state" in err

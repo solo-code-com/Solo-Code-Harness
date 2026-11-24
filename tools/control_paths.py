@@ -16,6 +16,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+#: A path listed here is only visible through `git status`, so an entry that git
+#: ignores -- notably `.solocode/`, which holds the review receipts -- can never
+#: fire from this module. tools/protected_state.py fingerprints those entries
+#: instead, and both delegation wrappers run it alongside this check.
 #: Repo-relative paths a worker has no business writing. A directory entry ends
 #: with "/" and matches as a prefix; every other entry matches exactly, so a
 #: stale `.harness.lock.bak` is not read as the lock file itself.
