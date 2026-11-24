@@ -35,6 +35,7 @@ import failure_ledger  # noqa: E402
 import opencode_engine  # noqa: E402
 import session_control  # noqa: E402
 import session_registry  # noqa: E402
+import worktree  # noqa: E402
 
 from tools import opencode_delegate  # noqa: E402
 
@@ -1719,13 +1720,12 @@ def test_cascade_skips_when_tree_changed(monkeypatch, tmp_path, capsys):
     (ws / "src").mkdir(parents=True)
     monkeypatch.setattr(opencode_delegate, "ROOT", ws)
     _reach_the_wrapper(monkeypatch, tmp_path)
-    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
 
-    snaps = [{"file.txt": "hash1"}, {"file.txt": "hash2"}]
+    porcelains = ["", " M file.txt"]
     monkeypatch.setattr(
         opencode_delegate,
-        "_snapshot",
-        lambda _root: snaps.pop(0) if snaps else {"file.txt": "hash2"},
+        "_git_porcelain",
+        lambda _root: porcelains.pop(0) if porcelains else " M file.txt",
     )
 
     kilo_called = []
@@ -1753,9 +1753,7 @@ def test_cascade_skips_when_tree_changed(monkeypatch, tmp_path, capsys):
     assert code != 0
     assert not kilo_called
     err = capsys.readouterr().err
-    assert (
-        "[cascade] skipped: the failed arm already changed 1 path(s) in the tree" in err
-    )
+    assert "[cascade] skipped: the failed arm already changed the tree" in err
 
 
 def test_cascade_uses_kilo_when_tree_clean(monkeypatch, tmp_path, capsys):
@@ -1916,3 +1914,101 @@ def test_kilo_arm_never_adds_a_second_guardrail(monkeypatch):
     assert argv[argv.index("--timeout") + 1] == "42"
     assert argv[argv.index("--directory") + 1] == "src"
     assert "--ensure-server" in argv
+
+
+def test_worktree_refuses_a_dirty_tree(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: ["src/x.py"])
+    created: list[tuple] = []
+    monkeypatch.setattr(worktree, "create", lambda *a, **k: created.append(a))
+
+    code = opencode_delegate.main(
+        ["do task", "--no-guardrail", "--worktree", "--cascade", "off"]
+    )
+    assert code == 7
+    assert len(created) == 0
+    err = capsys.readouterr().err
+    assert (
+        "[worktree] refused: uncommitted changes would not exist in the worktree" in err
+    )
+
+
+def test_worktree_swaps_the_directory(monkeypatch, tmp_path):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    seen_dir: list[str | None] = []
+
+    def fake_run(**kwargs):
+        seen_dir.append(kwargs.get("directory"))
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    wt_path = ws / ".solocode" / "worktrees" / "task-1"
+    fake_wt = SimpleNamespace(path=wt_path, branch="jev/task-1")
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: [])
+    monkeypatch.setattr(worktree, "create", lambda *a, **k: fake_wt)
+    monkeypatch.setattr(worktree, "summary", lambda _path: "")
+
+    code = opencode_delegate.main(
+        ["do task", "--no-guardrail", "--worktree", "--cascade", "off"]
+    )
+    assert code == 0
+    assert seen_dir == [str(wt_path)]
+
+
+def test_worktree_allow_dirty_proceeds(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    run_called: list[bool] = []
+
+    def fake_run(**_kwargs):
+        run_called.append(True)
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    wt_path = ws / ".solocode" / "worktrees" / "task-1"
+    fake_wt = SimpleNamespace(path=wt_path, branch="jev/task-1")
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: ["src/x.py"])
+    monkeypatch.setattr(worktree, "create", lambda *a, **k: fake_wt)
+    monkeypatch.setattr(worktree, "summary", lambda _path: "")
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--worktree",
+            "--worktree-allow-dirty",
+            "--cascade",
+            "off",
+        ]
+    )
+    assert code == 0
+    assert run_called
+    err = capsys.readouterr().err
+    assert "[worktree] warning: 1 uncommitted path(s) are not in the worktree" in err

@@ -181,7 +181,10 @@ reviews, because its tokens are free. Gemini runs on a finite plan quota and die
    Neither wrapper reverts a write made outside the fence, and both compare a
    snapshot of the whole workspace, so a second writer running at the same time
    looks like this run's violation. Inspect `git status` and the diff after
-   every delegation, and run only one writing worker at a time.
+   every delegation. Two writers may run at once only when each gets its own
+   tree: `opencode_delegate.py --worktree` builds one from HEAD, refuses when the
+   tree is dirty, and prints the branch to merge. Without that flag, run one
+   writing worker at a time.
 3. Demand **evidence, not confidence**: a `| Claim | Command run | Output |`
    table. Never accept "Confident: Yes".
 4. Give the measurement, never the answer.

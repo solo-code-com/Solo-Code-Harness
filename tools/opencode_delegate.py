@@ -48,6 +48,7 @@ from typing import Any
 
 DEFAULT_MODEL = "opencode-go/beam-free"
 SCOPE_ERROR_EXIT_CODE = 4
+WORKTREE_ERROR_EXIT_CODE = 7
 # The orchestrator runs WITHOUT --auto: that flag auto-approves past its
 # `edit: deny`, so the deny only holds once the flag is gone (measured 2026-10-16:
 # a write landed with the jev agent selected and --auto in play).
@@ -1183,6 +1184,19 @@ def main(argv: list[str] | None = None) -> int:
             "unchanged; off: single arm"
         ),
     )
+    parser.add_argument(
+        "--worktree",
+        action="store_true",
+        help=(
+            "run the worker in a fresh git worktree on its own branch, so two "
+            "writers cannot see each other; the tree must be clean"
+        ),
+    )
+    parser.add_argument(
+        "--worktree-allow-dirty",
+        action="store_true",
+        help="proceed even though uncommitted changes will not be in the worktree",
+    )
 
     args = parser.parse_args(argv)
     _tier_reason = _tier_refusal(
@@ -1252,6 +1266,33 @@ def main(argv: list[str] | None = None) -> int:
         # deepseek model is the verified default there.
         _stderr(f"sandbox=wsl: {model} is Windows-only; using {WSL_DEFAULT_MODEL}")
         model = WSL_DEFAULT_MODEL
+
+    worktree_created = None
+    if args.worktree:
+        worktree = _load_sibling("worktree")
+        dirty = worktree.dirty_paths(ROOT)
+        if dirty and not args.worktree_allow_dirty:
+            _stderr(
+                "[worktree] refused: uncommitted changes would not exist in the "
+                "worktree, so the worker would edit a different tree"
+            )
+            for changed in dirty[:10]:
+                _stderr(f"  {changed}")
+            _stderr("[worktree] commit first, or pass --worktree-allow-dirty")
+            return WORKTREE_ERROR_EXIT_CODE
+        try:
+            worktree_created = worktree.create(ROOT, worktree.slugify(args.prompt))
+        except worktree.WorktreeError as exc:
+            _stderr(f"[worktree] {exc}")
+            return WORKTREE_ERROR_EXIT_CODE
+        args.directory = str(worktree_created.path)
+        _stderr(f"[worktree] path={worktree_created.path}")
+        _stderr(f"[worktree] branch={worktree_created.branch}")
+        if dirty:
+            _stderr(
+                f"[worktree] warning: {len(dirty)} uncommitted path(s) are not in "
+                "the worktree"
+            )
 
     # ── Prepend guardrail unless disabled ──
     prompt = args.prompt
@@ -1328,17 +1369,8 @@ def main(argv: list[str] | None = None) -> int:
         if not _retryable_failure(result):
             _stderr("[cascade] skipped: policy refusal, not an arm failure")
         else:
-            changed_now = (
-                changed_workspace_paths(before, _snapshot(ROOT))
-                if before is not None
-                else []
-            )
-            if changed_now:
-                _stderr(
-                    "[cascade] skipped: the failed arm already changed "
-                    + str(len(changed_now))
-                    + " path(s) in the tree"
-                )
+            if _git_porcelain(Path(args.directory)) != before_porcelain:
+                _stderr("[cascade] skipped: the failed arm already changed the tree")
             else:
                 error_text = str(result.get("error"))[:80]
                 _stderr(f"[cascade] opencode arm failed ({error_text})")
@@ -1446,6 +1478,12 @@ def main(argv: list[str] | None = None) -> int:
         )
     if result.get("cost") is not None:
         _stderr(f"cost: ${result['cost']:.6f}")
+
+    if worktree_created is not None:
+        _stderr(f"[worktree] branch={worktree_created.branch}")
+        status = worktree.summary(worktree_created.path)
+        _stderr("[worktree] " + (status if status else "no changes"))
+        _stderr("[worktree] kept on disk; merge the branch, then remove it")
 
     return 0
 
