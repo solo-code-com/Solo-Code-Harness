@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import os
+import stat
 import sys
 from pathlib import Path
 
@@ -148,3 +150,159 @@ def test_nested_file_under_task_receipts_tracked_individually_rename_shows_remov
     additions = [k for k in violations if k in after and k not in before]
     assert removals == [old_key]
     assert additions == [new_key]
+
+
+def test_protected_file_replaced_by_symlink_to_identical_content_reported_as_change(
+    tmp_path: Path, monkeypatch
+):
+    """1. A protected file replaced by a symlink to an identical-content file is reported as a change."""
+    solocode = tmp_path / ".solocode"
+    solocode.mkdir(parents=True, exist_ok=True)
+    target = solocode / "executor-mode"
+    target.write_bytes(b"on\n")
+
+    before = protected_state.fingerprint(tmp_path)
+    assert before[".solocode/executor-mode"].startswith("file:")
+
+    other_file = tmp_path / "other-file"
+    other_file.write_bytes(b"on\n")
+
+    target.unlink()
+    try:
+        target.symlink_to(other_file)
+    except OSError:
+        target.write_bytes(b"on\n")
+        real_is_symlink = Path.is_symlink
+        monkeypatch.setattr(
+            Path, "is_symlink", lambda self: self == target or real_is_symlink(self)
+        )
+        real_readlink = os.readlink
+        monkeypatch.setattr(
+            os,
+            "readlink",
+            lambda p: str(other_file) if Path(p) == target else real_readlink(p),
+        )
+
+    after = protected_state.fingerprint(tmp_path)
+    assert after[".solocode/executor-mode"].startswith("link:")
+    violations = protected_state.new_violations(before, after)
+    assert violations == [".solocode/executor-mode"]
+
+
+def test_permission_change_on_protected_file_reported_as_change(tmp_path: Path):
+    """2. A permission change on a protected file is reported as a change."""
+    solocode = tmp_path / ".solocode"
+    solocode.mkdir(parents=True, exist_ok=True)
+    target = solocode / "executor-mode"
+    target.write_bytes(b"on\n")
+
+    before = protected_state.fingerprint(tmp_path)
+    orig_entry = before[".solocode/executor-mode"]
+    assert orig_entry.startswith("file:")
+
+    try:
+        os.chmod(target, stat.S_IREAD)
+        after = protected_state.fingerprint(tmp_path)
+        new_entry = after[".solocode/executor-mode"]
+        assert orig_entry != new_entry
+        violations = protected_state.new_violations(before, after)
+        assert violations == [".solocode/executor-mode"]
+    finally:
+        os.chmod(target, stat.S_IWRITE | stat.S_IREAD)
+
+
+def test_gate_fingerprint_changes_when_guard_rules_changes(tmp_path: Path):
+    """3. gate_fingerprint changes when tools/guard_rules.py content changes, and gate_changes names it."""
+    guard_rules = tmp_path / "tools" / "guard_rules.py"
+    guard_rules.parent.mkdir(parents=True, exist_ok=True)
+    guard_rules.write_text("# initial\n", encoding="utf-8")
+
+    before = protected_state.gate_fingerprint(tmp_path)
+    assert "tools/guard_rules.py" in before
+    assert before["tools/guard_rules.py"].startswith("file:")
+
+    guard_rules.write_text("# modified\n", encoding="utf-8")
+    after = protected_state.gate_fingerprint(tmp_path)
+
+    assert before["tools/guard_rules.py"] != after["tools/guard_rules.py"]
+    changes = protected_state.gate_changes(before, after)
+    assert changes == ["tools/guard_rules.py"]
+
+
+def test_recent_ignored_writes_names_file_after_since_and_not_before(
+    tmp_path: Path,
+):
+    """4. recent_ignored_writes names a file created under node_modules after since, and does not name a file whose mtime predates it."""
+    nm = tmp_path / "node_modules"
+    nm.mkdir(parents=True, exist_ok=True)
+
+    old_file = nm / "old_pkg.js"
+    old_file.write_text("console.log('old');\n", encoding="utf-8")
+
+    new_file = nm / "new_pkg.js"
+    new_file.write_text("console.log('new');\n", encoding="utf-8")
+
+    since = 1_000_000.0
+    os.utime(old_file, (since - 100.0, since - 100.0))
+    os.utime(new_file, (since + 100.0, since + 100.0))
+
+    hits = protected_state.recent_ignored_writes(tmp_path, since=since)
+    assert "node_modules/new_pkg.js" in hits
+    assert "node_modules/old_pkg.js" not in hits
+    assert hits == ["node_modules/new_pkg.js"]
+
+
+def test_recent_ignored_writes_ignores_pycache_and_pytest_cache(tmp_path: Path):
+    """5. recent_ignored_writes ignores __pycache__ and .pytest_cache, which are written by ordinary Python runs."""
+    venv = tmp_path / ".venv"
+    venv.mkdir(parents=True, exist_ok=True)
+
+    pycache_file = venv / "__pycache__" / "module.cpython-313.pyc"
+    pycache_file.parent.mkdir(parents=True, exist_ok=True)
+    pycache_file.write_bytes(b"compiled")
+
+    pytest_cache_file = venv / ".pytest_cache" / "v" / "cache" / "lastfailed"
+    pytest_cache_file.parent.mkdir(parents=True, exist_ok=True)
+    pytest_cache_file.write_text("{}", encoding="utf-8")
+
+    root_pycache = tmp_path / "__pycache__" / "root.pyc"
+    root_pycache.parent.mkdir(parents=True, exist_ok=True)
+    root_pycache.write_bytes(b"root-pyc")
+
+    root_pytest = tmp_path / ".pytest_cache" / "node.json"
+    root_pytest.parent.mkdir(parents=True, exist_ok=True)
+    root_pytest.write_text("{}", encoding="utf-8")
+
+    since = 1_000_000.0
+    for f in (pycache_file, pytest_cache_file, root_pycache, root_pytest):
+        os.utime(f, (since + 50.0, since + 50.0))
+
+    hits = protected_state.recent_ignored_writes(tmp_path, since=since)
+    assert hits == []
+
+    tampered = venv / "tampered.py"
+    tampered.write_text("injected = True\n", encoding="utf-8")
+    os.utime(tampered, (since + 50.0, since + 50.0))
+
+    hits = protected_state.recent_ignored_writes(tmp_path, since=since)
+    assert hits == [".venv/tampered.py"]
+
+
+def test_recent_ignored_writes_stops_when_tree_exceeds_limit(tmp_path: Path):
+    """6. recent_ignored_writes stops and says so when a tree exceeds the limit."""
+    target_dir = tmp_path / "node_modules"
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    since = 1_000_000.0
+    files = [
+        target_dir / "f1.js",
+        target_dir / "f2.js",
+        target_dir / "f3.js",
+        target_dir / "f4.js",
+    ]
+    for f in files:
+        f.write_text("x", encoding="utf-8")
+        os.utime(f, (since + 10.0, since + 10.0))
+
+    hits = protected_state.recent_ignored_writes(tmp_path, since=since, limit=3)
+    assert hits[-1] == "<walk truncated after 3 entries>"

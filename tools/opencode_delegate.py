@@ -1270,6 +1270,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="proceed even though uncommitted changes will not be in the worktree",
     )
+    parser.add_argument(
+        "--allow-ignored-writes",
+        action="store_true",
+        help="permit writes into node_modules, build, dist, .venv, venv or target",
+    )
 
     args = parser.parse_args(argv)
     args.directory = str(Path(args.directory).resolve())
@@ -1401,11 +1406,15 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:  # noqa: BLE001 - report only by default
         before = None
         before_exc = exc
+    protected = _load_sibling("protected_state")
     before_state = None
-    if not args.allow_control_paths:
-        protected = _load_sibling("protected_state")
+    with contextlib.suppress(Exception):
+        before_state = protected.fingerprint(ROOT)
+    before_gates = None
+    if args.allow_control_paths:
         with contextlib.suppress(Exception):
-            before_state = protected.fingerprint(ROOT)
+            before_gates = protected.gate_fingerprint(ROOT)
+    run_started = time.time()
     before_target = None
     if len(models_to_try) > 1 or getattr(args, "cascade", "auto") != "off":
         # Only the cascade needs this second baseline; a single-arm run should
@@ -1548,20 +1557,37 @@ def main(argv: list[str] | None = None) -> int:
                 _stderr("--- worker output (control-path violation) ---")
                 _stderr(result["text"][-4000:])
             return 3
-    if not args.allow_control_paths:
-        if before_state is None:
-            _stderr(
-                "[control-path] could not fingerprint protected state before the run"
-            )
-            return 3
-        protected_now = _load_sibling("protected_state")
-        state_violations = protected_now.new_violations(
-            before_state, protected_now.fingerprint(ROOT)
+    if before_state is None:
+        _stderr("[control-path] could not fingerprint protected state before the run")
+        return 3
+    protected_now = _load_sibling("protected_state")
+    state_violations = protected_now.new_violations(
+        before_state, protected_now.fingerprint(ROOT)
+    )
+    if state_violations:
+        _stderr(
+            "[control-path] worker changed protected state: "
+            + ", ".join(state_violations)
         )
-        if state_violations:
+        return 3
+    if args.allow_control_paths and before_gates is not None:
+        gate_now = protected.gate_fingerprint(ROOT)
+        moved = protected.gate_changes(before_gates, gate_now)
+        if moved:
             _stderr(
-                "[control-path] worker changed protected state: "
-                + ", ".join(state_violations)
+                "[control-path] the fence moved during the run: " + ", ".join(moved)
+            )
+    ignored_writes = protected.recent_ignored_writes(ROOT, run_started - 2)
+    if ignored_writes:
+        if args.allow_ignored_writes:
+            _stderr("[ignored-writes] allowed: " + ", ".join(ignored_writes[:10]))
+        else:
+            _stderr(
+                "[ignored-writes] the run wrote into a generated tree: "
+                + ", ".join(ignored_writes[:10])
+            )
+            _stderr(
+                "[ignored-writes] re-run with --allow-ignored-writes if that was intended"
             )
             return 3
     # The six Claude Code session hooks are gone with that engine; the checks

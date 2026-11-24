@@ -1047,3 +1047,52 @@ def test_protected_state_change_blocks_the_run(monkeypatch, tmp_path, capsys):
     err = capsys.readouterr().err
     assert ".solocode/executor-mode" in err
     assert "[control-path] worker changed protected state" in err
+
+
+def test_ignored_write_blocks_the_run(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        protected_state,
+        "recent_ignored_writes",
+        lambda _root, _since: ["node_modules/pkg/index.js"],
+    )
+    code = _run_main(monkeypatch, ws, ({"text": "done", "error": None}, 0))
+
+    assert code == 3
+    err = capsys.readouterr().err
+    assert (
+        "[ignored-writes] the run wrote into a generated tree: node_modules/pkg/index.js"
+        in err
+    )
+    assert (
+        "[ignored-writes] re-run with --allow-ignored-writes if that was intended"
+        in err
+    )
+
+
+def test_protected_state_still_checked_with_allow_control_paths(
+    monkeypatch, tmp_path, capsys
+):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    calls = 0
+
+    def fake_fingerprint(root):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {".solocode/executor-mode": "orig"}
+        return {".solocode/executor-mode": "tampered"}
+
+    monkeypatch.setattr(protected_state, "fingerprint", fake_fingerprint)
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "run_agy_cli",
+        lambda **kwargs: ({"text": "done", "error": None}, 0),
+    )
+    argv = _wrapper_argv(ws) + ["--allow-control-paths"]
+    code = antigravity_delegate.main(argv)
+
+    assert code == 3
+    err = capsys.readouterr().err
+    assert ".solocode/executor-mode" in err
+    assert "[control-path] worker changed protected state" in err

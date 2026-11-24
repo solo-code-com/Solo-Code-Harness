@@ -515,6 +515,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Allow the worker to edit harness control paths (only when maintaining the harness)",
     )
     parser.add_argument(
+        "--allow-ignored-writes",
+        action="store_true",
+        help="permit writes into node_modules, build, dist, .venv, venv or target",
+    )
+    parser.add_argument(
         "--auto-approve", action="store_true", help="Allow writes inside --allow-dir"
     )
     parser.add_argument(
@@ -617,9 +622,13 @@ def main(argv: list[str] | None = None) -> int:
         log_start(args.model, len(prompt), run_id)
         before_porcelain = _git_porcelain(Path(target_dir))
         before_state = None
-        if not args.allow_control_paths:
+        with contextlib.suppress(Exception):
+            before_state = protected_state.fingerprint(Path(target_dir))
+        protected_gates = None
+        if args.allow_control_paths:
             with contextlib.suppress(Exception):
-                before_state = protected_state.fingerprint(Path(target_dir))
+                protected_gates = protected_state.gate_fingerprint(Path(target_dir))
+        run_started = time.time()
         if args.allow_control_paths:
             _stderr(
                 "[control-path] --allow-control-paths given: control-path gate disabled for this run"
@@ -674,19 +683,42 @@ def main(argv: list[str] | None = None) -> int:
             if control:
                 _stderr("control-path violation; changed: " + ", ".join(control))
                 return 3
-        if not args.allow_control_paths:
-            if before_state is None:
-                _stderr(
-                    "[control-path] could not fingerprint protected state before the run"
-                )
-                return 3
-            state_violations = protected_state.new_violations(
-                before_state, protected_state.fingerprint(Path(target_dir))
+        if before_state is None:
+            _stderr(
+                "[control-path] could not fingerprint protected state before the run"
             )
-            if state_violations:
+            return 3
+        state_violations = protected_state.new_violations(
+            before_state, protected_state.fingerprint(Path(target_dir))
+        )
+        if state_violations:
+            _stderr(
+                "[control-path] worker changed protected state: "
+                + ", ".join(state_violations)
+            )
+            return 3
+        if args.allow_control_paths and protected_gates is not None:
+            moved = protected_state.gate_changes(
+                protected_gates,
+                protected_state.gate_fingerprint(Path(target_dir)),
+            )
+            if moved:
                 _stderr(
-                    "[control-path] worker changed protected state: "
-                    + ", ".join(state_violations)
+                    "[control-path] the fence moved during the run: " + ", ".join(moved)
+                )
+        ignored_writes = protected_state.recent_ignored_writes(
+            Path(target_dir), run_started - 2
+        )
+        if ignored_writes:
+            if args.allow_ignored_writes:
+                _stderr("[ignored-writes] allowed: " + ", ".join(ignored_writes[:10]))
+            else:
+                _stderr(
+                    "[ignored-writes] the run wrote into a generated tree: "
+                    + ", ".join(ignored_writes[:10])
+                )
+                _stderr(
+                    "[ignored-writes] re-run with --allow-ignored-writes if that was intended"
                 )
                 return 3
         try:
