@@ -260,13 +260,11 @@ are available, which is a prompt to consider delegation, not to always delegate.
 | Architecture / product / security decisions | **Neither — do it here** | Judgment is not delegable. The native advisor tool may be invoked for a second opinion; it pairs the main model with a stronger advisor model. |
 | Anything needing this conversation's history | **Neither — do it here** | Workers are context-blind |
 
-- Claude Code as a worker must be launched through `claude-env.ps1`: bare `claude -p` returns HTTP 401, because the launcher loads `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` from `.env`.
-
-**Workflow vs CLI.** A workflow run caps at 4,096 items per `parallel()`/`pipeline()`, an agent cap of 1,000 per run and 16 concurrent. Use it when the work fits Claude's context and benefits from structured output or independent reviewers; delegate to the CLI when the work exceeds that context, needs a different model, or needs UI verification. Running both is normal. Thresholds: **workflow** under 200 items at ~1M tokens; **CLI** above 200, or for cross-engine perspective or UI verification. Templates: `.claude/skills/dynamic-workflow-orchestration/SKILL.md`.
+**Workflow vs CLI.** A workflow run caps at 4,096 items per `parallel()`/`pipeline()`, an agent cap of 1,000 per run and 16 concurrent. Use it when the work fits Claude's context and benefits from structured output or independent reviewers; delegate to the CLI when the work exceeds that context, needs a different model, or needs UI verification. Running both is normal. Thresholds: **workflow** under 200 items at ~1M tokens; **CLI** above 200, or for cross-engine perspective or UI verification. Templates: `.agents/skills/dynamic-workflow-orchestration/SKILL.md`.
 
 ## Using workflow templates
 
-Templates live in `.claude/workflows/`, one slash command per file stem. Pass
+Templates live in `.agents/workflows/` (preserved from the retired Claude engine, not yet adapted to any engine), one slash command per file stem. Pass
 arguments as an object keyed by name (`specFile`, `outputDir`, `entityName`); a
 single string fails with "missing required arg" before any agent starts.
 
@@ -278,7 +276,7 @@ single string fails with "missing required arg" before any agent starts.
 `api-from-spec` and `crud-module` emit Express routes (needs `express`); their
 tests use `node:test`, so run `node --test` from the project root. Pass
 `includeTests: false` to skip the test stage. All five templates, their
-arguments and the runtime limits: `.claude/skills/dynamic-workflow-orchestration/SKILL.md`.
+arguments and the runtime limits: `.agents/skills/dynamic-workflow-orchestration/SKILL.md`.
 
 OpenCode CLI, Kilo CLI, and Antigravity CLI are headless. **OpenCode CLI is the
 primary narrow executor and the orchestrator that plans and routes work**;

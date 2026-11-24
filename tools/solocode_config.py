@@ -44,16 +44,16 @@ MODELS: dict[str, dict[str, str]] = {
 # The flash entries stay: deepseek-v4-flash is retired for new sessions, but
 # tools/cost.py prices historical usage.log rows that still name it.
 PRICING: dict[str, dict[str, float]] = {
-    "deepseek-v4-pro[1m]":   {"input": 0.435, "cache": 0.003625, "output": 0.87},
-    "deepseek-v4-flash[1m]": {"input": 0.14,  "cache": 0.0028,   "output": 0.28},
+    "deepseek-v4-pro[1m]": {"input": 0.435, "cache": 0.003625, "output": 0.87},
+    "deepseek-v4-flash[1m]": {"input": 0.14, "cache": 0.0028, "output": 0.28},
     # Legacy names (without [1m] suffix)
-    "deepseek-v4-pro":       {"input": 0.435, "cache": 0.003625, "output": 0.87},
-    "deepseek-v4-flash":     {"input": 0.14,  "cache": 0.0028,   "output": 0.28},
+    "deepseek-v4-pro": {"input": 0.435, "cache": 0.003625, "output": 0.87},
+    "deepseek-v4-flash": {"input": 0.14, "cache": 0.0028, "output": 0.28},
     # Official API id for V4.1 Flash -- what harness_config [models].fallback now
     # names. No price in the official /models response, so this carries over the
     # retired v4-flash row; verify against the DeepSeek pricing page.
-    "deepseek-flash[1m]":    {"input": 0.14,  "cache": 0.0028,   "output": 0.28},
-    "deepseek-flash":        {"input": 0.14,  "cache": 0.0028,   "output": 0.28},
+    "deepseek-flash[1m]": {"input": 0.14, "cache": 0.0028, "output": 0.28},
+    "deepseek-flash": {"input": 0.14, "cache": 0.0028, "output": 0.28},
 }
 
 # Token consumption estimates (tokens per minute) — for cost estimation
@@ -67,6 +67,7 @@ TOKENS_PER_MINUTE: dict[str, float] = {
 # ═══════════════════════════════════════════════════════════════════
 # .env parsing
 # ═══════════════════════════════════════════════════════════════════
+
 
 def load_api_key(root: Path | None = None) -> str:
     """Read DEEPSEEK_API_KEY from project .env file.
@@ -102,7 +103,10 @@ def require_api_key(root: Path | None = None) -> str:
 # Model resolution
 # ═══════════════════════════════════════════════════════════════════
 
-def resolve_model(prompt_text: str = "", model_flag: str = "pro") -> tuple[str, str, bool]:
+
+def resolve_model(
+    prompt_text: str = "", model_flag: str = "pro"
+) -> tuple[str, str, bool]:
     """Resolve the canonical model name.
 
     Returns (model_name, model_label, auto_detected).
@@ -132,6 +136,7 @@ def resolve_model(prompt_text: str = "", model_flag: str = "pro") -> tuple[str, 
 # Environment variables
 # ═══════════════════════════════════════════════════════════════════
 
+
 def get_env_vars(api_key: str, model_name: str) -> dict[str, str]:
     """Build the environment variable dict for launching Claude Code."""
     return {
@@ -151,6 +156,7 @@ def get_env_vars(api_key: str, model_name: str) -> dict[str, str]:
 # ═══════════════════════════════════════════════════════════════════
 # Session logging
 # ═══════════════════════════════════════════════════════════════════
+
 
 def log_session(
     model_name: str,
@@ -177,10 +183,13 @@ def log_session(
 # CLI interface
 # ═══════════════════════════════════════════════════════════════════
 
+
 def _cmd_env_json(model_flag: str, prompt_text: str = "") -> int:
     """Print env vars as JSON (for PowerShell)."""
     api_key = require_api_key()
-    model_name, model_label, auto = resolve_model(prompt_text=prompt_text, model_flag=model_flag)
+    model_name, model_label, auto = resolve_model(
+        prompt_text=prompt_text, model_flag=model_flag
+    )
     env = get_env_vars(api_key, model_name)
     env["SOLOCODE_MODEL_LABEL"] = model_label
     env["SOLOCODE_AUTO_DETECTED"] = "true" if auto else "false"
@@ -191,7 +200,9 @@ def _cmd_env_json(model_flag: str, prompt_text: str = "") -> int:
 def _cmd_env_bash(model_flag: str, prompt_text: str = "") -> int:
     """Print env vars as KEY=VALUE lines (for bash source)."""
     api_key = require_api_key()
-    model_name, model_label, auto = resolve_model(prompt_text=prompt_text, model_flag=model_flag)
+    model_name, model_label, auto = resolve_model(
+        prompt_text=prompt_text, model_flag=model_flag
+    )
     env = get_env_vars(api_key, model_name)
     env["SOLOCODE_MODEL_LABEL"] = model_label
     env["SOLOCODE_AUTO_DETECTED"] = "true" if auto else "false"
@@ -203,7 +214,9 @@ def _cmd_env_bash(model_flag: str, prompt_text: str = "") -> int:
 
 def _cmd_resolve_model(prompt_text: str, model_flag: str) -> int:
     """Print the canonical model name."""
-    model_name, model_label, auto = resolve_model(prompt_text=prompt_text, model_flag=model_flag)
+    model_name, model_label, auto = resolve_model(
+        prompt_text=prompt_text, model_flag=model_flag
+    )
     print(model_name)
     return 0
 
@@ -228,21 +241,33 @@ def main() -> int:
 
     # --env-json <pro|flash> [--prompt <text>]
     p_json = sub.add_parser("env-json", help="Print env vars as JSON")
-    p_json.add_argument("model", choices=["pro", "flash", "auto"],
-                        help="Model tier (all resolve to pro; flash is a deprecated alias)")
+    p_json.add_argument(
+        "model",
+        choices=["pro", "flash", "auto"],
+        help="Model tier (all resolve to pro; flash is a deprecated alias)",
+    )
     p_json.add_argument("--prompt", default="", help="Prompt text for auto-detection")
 
     # --env-bash <pro|flash> [--prompt <text>]
     p_bash = sub.add_parser("env-bash", help="Print env vars as KEY=VALUE")
-    p_bash.add_argument("model", choices=["pro", "flash", "auto"],
-                        help="Model tier (all resolve to pro; flash is a deprecated alias)")
+    p_bash.add_argument(
+        "model",
+        choices=["pro", "flash", "auto"],
+        help="Model tier (all resolve to pro; flash is a deprecated alias)",
+    )
     p_bash.add_argument("--prompt", default="", help="Prompt text for auto-detection")
 
     # --resolve-model <prompt_text>
     p_resolve = sub.add_parser("resolve-model", help="Resolve model from prompt text")
-    p_resolve.add_argument("prompt", nargs="*", default=[], help="Prompt text to analyze")
-    p_resolve.add_argument("--model", default="auto", choices=["pro", "flash", "auto"],
-                           help="Model flag (default: auto; all resolve to pro)")
+    p_resolve.add_argument(
+        "prompt", nargs="*", default=[], help="Prompt text to analyze"
+    )
+    p_resolve.add_argument(
+        "--model",
+        default="auto",
+        choices=["pro", "flash", "auto"],
+        help="Model flag (default: auto; all resolve to pro)",
+    )
 
     # --log-session
     p_log = sub.add_parser("log-session", help="Append session to usage.log")

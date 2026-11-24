@@ -1,4 +1,5 @@
 """Tests for tools/snapshot_testing.py"""
+
 import json
 import tempfile
 from pathlib import Path
@@ -17,6 +18,7 @@ st.FIXTURES_DIR = _fixtures_path
 
 
 # ── normalize_output ───────────────────────────────────────────────────────────
+
 
 def test_normalize_strips_timestamp():
     data = {"status": "ok", "timestamp": "2026-01-01T00:00:00"}
@@ -59,6 +61,7 @@ def test_normalize_preserves_non_timestamp_keys():
 
 # ── record_snapshot / replay_snapshot ──────────────────────────────────────────
 
+
 def test_record_creates_file():
     name = "test_record_creates"
     path = st.record_snapshot(name, {"status": "ok"})
@@ -91,6 +94,7 @@ def test_replay_missing_returns_none(capsys):
 
 # ── compare_snapshots ──────────────────────────────────────────────────────────
 
+
 def test_compare_matching_returns_true():
     expected = {"status": "ok", "v": 1}
     actual = {"status": "ok", "v": 1}
@@ -111,6 +115,7 @@ def test_compare_normalizes_actual():
 
 
 # ── full record/compare cycle ──────────────────────────────────────────────────
+
 
 def test_full_cycle_timestamp_invariant():
     name = "full_cycle"

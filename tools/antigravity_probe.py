@@ -84,8 +84,12 @@ def build_report(agy_binary: str | None) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Antigravity headless worker diagnostic")
-    parser.add_argument("--agy-bin", help="Path to agy executable (default: auto-discover)")
+    parser = argparse.ArgumentParser(
+        description="Antigravity headless worker diagnostic"
+    )
+    parser.add_argument(
+        "--agy-bin", help="Path to agy executable (default: auto-discover)"
+    )
     parser.add_argument("--json", action="store_true", help="Emit the report as JSON")
     args = parser.parse_args(argv)
 
@@ -96,13 +100,17 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, indent=2))
     else:
         if not report["found"]:
-            print("[antigravity_probe] agy binary NOT found; install Antigravity CLI or pass --agy-bin")
+            print(
+                "[antigravity_probe] agy binary NOT found; install Antigravity CLI or pass --agy-bin"
+            )
             return 1
         print(f"[antigravity_probe] binary: {report['binary']}")
         print(f"[antigravity_probe] models: {len(report['models'])}")
         print(f"[antigravity_probe] default: {report['default_model']}")
         if report["missing_models"]:
-            print(f"[antigravity_probe] MISSING expected models: {', '.join(report['missing_models'])}")
+            print(
+                f"[antigravity_probe] MISSING expected models: {', '.join(report['missing_models'])}"
+            )
         else:
             print("[antigravity_probe] all expected gemini-3.8-flash ids present")
 

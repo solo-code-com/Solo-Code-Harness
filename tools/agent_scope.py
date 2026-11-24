@@ -23,6 +23,7 @@ Usage:
 
     registry.dispose_scope("agent-a")  # removes all agent-a scoped tools
 """
+
 from __future__ import annotations
 
 import threading
@@ -98,7 +99,10 @@ class AgentScopeRegistry:
 
         def _undo() -> None:
             with self._lock:
-                if scope_key in self._scopes and self._scopes[scope_key].tools.get(tool.name) is tool:
+                if (
+                    scope_key in self._scopes
+                    and self._scopes[scope_key].tools.get(tool.name) is tool
+                ):
                     del self._scopes[scope_key].tools[tool.name]
 
         return _undo
@@ -107,9 +111,7 @@ class AgentScopeRegistry:
     # Resolution                                                           #
     # ------------------------------------------------------------------ #
 
-    def resolve(
-        self, name: str, scope_key: str | None = None
-    ) -> ToolDefinition | None:
+    def resolve(self, name: str, scope_key: str | None = None) -> ToolDefinition | None:
         """
         Resolve a tool name. Scoped entry shadows global when scope is given.
         Returns None when no tool is found.
@@ -167,6 +169,7 @@ class AgentScopeRegistry:
 # CLI / self-test                                                              #
 # --------------------------------------------------------------------------- #
 
+
 def _self_test() -> None:
     print("Running agent_scope self-test...")
 
@@ -182,18 +185,29 @@ def _self_test() -> None:
         return f"read: {args.get('path')}"
 
     # Register globals
-    undo_bash = registry.register_global(ToolDefinition("bash", "run shell", _global_bash))
+    undo_bash = registry.register_global(
+        ToolDefinition("bash", "run shell", _global_bash)
+    )
     registry.register_global(ToolDefinition("read_file", "read a file", _read_file))
 
     # Register scoped override for agent-a
-    registry.register_scoped("agent-a", ToolDefinition("bash", "sandbox bash", _sandbox_bash))
+    registry.register_scoped(
+        "agent-a", ToolDefinition("bash", "sandbox bash", _sandbox_bash)
+    )
 
     # Resolution tests
     assert registry.resolve("bash") is not None
     assert registry.resolve("bash").execute({"cmd": "ls"}) == "global-bash: ls"
-    assert registry.resolve("bash", "agent-a").execute({"cmd": "ls"}) == "sandbox-bash: ls"
-    assert registry.resolve("bash", "agent-b").execute({"cmd": "ls"}) == "global-bash: ls"
-    assert registry.resolve("read_file", "agent-a").execute({"path": "/var"}) == "read: /var"
+    assert (
+        registry.resolve("bash", "agent-a").execute({"cmd": "ls"}) == "sandbox-bash: ls"
+    )
+    assert (
+        registry.resolve("bash", "agent-b").execute({"cmd": "ls"}) == "global-bash: ls"
+    )
+    assert (
+        registry.resolve("read_file", "agent-a").execute({"path": "/var"})
+        == "read: /var"
+    )
     assert registry.resolve("nonexistent") is None
 
     # List tools
@@ -202,12 +216,16 @@ def _self_test() -> None:
 
     scoped_tools = registry.list_tools("agent-a")
     assert len(scoped_tools) == 2  # sandbox bash (shadows) + read_file
-    assert scoped_tools[0].execute({"cmd": "x"}) == "sandbox-bash: x"  # bash is first alphabetically
+    assert (
+        scoped_tools[0].execute({"cmd": "x"}) == "sandbox-bash: x"
+    )  # bash is first alphabetically
 
     # Undo global registration
     undo_bash()
     assert registry.resolve("bash") is None
-    assert registry.resolve("bash", "agent-a").execute({"cmd": "x"}) == "sandbox-bash: x"
+    assert (
+        registry.resolve("bash", "agent-a").execute({"cmd": "x"}) == "sandbox-bash: x"
+    )
 
     # Dispose scope
     registry.dispose_scope("agent-a")
@@ -223,12 +241,20 @@ def _self_test() -> None:
         pass
 
     # Stale-undo identity check: undo must not remove a re-registration
-    undo_bash2 = registry.register_global(ToolDefinition("ls", "list files", _global_bash))
-    undo_bash3 = registry.register_global(ToolDefinition("cat", "cat file", _global_bash))
+    undo_bash2 = registry.register_global(
+        ToolDefinition("ls", "list files", _global_bash)
+    )
+    undo_bash3 = registry.register_global(
+        ToolDefinition("cat", "cat file", _global_bash)
+    )
     undo_bash2()  # remove "ls"
-    registry.register_global(ToolDefinition("ls", "list files v2", _sandbox_bash))  # re-register
+    registry.register_global(
+        ToolDefinition("ls", "list files v2", _sandbox_bash)
+    )  # re-register
     undo_bash2()  # stale undo — must NOT remove the new "ls"
-    assert registry.resolve("ls") is not None, "Stale undo must not remove re-registration"
+    assert registry.resolve("ls") is not None, (
+        "Stale undo must not remove re-registration"
+    )
     undo_bash3()
 
     # Validation: empty name/scope_key rejected

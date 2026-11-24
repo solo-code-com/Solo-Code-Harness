@@ -34,7 +34,9 @@ def main() -> None:
     total_output = 0
     total_cost = 0.0
     errors = 0
-    by_model: dict[str, dict] = defaultdict(lambda: {"input": 0, "output": 0, "cost": 0.0, "calls": 0})
+    by_model: dict[str, dict] = defaultdict(
+        lambda: {"input": 0, "output": 0, "cost": 0.0, "calls": 0}
+    )
 
     for e in entries:
         model = e.get("model", "unknown")
@@ -57,7 +59,9 @@ def main() -> None:
         by_model[model]["cost"] += cost
 
     print(f"Total calls : {len(entries)}  (errors: {errors})")
-    print(f"Total tokens: input={total_input:,}  output={total_output:,}  total={total_input+total_output:,}")
+    print(
+        f"Total tokens: input={total_input:,}  output={total_output:,}  total={total_input + total_output:,}"
+    )
     print(f"Total cost  : ${total_cost:.6f}")
     print()
     print(f"{'Model':<45} {'Calls':>6} {'Input':>10} {'Output':>10} {'Cost':>12}")

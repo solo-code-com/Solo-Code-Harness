@@ -1,4 +1,5 @@
 """Tests for tools/session_persistence.py"""
+
 import pytest
 
 from tools.session_persistence import (
@@ -20,6 +21,7 @@ def db(tmp_path):
 
 # ── init_db ────────────────────────────────────────────────────────────────────
 
+
 def test_init_db_creates_file(tmp_path):
     p = tmp_path / "s.db"
     conn = init_db(p)
@@ -34,6 +36,7 @@ def test_init_db_idempotent(tmp_path):
 
 
 # ── record_session_start ───────────────────────────────────────────────────────
+
 
 def test_record_session_start(db):
     record_session_start("sess-1", "main", "abc1234", path=db)
@@ -52,6 +55,7 @@ def test_record_session_start_multiple(db):
 
 # ── record_session_end ─────────────────────────────────────────────────────────
 
+
 def test_record_session_end_updates_status(db):
     record_session_start("sess-1", "main", "abc", path=db)
     record_session_end("sess-1", files_changed=3, status="completed", path=db)
@@ -63,10 +67,13 @@ def test_record_session_end_updates_status(db):
 def test_record_session_end_unknown_session(db):
     # record_session_end raises ValueError for unknown sessions
     with pytest.raises(ValueError, match="unknown session"):
-        record_session_end("ghost-session", files_changed=0, status="completed", path=db)
+        record_session_end(
+            "ghost-session", files_changed=0, status="completed", path=db
+        )
 
 
 # ── get_session ────────────────────────────────────────────────────────────────
+
 
 def test_get_session_found(db):
     record_session_start("sess-1", "main", "abc", path=db)
@@ -80,6 +87,7 @@ def test_get_session_not_found(db):
 
 
 # ── list_sessions ──────────────────────────────────────────────────────────────
+
 
 def test_list_sessions_empty(db):
     assert list_sessions(path=db) == []
@@ -100,6 +108,7 @@ def test_list_sessions_returns_dicts(db):
 
 
 # ── search_sessions ────────────────────────────────────────────────────────────
+
 
 def test_search_sessions_by_branch(db):
     record_session_start("sess-1", "main", "a", path=db)
@@ -131,6 +140,7 @@ def test_search_sessions_empty_result(db):
 
 
 # ── isolation — separate DBs don't interfere ──────────────────────────────────
+
 
 def test_separate_dbs_isolated(tmp_path):
     db1 = tmp_path / "a.db"

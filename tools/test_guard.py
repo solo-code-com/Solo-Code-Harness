@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent / ".claude" / "hooks"))
-import guard
+sys.path.insert(0, str(Path(__file__).parent))
+import guard_hook as guard
 
 
 def test_normalize_command():

@@ -84,8 +84,6 @@ Phải tồn tại các thư mục: `.claude/` `.copilot/` `.github/` `.gemini/`
 |---|---|---|
 | `.harness.lock` | Ranh giới harness/project + version | Tự động generate bởi `tools/deploy.py` |
 | `kilo.jsonc` | Kilo engine config | Provider, model, agent, permission |
-| `CLAUDE.md` | Claude Code rulebook (ở ROOT, không phải `.claude/CLAUDE.md`) | Auto-generate từ `AGENTS.md` bởi `tools/claude_engine.py` |
-| `.claude/settings.json` | Claude Code hooks + permissions | PreToolUse (`guard.py`), PostToolUse (`quality_gate.py`, `memory_gate.py`, `security_post.py`), PreCompact (`pre_compact.py`), SessionStart/SessionEnd |
 | `extensions_config.json` | Extension feature flags | Mặc định TẮT một số flag |
 | `.mcp.json` | MCP server config dùng chung | context7, sequential-thinking, memory, playwright |
 | `.gitleaks.toml` | Git leak detection rules | Allowlist `.venv`, `node_modules` |

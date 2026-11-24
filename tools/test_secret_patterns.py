@@ -5,7 +5,7 @@ Secret Pattern Coverage Tests (cross-scanner)
 This harness has THREE independent secret detectors, each a separate
 hand-maintained copy of the same pattern list:
 
-  1. .claude/hooks/guard.py            -- PreToolUse, blocks the write (exit 2)
+  1. tools/guard_hook.py               -- engine-neutral gate, blocks the write (exit 2)
   2. .kilo/hooks/pre-tool-use/secret-scan.js -- Kilo PreToolUse equivalent
   3. .github/scripts/security_scan.py  -- CI gate, blocks the merge (exit 1)
 
@@ -36,7 +36,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-GUARD = ROOT / ".claude" / "hooks" / "guard.py"
+GUARD = ROOT / "tools" / "guard_hook.py"
 SECRET_SCAN_JS = ROOT / ".kilo" / "hooks" / "pre-tool-use" / "secret-scan.js"
 
 sys.path.insert(0, str(ROOT / ".github" / "scripts"))

@@ -29,6 +29,7 @@ exists (see docs/dsh-port-plan.md, A2).
 Usage:
     python tools/subagent_seam.py --self-test
 """
+
 from __future__ import annotations
 
 import argparse
@@ -37,6 +38,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 # ── Vocabulary types ─────────────────────────────────────────────────────────
+
 
 @dataclass
 class SubagentRequest:
@@ -118,6 +120,7 @@ class SubagentRuntime(Protocol):
 
 
 # ── Self-test ────────────────────────────────────────────────────────────────
+
 
 class _FakeRuntime:
     """A fake provider used only to prove the Protocol is not over-specified."""
@@ -207,6 +210,7 @@ def _self_test() -> None:
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(

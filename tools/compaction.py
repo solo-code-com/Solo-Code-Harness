@@ -20,6 +20,7 @@ must include wrappers and metadata, not just the payload.
 Usage:
     python tools/compaction.py --self-test
 """
+
 from __future__ import annotations
 
 import argparse
@@ -75,7 +76,7 @@ def _self_test() -> None:
 
     # Multibyte: 1 extra byte over the limit is caught (boundary, not just gross overflow).
     assert Budget(byte_limit=3).exceeds("€") == (False, "")  # € = 3 bytes
-    assert Budget(byte_limit=3).exceeds("€a")[0] is True      # 4 bytes
+    assert Budget(byte_limit=3).exceeds("€a")[0] is True  # 4 bytes
 
     print("All tests passed.")
 

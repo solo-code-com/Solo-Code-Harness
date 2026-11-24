@@ -12,3 +12,12 @@
 docs/deepseek-harness-upgrade-acceptance.md                   # dated acceptance record of the 2026-09 upgrade
 docs/INTEGRATION_DESIGN_SPEC.md                               # dated design spec; describes the engine set at that time
 docs/lifecycle-matrix-verification.md                         # dated lifecycle verification record
+.gemini/antigravity/handoff/inbox/followup-fixes-2026-10-03-plan.md   # dated delegation plan; cites files removed with the Claude engine
+.gemini/antigravity/handoff/inbox/full-project-audit-2026-10-03-plan.md   # dated audit plan
+.gemini/antigravity/handoff/inbox/phase3-post-review-fixes.md              # dated phase-3 record
+.gemini/antigravity/handoff/inbox/phase3-workflow-adoption-brief.md        # dated phase-3 brief
+.gemini/antigravity/handoff/inbox/vanilla-adopt-roadmap.md                 # dated roadmap
+.gemini/antigravity/handoff/outbox/followup-fixes-2026-10-03-report.md     # dated report
+.gemini/antigravity/handoff/outbox/full-project-audit-2026-10-03-report.md # dated report
+docs/audit-2026-09-11.md                                                   # dated audit
+docs/handoff-2026-09-11.md                                                 # dated handoff

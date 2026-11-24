@@ -214,10 +214,7 @@ def test_split_frontmatter_without_delimiters():
 
 def test_live_repo_has_zero_memory_content_drift():
     kilo = ROOT / ".kilo"
-    for engine_dir, label in (
-        (ROOT / ".claude", ".claude"),
-        (ROOT / ".copilot", ".copilot"),
-    ):
+    for engine_dir, label in ((ROOT / ".copilot", ".copilot"),):
         issues = garden.check_memory(kilo, engine_dir, label)
         assert issues == [], f"{label} memory drift: {issues}"
 
@@ -228,9 +225,8 @@ def test_check_memory_covers_decisions_archive():
     it's exempt from the SIZE cap, not from the drift check."""
     kilo = ROOT / ".kilo"
     assert (kilo / "memory" / "decisions-archive.md").is_file()
-    assert (ROOT / ".claude" / "memory" / "decisions-archive.md").is_file()
     assert (ROOT / ".copilot" / "memory" / "decisions-archive.md").is_file()
-    issues = garden.check_memory(kilo, ROOT / ".claude", ".claude")
+    issues = garden.check_memory(kilo, ROOT / ".copilot", ".copilot")
     assert not any("decisions-archive" in i for i in issues)
 
 
@@ -258,65 +254,9 @@ def test_live_repo_has_zero_instruction_content_drift():
     )
 
 
-def test_live_repo_claude_md_matches_template():
-    """CLAUDE.md and its generator template silently diverged once, so
-    regenerating would have DELETED real hand-edited content. Guard that."""
-    assert garden.check_claude_md_regenerable() == []
-
-
 def _normalise_dashes(text: str) -> str:
     """AGENTS.md uses an em dash where the CLAUDE.md template uses two hyphens."""
     return text.replace("\u2014", "--")
-
-
-def test_native_auto_memory_paragraphs_match_claude_template():
-    """The two rulebooks carry one auto-memory policy; this catches drift.
-
-    The files differ in dash style on purpose, so the comparison normalises
-    that first. Without this test the policy can be edited in one place only.
-    """
-    agents = _normalise_dashes((ROOT / "AGENTS.md").read_text(encoding="utf-8"))
-    template = _normalise_dashes(
-        (ROOT / "tools" / "claude_engine.py").read_text(encoding="utf-8")
-    )
-    paragraphs = (
-        "Claude Code writes its own auto memory per repository alongside this harness's\n"
-        "custom memory system (`memory/` dir + `MEMORY.md` index). Both load every\n"
-        "session and serve different purposes -- they coexist, not compete.",
-        "**Rule:** Let native auto memory hold preferences and corrections. Write to\n"
-        "`memory/` only for project facts with stable structure. `python tools/garden.py`\n"
-        "keeps the `memory/` mirrors in sync across engines; no gate inspects Claude's\n"
-        "native auto memory, so audit that one by hand.",
-    )
-    for paragraph in paragraphs:
-        assert paragraph in agents
-        assert paragraph in template
-
-
-def test_claude_md_drift_is_detected():
-    """The check must actually fail on divergence -- a drift check that can
-    never fail is what let the template fall behind unnoticed."""
-    claude_path = ROOT / "CLAUDE.md"
-    original = claude_path.read_bytes()
-    try:
-        claude_path.write_bytes(original + b"\n# JUNK-DRIFT-LINE\n")
-        assert garden.check_claude_md_regenerable() != []
-    finally:
-        claude_path.write_bytes(original)
-
-
-def test_claude_md_check_ignores_line_ending_differences():
-    """Git checks out CRLF on Windows for this LF-committed file, so a
-    byte-exact compare would fail for every Windows dev; only content counts."""
-    claude_path = ROOT / "CLAUDE.md"
-    original = claude_path.read_bytes()
-    try:
-        claude_path.write_bytes(
-            original.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
-        )
-        assert garden.check_claude_md_regenerable() == []
-    finally:
-        claude_path.write_bytes(original)
 
 
 def test_check_doc_counts_detects_wrong_count(tmp_path):
@@ -883,83 +823,6 @@ def _write_key_config(tmp_path, approved, rejected):
     return cfg
 
 
-def test_check_api_key_approval_warns_when_key_rejected(tmp_path, monkeypatch, capsys):
-    key = "k" * 24
-    _write_key_config(tmp_path, [], [key[-20:]])
-    monkeypatch.setenv("ANTHROPIC_API_KEY", key)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
-
-    # advisory, never fails the run
-    assert garden.check_api_key_approval(root=tmp_path) == []
-    out = capsys.readouterr().out
-    assert "rejected" in out
-    assert "approve_api_key.py" in out
-
-
-def test_check_api_key_approval_silent_when_approved(tmp_path, monkeypatch, capsys):
-    key = "k" * 24
-    _write_key_config(tmp_path, [key[-20:]], [])
-    monkeypatch.setenv("ANTHROPIC_API_KEY", key)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
-
-    assert garden.check_api_key_approval(root=tmp_path) == []
-    assert capsys.readouterr().out == ""
-
-
-def test_check_api_key_approval_silent_without_key(tmp_path, monkeypatch, capsys):
-    _write_key_config(tmp_path, [], ["k" * 20])
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
-
-    assert garden.check_api_key_approval(root=tmp_path) == []
-    assert capsys.readouterr().out == ""
-
-
-def test_check_api_key_approval_reads_env_file_when_shell_has_no_key(
-    tmp_path, monkeypatch, capsys
-):
-    """The launcher is what loads `.env` into the shell. Run the gate from a
-    plain shell in a deployed project and the shell is empty -- so a repo whose
-    interactive sessions are dead would report all-clear. This is the exact
-    shape of the reported failure: a deployed project with a real key in `.env`
-    whose fingerprint was stored as rejected."""
-    key = "k" * 24
-    _write_key_config(tmp_path, [], [key[-20:]])
-    (tmp_path / ".env").write_text(
-        f"# comment\nANTHROPIC_BASE_URL=https://example.invalid\n"
-        f'ANTHROPIC_API_KEY="{key}"\n',
-        encoding="utf-8",
-    )
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
-
-    assert garden.check_api_key_approval(root=tmp_path) == []
-    out = capsys.readouterr().out
-    assert ".env" in out
-    assert "approve_api_key.py" in out
-
-
-def test_check_api_key_approval_prefers_shell_key_over_env_file(
-    tmp_path, monkeypatch, capsys
-):
-    """The shell key is the one the session will actually use, so it wins.
-    A stale rejected key left in `.env` must not raise a false alarm."""
-    shell_key = "s" * 24
-    stale_key = "k" * 24
-    _write_key_config(tmp_path, [shell_key[-20:]], [stale_key[-20:]])
-    (tmp_path / ".env").write_text(f"ANTHROPIC_API_KEY={stale_key}\n", encoding="utf-8")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", shell_key)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
-
-    assert garden.check_api_key_approval(root=tmp_path) == []
-    assert capsys.readouterr().out == ""
-
-
 # ─── _doc_scan_skip_dirs (reference-repo exclusion) ─────────────────────────
 #
 # Reference repos (unpacked upstream projects) used to be excluded by a
@@ -1112,54 +975,6 @@ def test_check_agent_permissions_silent_when_dirs_absent(tmp_path):
     )
 
 
-def test_check_claude_agent_tools_detects_stale_allowlist(tmp_path):
-    src, dst = tmp_path / "src", tmp_path / "dst"
-    _write(src / "agents" / "reviewer.md", _AGENT_ALLOW)
-    _write(
-        dst / "agents" / "reviewer.md", "---\nname: reviewer\ntools: Read\n---\nBody.\n"
-    )
-
-    issues = garden.check_claude_agent_tools(src, dst)
-
-    assert len(issues) == 1
-    assert "Agent tools drift" in issues[0]
-    assert "tools=[Read, Edit, Write]" in issues[0]
-
-
-def test_check_claude_agent_tools_clean_when_derived_from_source(tmp_path):
-    src, dst = tmp_path / "src", tmp_path / "dst"
-    _write(src / "agents" / "reviewer.md", _AGENT_ALLOW)
-    _write(
-        dst / "agents" / "reviewer.md",
-        "---\nname: reviewer\ntools: Read, Edit, Write\n---\nBody.\n",
-    )
-
-    assert garden.check_claude_agent_tools(src, dst) == []
-
-
-def test_check_claude_agent_tools_silent_when_dirs_absent(tmp_path):
-    assert garden.check_claude_agent_tools(tmp_path / "src", tmp_path / "dst") == []
-
-
-def test_check_claude_agent_tools_defers_missing_copy_to_check_agents(tmp_path):
-    src, dst = tmp_path / "src", tmp_path / "dst"
-    _write(src / "agents" / "reviewer.md", _AGENT_ALLOW)
-    (dst / "agents").mkdir(parents=True)
-
-    assert garden.check_claude_agent_tools(src, dst) == []
-
-
-def test_check_claude_agent_tools_skips_frontmatter_less_files(tmp_path):
-    """A mirror with no frontmatter has no `tools:` line to compare. The missing
-    or malformed copy is check_agents()' finding, so this check stays silent
-    rather than inventing a second report for the same file."""
-    src, dst = tmp_path / "src", tmp_path / "dst"
-    _write(src / "agents" / "reviewer.md", _AGENT_ALLOW)
-    _write(dst / "agents" / "reviewer.md", "Body only, no frontmatter.\n")
-
-    assert garden.check_claude_agent_tools(src, dst) == []
-
-
 def test_live_repo_has_zero_agent_permission_drift():
     kilo = ROOT / ".kilo"
     for engine_dir, label in (
@@ -1168,11 +983,6 @@ def test_live_repo_has_zero_agent_permission_drift():
     ):
         issues = garden.check_agent_permissions(kilo, engine_dir, label)
         assert issues == [], f"{label} agent permission drift: {issues}"
-
-
-def test_live_repo_claude_agent_tools_match_their_source():
-    issues = garden.check_claude_agent_tools(ROOT / ".kilo", ROOT / ".claude")
-    assert issues == [], f".claude agent tools drift: {issues}"
 
 
 # --- check_no_symlinks -------------------------------------------------------

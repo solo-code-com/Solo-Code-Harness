@@ -169,7 +169,8 @@ def by_branch_stats(*, path: Path | None = None) -> dict[str, dict[str, Any]]:
             "active": sum(1 for s in branch_sessions if s["status"] == "active"),
             "avg_files_changed": (
                 sum(s["files_changed"] for s in branch_sessions) / len(branch_sessions)
-                if branch_sessions else 0
+                if branch_sessions
+                else 0
             ),
             "avg_duration": sum(durations) / len(durations) if durations else None,
         }
@@ -199,23 +200,27 @@ def by_status_stats(*, path: Path | None = None) -> dict[str, dict[str, Any]]:
     return result
 
 
-def recent_sessions_detail(limit: int = 10, *, path: Path | None = None) -> list[dict[str, Any]]:
+def recent_sessions_detail(
+    limit: int = 10, *, path: Path | None = None
+) -> list[dict[str, Any]]:
     """Get recent sessions with computed duration."""
     sessions = sp.list_sessions(limit, path=path)
 
     result = []
     for s in sessions:
         duration = _duration_seconds(s["start_time"], s["end_time"])
-        result.append({
-            "id": s["id"],
-            "start": s["start_time"],
-            "end": s["end_time"],
-            "duration": _format_duration(duration) if duration else "active",
-            "branch": s.get("branch") or "unknown",
-            "commit": (s.get("commit_hash") or "unknown")[:7],
-            "files_changed": s["files_changed"],
-            "status": s["status"],
-        })
+        result.append(
+            {
+                "id": s["id"],
+                "start": s["start_time"],
+                "end": s["end_time"],
+                "duration": _format_duration(duration) if duration else "active",
+                "branch": s.get("branch") or "unknown",
+                "commit": (s.get("commit_hash") or "unknown")[:7],
+                "files_changed": s["files_changed"],
+                "status": s["status"],
+            }
+        )
 
     return result
 
@@ -238,11 +243,7 @@ def print_stats(stats: dict[str, Any]) -> None:
         )
 
     f = stats["files_changed"]
-    print(
-        f"Files changed: avg {f['avg']:.1f}, "
-        f"median {f['median']}, "
-        f"max {f['max']}"
-    )
+    print(f"Files changed: avg {f['avg']:.1f}, median {f['median']}, max {f['max']}")
 
     if stats["top_branches"]:
         branch_str = ", ".join(f"{b} ({c})" for b, c in stats["top_branches"])
@@ -251,9 +252,13 @@ def print_stats(stats: dict[str, Any]) -> None:
 
 def print_by_branch(branch_stats: dict[str, dict[str, Any]]) -> None:
     """Pretty-print branch statistics."""
-    for branch, data in sorted(branch_stats.items(), key=lambda x: x[1]["count"], reverse=True):
+    for branch, data in sorted(
+        branch_stats.items(), key=lambda x: x[1]["count"], reverse=True
+    ):
         print(f"\n{branch}:")
-        print(f"  Sessions: {data['count']} ({data['completed']} completed, {data['active']} active)")
+        print(
+            f"  Sessions: {data['count']} ({data['completed']} completed, {data['active']} active)"
+        )
         print(f"  Avg files changed: {data['avg_files_changed']:.1f}")
         if data["avg_duration"]:
             print(f"  Avg duration: {_format_duration(data['avg_duration'])}")

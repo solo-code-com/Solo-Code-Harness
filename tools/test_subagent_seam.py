@@ -52,9 +52,7 @@ def test_subagent_result_reads_evidence_properties():
 
 def test_check_capabilities_raises_for_missing_capability():
     runtime = _WriteOnlyRuntime()
-    req = subagent_seam.SubagentRequest(
-        prompt="do X", capabilities=frozenset({"bash"})
-    )
+    req = subagent_seam.SubagentRequest(prompt="do X", capabilities=frozenset({"bash"}))
     with pytest.raises(ValueError):
         subagent_seam.check_capabilities(req, runtime)
 
@@ -62,9 +60,7 @@ def test_check_capabilities_raises_for_missing_capability():
 def test_check_capabilities_passes_when_capabilities_supported():
     runtime = _WriteOnlyRuntime()
     subagent_seam.check_capabilities(
-        subagent_seam.SubagentRequest(
-            prompt="do X", capabilities=frozenset({"write"})
-        ),
+        subagent_seam.SubagentRequest(prompt="do X", capabilities=frozenset({"write"})),
         runtime,
     )
     subagent_seam.check_capabilities(
@@ -74,12 +70,7 @@ def test_check_capabilities_passes_when_capabilities_supported():
 
 def test_stop_reason_accepts_closed_union_values():
     assert (
-        subagent_seam.SubagentResult(
-            ok=False, stop_reason="scope_exceeded"
-        ).stop_reason
+        subagent_seam.SubagentResult(ok=False, stop_reason="scope_exceeded").stop_reason
         == "scope_exceeded"
     )
-    assert (
-        subagent_seam.SubagentResult(ok=True, stop_reason=None).stop_reason
-        is None
-    )
+    assert subagent_seam.SubagentResult(ok=True, stop_reason=None).stop_reason is None

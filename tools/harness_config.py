@@ -73,15 +73,26 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 # Directories excluded from project-root discovery
-_EXCLUDED_DIRS = frozenset({
-    ".git", "node_modules", "__pycache__", ".venv", "venv",
-    ".pytest_cache", ".ruff_cache", "dist", "build", ".mypy_cache",
-})
+_EXCLUDED_DIRS = frozenset(
+    {
+        ".git",
+        "node_modules",
+        "__pycache__",
+        ".venv",
+        "venv",
+        ".pytest_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".mypy_cache",
+    }
+)
 
 
 # ═══════════════════════════════════════════════════════════════════
 # Config file loading
 # ═══════════════════════════════════════════════════════════════════
+
 
 def _load_file(path: Path) -> dict[str, Any] | None:
     """Load a config file, returning None if missing or unparseable."""
@@ -119,24 +130,27 @@ def _strip_jsonc(content: str) -> str:
         i = 0
         while i < len(line):
             ch = line[i]
-            if ch == '"' and (i == 0 or line[i - 1] != '\\'):
+            if ch == '"' and (i == 0 or line[i - 1] != "\\"):
                 in_string = not in_string
-            if not in_string and ch == '/' and i + 1 < len(line) and line[i + 1] == '/':
+            if not in_string and ch == "/" and i + 1 < len(line) and line[i + 1] == "/":
                 break
             cleaned.append(ch)
             i += 1
-        result = ''.join(cleaned).rstrip()
+        result = "".join(cleaned).rstrip()
         # Remove trailing commas before ] or }
-        if result.rstrip().endswith(',') and any(result.rstrip().endswith(c + ',') for c in ']}'):
+        if result.rstrip().endswith(",") and any(
+            result.rstrip().endswith(c + ",") for c in "]}"
+        ):
             result = result.rstrip()[:-1]
         if result:
             lines.append(result)
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 # ═══════════════════════════════════════════════════════════════════
 # Path discovery
 # ═══════════════════════════════════════════════════════════════════
+
 
 def _find_project_root(start: Path | None = None) -> Path:
     """Walk up from start (or CWD) to find the project root.
@@ -193,6 +207,7 @@ def _find_config_file(directory: Path) -> Path | None:
 # Merging strategy
 # ═══════════════════════════════════════════════════════════════════
 
+
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge override into base. override wins on conflict."""
     result = dict(base)
@@ -207,6 +222,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 # ═══════════════════════════════════════════════════════════════════
 # Public API
 # ═══════════════════════════════════════════════════════════════════
+
 
 class HarnessConfig:
     """Layered configuration for Solo-Code harness.
@@ -336,9 +352,18 @@ def _load_env_overrides() -> dict[str, Any]:
         "SOLOCODE_GATES_GARDEN": ("gates.garden", lambda v: v.lower() == "true"),
         "SOLOCODE_GATES_TEST": ("gates.test", lambda v: v.lower() == "true"),
         "SOLOCODE_GATES_GUARD": ("gates.guard", lambda v: v.lower() == "true"),
-        "SOLOCODE_SKILLS_DISABLED": ("skills.disabled", lambda v: [s.strip() for s in v.split(",") if s.strip()]),
-        "SOLOCODE_VERIFY_ON_COMMIT": ("verify_on_commit", lambda v: v.lower() == "true"),
-        "SOLOCODE_AUTO_VERIFY_BEFORE_PUSH": ("auto_verify_before_push", lambda v: v.lower() == "true"),
+        "SOLOCODE_SKILLS_DISABLED": (
+            "skills.disabled",
+            lambda v: [s.strip() for s in v.split(",") if s.strip()],
+        ),
+        "SOLOCODE_VERIFY_ON_COMMIT": (
+            "verify_on_commit",
+            lambda v: v.lower() == "true",
+        ),
+        "SOLOCODE_AUTO_VERIFY_BEFORE_PUSH": (
+            "auto_verify_before_push",
+            lambda v: v.lower() == "true",
+        ),
         "SOLOCODE_MODEL_DEFAULT": ("models.default", str),
     }
 
@@ -392,7 +417,7 @@ def create_default_config(
 
 def _generate_default_toml() -> str:
     """Generate a default settings.toml with comments."""
-    return '''# Solo-Code Harness Configuration
+    return """# Solo-Code Harness Configuration
 # ================================
 # This file is read with lowest priority. Override in .solocode/settings.toml
 # at the project root, or via environment variables (SOLOCODE_*).
@@ -435,12 +460,13 @@ fallback = "deepseek-flash[1m]"
 verify_on_commit = true
 # Auto-run verification before git push.
 auto_verify_before_push = true
-'''
+"""
 
 
 # ═══════════════════════════════════════════════════════════════════
 # CLI interface (for testing / init)
 # ═══════════════════════════════════════════════════════════════════
+
 
 def main() -> int:
     import argparse
@@ -453,8 +479,12 @@ def main() -> int:
 
     # init — create default config
     p_init = sub.add_parser("init", help="Create default global config")
-    p_init.add_argument("--format", choices=["toml", "json"], default="toml",
-                        help="Config file format (default: toml)")
+    p_init.add_argument(
+        "--format",
+        choices=["toml", "json"],
+        default="toml",
+        help="Config file format (default: toml)",
+    )
     p_init.add_argument("--path", help="Custom path for config file")
 
     # show — load and display merged config

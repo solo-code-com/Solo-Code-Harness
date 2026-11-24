@@ -2,7 +2,7 @@
 """
 Claude Guard Hook Tests
 =======================
-Runs .claude/hooks/guard.py as a subprocess with JSON payloads on stdin and
+Runs tools/guard_hook.py as a subprocess with JSON payloads on stdin and
 asserts the block/allow decision (exit code 2 = block, 0 = allow).
 
 Usage:
@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-GUARD = ROOT / ".claude" / "hooks" / "guard.py"
+GUARD = ROOT / "tools" / "guard_hook.py"
 
 # Most tests here predate executor mode and assert the guard's *security*
 # behavior (destructive commands, secrets, protected config, skill risk).

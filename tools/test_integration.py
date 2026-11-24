@@ -50,8 +50,11 @@ def test_copilot_agents() -> None:
 
     agents = sorted(agents_dir.glob("*.md"))
     expected = len(list((KILO / "agents").glob("*.md")))
-    check(f"agent count = {len(agents)} (matches .kilo/)", len(agents) == expected,
-          f"got {len(agents)}, .kilo/ has {expected}")
+    check(
+        f"agent count = {len(agents)} (matches .kilo/)",
+        len(agents) == expected,
+        f"got {len(agents)}, .kilo/ has {expected}",
+    )
 
     for f in agents:
         content = f.read_text(encoding="utf-8")
@@ -61,7 +64,11 @@ def test_copilot_agents() -> None:
             end = content.find("\n---", 3)
             check(f"  {f.name}: closing ---", end != -1)
             fm = content[3:end] if end != -1 else ""
-            check(f"  {f.name}: mode or permission key", "mode:" in fm or "permission:" in fm, "missing mode/permission")
+            check(
+                f"  {f.name}: mode or permission key",
+                "mode:" in fm or "permission:" in fm,
+                "missing mode/permission",
+            )
 
 
 def test_copilot_skills() -> None:
@@ -76,8 +83,11 @@ def test_copilot_skills() -> None:
     # number -- the literal 49 silently rotted when the 50th skill landed,
     # failing this suite for a drift that did not exist.
     expected = len([d for d in (KILO / "skill").iterdir() if d.is_dir()])
-    check(f"skill count = {len(skills)} (matches .kilo/)", len(skills) == expected,
-          f"got {len(skills)}, .kilo/ has {expected}")
+    check(
+        f"skill count = {len(skills)} (matches .kilo/)",
+        len(skills) == expected,
+        f"got {len(skills)}, .kilo/ has {expected}",
+    )
 
     for d in skills:
         skill_md = d / "SKILL.md"
@@ -112,8 +122,11 @@ def test_copilot_commands() -> None:
 
     cmds = sorted(cmd_dir.glob("*.md"))
     expected = len(list((KILO / "command").glob("*.md")))
-    check(f"command count = {len(cmds)} (matches .kilo/)", len(cmds) == expected,
-          f"got {len(cmds)}, .kilo/ has {expected}")
+    check(
+        f"command count = {len(cmds)} (matches .kilo/)",
+        len(cmds) == expected,
+        f"got {len(cmds)}, .kilo/ has {expected}",
+    )
 
 
 def test_copilot_rulebook() -> None:
@@ -123,7 +136,9 @@ def test_copilot_rulebook() -> None:
     if rulebook.is_file():
         content = rulebook.read_text(encoding="utf-8")
         check("  non-empty", len(content) > 100, "too small to be valid rulebook")
-        check("  contains 'Request Classification'", "Request Classification" in content)
+        check(
+            "  contains 'Request Classification'", "Request Classification" in content
+        )
         check("  contains 'Socratic Gate'", "Socratic Gate" in content)
         check("  contains 'Solo-Code' branding", "Solo-Code" in content)
 
@@ -157,8 +172,14 @@ def test_copilot_vscode() -> None:
         try:
             data = json.loads(settings.read_text(encoding="utf-8"))
             check("  settings.json: valid JSON", True)
-            check("  settings.json: copilot instructions", "github.copilot.chat.codeGeneration.instructions" in data)
-            check("  settings.json: promptFiles", "github.copilot.chat.promptFiles" in data)
+            check(
+                "  settings.json: copilot instructions",
+                "github.copilot.chat.codeGeneration.instructions" in data,
+            )
+            check(
+                "  settings.json: promptFiles",
+                "github.copilot.chat.promptFiles" in data,
+            )
         except json.JSONDecodeError:
             check("  settings.json: valid JSON", False, "parse error")
 
@@ -185,6 +206,7 @@ def test_shared_state() -> None:
         return
 
     from tools.shared_state import SharedState
+
     with SharedState(db_path) as state:
         errors = state.integrity_check()
         check("  integrity_check passes", errors == [], f"errors: {errors}")

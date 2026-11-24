@@ -26,8 +26,10 @@ def test_set_feature_status():
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
             state.set_feature_status(
-                "feat-001", "in-progress",
-                engine="copilot", model="deepseek-chat",
+                "feat-001",
+                "in-progress",
+                engine="copilot",
+                model="deepseek-chat",
                 evidence="PR #42 merged",
             )
         with SharedState(path) as state2:
@@ -44,8 +46,12 @@ def test_update_existing_feature():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
-            state.set_feature_status("feat-001", "not-started", engine="kilo", model="claude")
-            state.set_feature_status("feat-001", "completed", engine="opencode", model="gpt-4o")
+            state.set_feature_status(
+                "feat-001", "not-started", engine="kilo", model="claude"
+            )
+            state.set_feature_status(
+                "feat-001", "completed", engine="opencode", model="gpt-4o"
+            )
             features = state.get_features()
             assert len(features) == 1
             assert features[0]["status"] == "completed"
@@ -57,7 +63,9 @@ def test_acquire_lock():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
-            ok = state.acquire_lock("src/auth.py", engine="copilot", model="deepseek", reason="Fixing bug")
+            ok = state.acquire_lock(
+                "src/auth.py", engine="copilot", model="deepseek", reason="Fixing bug"
+            )
             assert ok is True
             locks = state.get_active_locks()
             assert len(locks) == 1
@@ -70,8 +78,14 @@ def test_lock_conflict():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
-            assert state.acquire_lock("src/auth.py", engine="kilo", model="deepseek") is True
-            assert state.acquire_lock("src/auth.py", engine="copilot", model="gpt-4o") is False
+            assert (
+                state.acquire_lock("src/auth.py", engine="kilo", model="deepseek")
+                is True
+            )
+            assert (
+                state.acquire_lock("src/auth.py", engine="copilot", model="gpt-4o")
+                is False
+            )
 
 
 def test_directory_lock_conflicts_with_contained_file_lock():
@@ -79,8 +93,14 @@ def test_directory_lock_conflicts_with_contained_file_lock():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
-            assert state.acquire_directory_lock("src", engine="gemini", model="flash") is True
-            assert state.acquire_lock("src/auth.py", engine="copilot", model="gpt-4o") is False
+            assert (
+                state.acquire_directory_lock("src", engine="gemini", model="flash")
+                is True
+            )
+            assert (
+                state.acquire_lock("src/auth.py", engine="copilot", model="gpt-4o")
+                is False
+            )
 
 
 def test_file_lock_blocks_containing_directory_lock():
@@ -88,24 +108,50 @@ def test_file_lock_blocks_containing_directory_lock():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
-            assert state.acquire_lock("src/auth.py", engine="copilot", model="gpt-4o") is True
-            assert state.acquire_directory_lock("src", engine="gemini", model="flash") is False
+            assert (
+                state.acquire_lock("src/auth.py", engine="copilot", model="gpt-4o")
+                is True
+            )
+            assert (
+                state.acquire_directory_lock("src", engine="gemini", model="flash")
+                is False
+            )
 
 
 def test_root_directory_lock_conflicts_with_all_paths():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
-            assert state.acquire_directory_lock(".", engine="gemini", model="flash", session_id="a") is True
-            assert state.acquire_lock("src/auth.py", engine="copilot", model="gpt", session_id="b") is False
+            assert (
+                state.acquire_directory_lock(
+                    ".", engine="gemini", model="flash", session_id="a"
+                )
+                is True
+            )
+            assert (
+                state.acquire_lock(
+                    "src/auth.py", engine="copilot", model="gpt", session_id="b"
+                )
+                is False
+            )
 
 
 def test_same_engine_different_sessions_conflict():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
-            assert state.acquire_directory_lock("src", engine="gemini", model="flash", session_id="a") is True
-            assert state.acquire_directory_lock("src", engine="gemini", model="flash", session_id="b") is False
+            assert (
+                state.acquire_directory_lock(
+                    "src", engine="gemini", model="flash", session_id="a"
+                )
+                is True
+            )
+            assert (
+                state.acquire_directory_lock(
+                    "src", engine="gemini", model="flash", session_id="b"
+                )
+                is False
+            )
 
 
 def test_stale_session_cannot_release_newer_lock():
@@ -113,12 +159,22 @@ def test_stale_session_cannot_release_newer_lock():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
-            assert state.acquire_directory_lock("src", engine="gemini", model="m", session_id="old") is True
+            assert (
+                state.acquire_directory_lock(
+                    "src", engine="gemini", model="m", session_id="old"
+                )
+                is True
+            )
             with state._transaction():
                 state._conn.execute(
                     "UPDATE active_locks SET expires_at = '1970-01-01T00:00:00+00:00'"
                 )
-            assert state.acquire_directory_lock("src", engine="gemini", model="m", session_id="new") is True
+            assert (
+                state.acquire_directory_lock(
+                    "src", engine="gemini", model="m", session_id="new"
+                )
+                is True
+            )
 
             state.release_directory_lock("src", engine="gemini", session_id="old")
 
@@ -150,14 +206,19 @@ def test_case_folding_treats_slash_and_case_variants_as_one_lock(monkeypatch):
         path = Path(tmpdir) / "shared-state.db"
         monkeypatch.setattr(shared_state, "_CASE_INSENSITIVE_PATHS", True)
         with SharedState(path) as state:
-            assert state.acquire_directory_lock("Src", engine="gemini", model="flash") is True
-            assert state.acquire_lock("src/auth.py", engine="copilot", model="gpt") is False
+            assert (
+                state.acquire_directory_lock("Src", engine="gemini", model="flash")
+                is True
+            )
+            assert (
+                state.acquire_lock("src/auth.py", engine="copilot", model="gpt")
+                is False
+            )
 
 
 def test_case_folding_is_off_on_case_sensitive_filesystems(monkeypatch):
     monkeypatch.setattr(shared_state, "_CASE_INSENSITIVE_PATHS", False)
     assert shared_state._lock_paths_conflict("dir:src", "Src/a.py") is False
-
 
 
 def test_release_lock():
@@ -177,13 +238,15 @@ def test_add_session_entry():
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
             state.add_session_entry(
-                engine="copilot", model="deepseek-chat",
+                engine="copilot",
+                model="deepseek-chat",
                 summary="Fixed auth bug",
                 files_changed=["src/auth.py"],
                 verification={"security_scan": True},
             )
             state.add_session_entry(
-                engine="kilo", model="claude-sonnet",
+                engine="kilo",
+                model="claude-sonnet",
                 summary="Refactored database layer",
                 files_changed=["src/db.py"],
             )
@@ -198,13 +261,20 @@ def test_add_shared_memory():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
-            state.add_convention("branch_naming", "feature/<slug>", engine="copilot", model="gpt-4o")
-            state.add_gotcha("ruff config in .ruff.toml only, not pyproject.toml", engine="kilo", model="claude")
+            state.add_convention(
+                "branch_naming", "feature/<slug>", engine="copilot", model="gpt-4o"
+            )
+            state.add_gotcha(
+                "ruff config in .ruff.toml only, not pyproject.toml",
+                engine="kilo",
+                model="claude",
+            )
             state.add_decision(
                 "Use SQLite for shared state",
                 "Chose SQLite over JSON+manual locking for real cross-process transaction isolation",
                 rationale="stdlib only, BEGIN IMMEDIATE gives real write isolation",
-                engine="copilot", model="gpt-4o",
+                engine="copilot",
+                model="gpt-4o",
             )
             mem = state.get_shared_memory()
             assert len(mem["conventions"]) == 1
@@ -240,7 +310,9 @@ def test_concurrent_lock_acquire():
                     # timeout để không bao giờ treo vô hạn nếu thread kia lỗi
                     # trước khi tới barrier — biến hang thành fail rõ ràng.
                     barrier.wait(timeout=10)
-                    results.append(state.acquire_lock("src/shared.py", engine=engine, model="test"))
+                    results.append(
+                        state.acquire_lock("src/shared.py", engine=engine, model="test")
+                    )
             except Exception as e:  # noqa: BLE001 — test must observe any crash, not hide it
                 errors.append(e)
 
@@ -251,7 +323,15 @@ def test_concurrent_lock_acquire():
         t1.join(timeout=15)
         t2.join(timeout=15)
 
-        assert not t1.is_alive(), "Thread 'kilo' did not finish within timeout — possible deadlock"
-        assert not t2.is_alive(), "Thread 'copilot' did not finish within timeout — possible deadlock"
-        assert errors == [], f"No exception should be raised during lock contention, got: {errors}"
-        assert sorted(results) == [False, True], f"Exactly one thread should win the lock, got: {results}"
+        assert not t1.is_alive(), (
+            "Thread 'kilo' did not finish within timeout — possible deadlock"
+        )
+        assert not t2.is_alive(), (
+            "Thread 'copilot' did not finish within timeout — possible deadlock"
+        )
+        assert errors == [], (
+            f"No exception should be raised during lock contention, got: {errors}"
+        )
+        assert sorted(results) == [False, True], (
+            f"Exactly one thread should win the lock, got: {results}"
+        )

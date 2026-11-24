@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-24T01:35:22Z"
+generated_at = "2026-11-24T05:27:05Z"
 mode = "root"
-content_fingerprint = "sha256:e4f1c176e8447c0fecd68f8ea479bb5e52ee4fae68ecb5e1fbe17572a1ec75c7"
+content_fingerprint = "sha256:87aed7b006c11bd3159f6678d8f718dfe68f64035238b8091d7705f075510fd2"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -40,8 +40,6 @@ dirs = [
     ".kilo",
     ".copilot",
     ".gemini",
-    ".claude",
-    ".claude-plugin",
     ".opencode",
     ".contracts",
 ]
@@ -91,7 +89,6 @@ paths = [
     "tools/agent_scope.py",
     "tools/antigravity_delegate.py",
     "tools/antigravity_probe.py",
-    "tools/approve_api_key.py",
     "tools/benchmark_executors.py",
     "tools/check_bypass_claims.py",
     "tools/check_lint_budget.py",
@@ -99,8 +96,6 @@ paths = [
     "tools/check_stdlib_only.py",
     "tools/check_text_hygiene.py",
     "tools/circuit_breaker.py",
-    "tools/claude_engine.py",
-    "tools/claude_guard_compat.py",
     "tools/compaction.py",
     "tools/compaction_pruner.py",
     "tools/config/coverage-budget.json",
@@ -120,6 +115,7 @@ paths = [
     "tools/garden.py",
     "tools/gate_probe.py",
     "tools/generate_harness.py",
+    "tools/guard_hook.py",
     "tools/guard_rules.py",
     "tools/gui/index.html",
     "tools/gui_server.py",
@@ -145,6 +141,7 @@ paths = [
     "tools/session_registry.py",
     "tools/shared_state.py",
     "tools/shared_state_schema.sql",
+    "tools/skills_engine.py",
     "tools/snapshot_testing.py",
     "tools/solocode_config.py",
     "tools/subagent_cli.py",
@@ -153,7 +150,6 @@ paths = [
     "tools/test_agent_scope.py",
     "tools/test_antigravity_delegate.py",
     "tools/test_antigravity_probe.py",
-    "tools/test_approve_api_key.py",
     "tools/test_benchmark_executors.py",
     "tools/test_boundary_audit.py",
     "tools/test_bypass_claims.py",
@@ -162,9 +158,7 @@ paths = [
     "tools/test_check_skips.py",
     "tools/test_checklist_gate.py",
     "tools/test_circuit_breaker.py",
-    "tools/test_claude_engine.py",
     "tools/test_claude_guard.py",
-    "tools/test_claude_hooks.py",
     "tools/test_compaction.py",
     "tools/test_compaction_pruner.py",
     "tools/test_control_paths.py",
@@ -179,7 +173,6 @@ paths = [
     "tools/test_garden.py",
     "tools/test_gate_probe.py",
     "tools/test_generate_harness.py",
-    "tools/test_generator_idempotency.py",
     "tools/test_guard.py",
     "tools/test_guard_rules.py",
     "tools/test_gui_server.py",
@@ -233,7 +226,6 @@ paths = [
 # File gốc harness — KHÔNG phải code dự án
 files = [
     "AGENTS.md",
-    "CLAUDE.md",
     "agent.yaml",
     "kilo.jsonc",
     "opencode.json",
@@ -243,7 +235,6 @@ files = [
     "eslint.config.mjs",
     "Makefile",
     "pyproject.toml",
-    "claude-env.ps1",
     "opencode-env.ps1",
     "antigravity-env.sh",
     "opencode-env.sh",

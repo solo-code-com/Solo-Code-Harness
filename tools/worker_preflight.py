@@ -143,7 +143,9 @@ def check_model_api() -> dict[str, object]:
             url, key = env_file.provider_endpoint(prov)
             if url and key:
                 configured_list.append(prov)
-        except Exception:
+        except Exception:  # noqa: S112, BLE001 - a broken provider row must not abort the report
+            # Preflight reports what is configured; a provider whose lookup fails
+            # is simply absent from `configured_list`, which the row already says.
             continue
     configured = bool(configured_list)
     state = f"configured ({', '.join(configured_list)})" if configured else "missing"

@@ -44,16 +44,17 @@ SKIP_FILE = (
     TOOLS_DIR / "opencode-skip-skills.txt"
 )  # legacy name, still the skill skip-list
 KILO_DIR = ROOT_DIR / ".kilo"
-CLAUDE_DIR = ROOT_DIR / ".claude"
 
 
-def _load_claude_engine():
-    """Import the sibling claude_engine module (tools/ may not be on sys.path)."""
-    if str(TOOLS_DIR) not in sys.path:
-        sys.path.insert(0, str(TOOLS_DIR))
-    import claude_engine
+def _load_skills_engine():
+    """Import the sibling skills_engine module (tools/ may not be on sys.path)."""
+    # Resolve from this file, not ROOT_DIR: tests patch ROOT_DIR to a temp tree.
+    tools_dir = str(Path(__file__).resolve().parent)
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    import skills_engine
 
-    return claude_engine
+    return skills_engine
 
 
 def _load_opencode_engine():
@@ -84,11 +85,11 @@ def load_skip_list(skip_file: Path) -> set[str]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Generate the Claude Code + OpenCode harness engines from .kilo/ source.",
+        description="Generate the OpenCode engine and the shared skill/instruction mirrors from .kilo/ source.",
     )
     parser.add_argument(
         "--harness",
-        choices=["all", "claude", "opencode"],
+        choices=["all", "opencode"],
         default="all",
         help="Which engine to generate. 'all' emits claude + opencode. The "
         ".copilot/.gemini instruction, memory and skill-body mirrors are synced "
@@ -156,7 +157,7 @@ def sync_instruction_mirrors(kilo_root: Path, root: Path) -> int:
 def sync_memory_mirrors(kilo_root: Path, root: Path) -> int:
     """Copy .kilo/memory/*.md to the .copilot/ mirror.
 
-    .claude/memory/ is handled by claude_engine.generate_all(); .copilot/
+    .copilot/
     was left to be "manually kept" (see garden.check_memory's docstring),
     which is the same gap that made garden's remediation advice a no-op for
     instructions. Memory files are byte-for-byte copies with no per-engine
@@ -259,10 +260,7 @@ def main() -> int:
     skip_names = set() if args.include_all else load_skip_list(SKIP_FILE)
 
     rc = 0
-    if args.harness in ("all", "claude"):
-        rc = _load_claude_engine().generate_all(
-            kilo_root, ROOT_DIR / ".claude", ROOT_DIR, skip_names=skip_names
-        )
+
     if args.harness in ("all", "opencode"):
         print("\n--- OpenCode engine ---")
         oc_rc = _load_opencode_engine().generate_all(
@@ -271,13 +269,12 @@ def main() -> int:
         rc = rc or oc_rc
 
     # `.agents/skills/` is the vendor-neutral copy OpenCode reads; it outlives the
-    # Claude Code engine, whose own mirror is a separate destination.
+    # The vendor-neutral copy OpenCode reads; no single CLI owns this path.
     print("\n--- Agent skills (.agents/skills) ---")
-    engine = _load_claude_engine()
-    generate_skills = getattr(engine, "generate_skills", None)
-    if generate_skills is not None:
-        ag_rc = generate_skills(kilo_root, ROOT_DIR / ".agents", skip_names=skip_names)
-        rc = rc or ag_rc
+    ag_rc = _load_skills_engine().generate(
+        kilo_root, ROOT_DIR / ".agents", skip_names=skip_names
+    )
+    rc = rc or ag_rc
 
     print("\n--- Agent mirrors (.copilot, .gemini) ---")
     sync_agent_mirrors(kilo_root, ROOT_DIR)

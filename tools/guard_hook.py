@@ -34,7 +34,7 @@ from pathlib import Path
 # a worker driven by one never runs this hook, and a single definition is the
 # only way the two gates stay in agreement. sys.path is set here because this
 # file runs as a script, not as part of an importable package.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from guard_rules import (  # noqa: E402
     BLOCK_PATTERNS,

@@ -1,4 +1,5 @@
 """Tests for tools/agent_scope.py"""
+
 import threading
 
 import pytest
@@ -11,6 +12,7 @@ def _fn(label: str):
 
 
 # ── register_global ────────────────────────────────────────────────────────────
+
 
 def test_register_global_and_resolve():
     r = AgentScopeRegistry()
@@ -60,6 +62,7 @@ def test_stale_undo_does_not_remove_reregistration():
 
 # ── register_scoped ────────────────────────────────────────────────────────────
 
+
 def test_scoped_shadows_global():
     r = AgentScopeRegistry()
     r.register_global(ToolDefinition("bash", "global", _fn("global")))
@@ -108,6 +111,7 @@ def test_stale_scoped_undo_does_not_remove_reregistration():
 
 # ── resolve ────────────────────────────────────────────────────────────────────
 
+
 def test_resolve_nonexistent_returns_none():
     r = AgentScopeRegistry()
     assert r.resolve("nope") is None
@@ -121,6 +125,7 @@ def test_resolve_without_scope_ignores_scoped():
 
 
 # ── list_tools ─────────────────────────────────────────────────────────────────
+
 
 def test_list_tools_global_only():
     r = AgentScopeRegistry()
@@ -148,6 +153,7 @@ def test_list_tools_empty():
 
 # ── execute ────────────────────────────────────────────────────────────────────
 
+
 def test_execute_global():
     r = AgentScopeRegistry()
     r.register_global(ToolDefinition("add", "add", lambda a: a["x"] + a["y"]))
@@ -169,6 +175,7 @@ def test_execute_scoped():
 
 
 # ── dispose_scope ──────────────────────────────────────────────────────────────
+
 
 def test_dispose_scope_removes_all_scoped():
     r = AgentScopeRegistry()
@@ -196,6 +203,7 @@ def test_active_scopes():
 
 
 # ── thread safety ──────────────────────────────────────────────────────────────
+
 
 def test_concurrent_register_global():
     r = AgentScopeRegistry()

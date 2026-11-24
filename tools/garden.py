@@ -228,58 +228,6 @@ def check_agent_permissions(src: Path, dst: Path, dst_label: str) -> list[str]:
     return issues
 
 
-def check_claude_agent_tools(src: Path, dst: Path) -> list[str]:
-    """Check .claude/agents/*.md `tools:` still equals what the source derives.
-
-    Claude Code expresses permissions as a bare tool-name allowlist, so the
-    mapping is lossy: `bash: ask` and `bash: allow` both become `Bash`. That
-    lossiness is by design (see claude_engine._build_tools_allowlist), so the
-    only assertable property is that the generated allowlist matches the current
-    source block -- which catches a hand-edited .claude/ file, not a widening.
-    """
-    try:
-        from tools.claude_engine import (  # noqa: PLC0415 -- cycle-free at call time
-            _build_tools_allowlist,
-            _parse_kilo_permissions,
-        )
-        from tools.claude_engine import (
-            _split_frontmatter as _ce_split_frontmatter,
-        )
-    except ImportError as exc:
-        return [
-            f"Cannot check .claude agent tools (claude_engine import failed): {exc}"
-        ]
-
-    issues: list[str] = []
-    src_dir = src / "agents"
-    dst_dir = dst / "agents"
-    if not src_dir.is_dir() or not dst_dir.is_dir():
-        return issues
-    for agent_file in sorted(src_dir.glob("*.md")):
-        dst_file = dst_dir / agent_file.name
-        if not dst_file.is_file():
-            continue
-        src_split = _ce_split_frontmatter(agent_file.read_text(encoding="utf-8"))
-        dst_split = _ce_split_frontmatter(dst_file.read_text(encoding="utf-8"))
-        if src_split is None or dst_split is None:
-            continue
-        perms, _description, _mode = _parse_kilo_permissions(src_split[0])
-        expected = ", ".join(_build_tools_allowlist(perms))
-        actual = ""
-        for line in dst_split[0].splitlines():
-            if line.startswith("tools:"):
-                actual = line.split(":", 1)[1].strip()
-                break
-        if actual != expected:
-            issues.append(
-                f"Agent tools drift: .claude/agents/{agent_file.name} has "
-                f"tools=[{actual or 'inherit'}] but its source permission block "
-                f"derives tools=[{expected or 'inherit'}] "
-                "(run 'python tools/generate_harness.py --harness claude')"
-            )
-    return issues
-
-
 def check_instructions(src: Path, dst: Path, dst_label: str) -> list[str]:
     """Check that all src/instruction/ files have a direct dst/ copy (same filename)."""
     issues: list[str] = []
@@ -548,162 +496,6 @@ def _issue_matches_skip(issue: str, skip_set: set[str]) -> bool:
         if f"/skill/{name}/" in issue or f"/skill/{name}" in issue.rstrip("/"):
             return True
     return False
-
-
-def check_claude(
-    src: Path, dst: Path, *, skip_set: set[str] | None = None
-) -> list[str]:
-    """Parity checks for the Claude engine (.claude/).
-
-    Claude uses different directory names than the other engines:
-      .kilo/agents      -> .claude/agents
-      .kilo/skill       -> .claude/skills   (plural)
-      .kilo/command     -> .claude/commands (plural)
-      .kilo/instruction -> .claude/instruction  (verbatim reference copy)
-      .kilo/instruction -> .claude/rules        (path-scoped, `paths:` added)
-    Plus static infra: CLAUDE.md, settings.json, hooks/guard.py.
-    """
-    issues: list[str] = []
-    skip_set = skip_set or set()
-
-    # Agents (same subdir name)
-    issues.extend(_check_parity_dir(src, dst, ".claude", "agents"))
-    issues.extend(check_claude_agent_tools(src, dst))
-
-    # Skills: .kilo/skill/* dirs must exist in .claude/skills/*
-    src_skills = src / "skill"
-    dst_skills = dst / "skills"
-    if src_skills.is_dir():
-        src_names = {p.name for p in src_skills.iterdir() if p.is_dir()} - skip_set
-        dst_names = (
-            {p.name for p in dst_skills.iterdir() if p.is_dir()}
-            if dst_skills.is_dir()
-            else set()
-        )
-        for name in sorted(src_names - dst_names):
-            issues.append(f"Missing skill: .claude/skills/{name}/")
-        for name in sorted(dst_names - src_names):
-            issues.append(f"Stale skill (no source): .claude/skills/{name}/")
-        # SKILL.md health
-        if dst_skills.is_dir():
-            for entry in sorted(dst_skills.iterdir()):
-                if entry.is_dir() and not (entry / "SKILL.md").exists():
-                    issues.append(
-                        f"Skill missing SKILL.md: .claude/skills/{entry.name}"
-                    )
-
-    # Commands: .kilo/command/*.md must exist in .claude/commands/*.md
-    src_cmd = src / "command"
-    dst_cmd = dst / "commands"
-    if src_cmd.is_dir():
-        src_names = {f.name for f in src_cmd.iterdir() if f.suffix == ".md"}
-        dst_names = {f.name for f in dst_cmd.iterdir()} if dst_cmd.is_dir() else set()
-        for name in sorted(src_names - dst_names):
-            issues.append(f"Missing command: .claude/commands/{name}")
-        for name in sorted(dst_names - src_names):
-            issues.append(f"Stale command (no source): .claude/commands/{name}")
-
-    # Instructions: path-scoped sources live in .claude/rules/ with a `paths:`
-    # frontmatter block, everything else is a verbatim copy in .claude/instruction/.
-    # The mapping is imported from the generator so the check and the writer can
-    # never disagree about which source goes where; deferred to call time because
-    # tools/ is not on sys.path when garden is imported as a module.
-    tools_dir = Path(__file__).resolve().parent
-    if str(tools_dir) not in sys.path:
-        sys.path.insert(0, str(tools_dir))
-    scoped_rules = None
-    try:
-        from claude_engine import PATH_SCOPED_RULES
-
-        scoped_rules = PATH_SCOPED_RULES
-    except Exception as exc:  # noqa: BLE001 - a broken generator must surface as drift
-        issues.append(
-            "Cannot check .claude/rules/: failed to import PATH_SCOPED_RULES "
-            f"from claude_engine.py ({exc.__class__.__name__}: {exc})"
-        )
-
-    src_instr = src / "instruction"
-    if src_instr.is_dir() and scoped_rules is not None:
-        dst_instr = dst / "instruction"
-        dst_rules = dst / "rules"
-        for f in sorted(src_instr.glob("*.md")):
-            if f.name in scoped_rules:
-                if not (dst_rules / f.name).is_file():
-                    issues.append(f"Missing rule: .claude/rules/{f.name}")
-                if (dst_instr / f.name).is_file():
-                    issues.append(
-                        f"Stale instruction (now a path-scoped rule): "
-                        f".claude/instruction/{f.name}"
-                    )
-            elif not (dst_instr / f.name).is_file():
-                issues.append(f"Missing instruction: .claude/instruction/{f.name}")
-        if dst_rules.is_dir():
-            for rule in sorted(dst_rules.glob("*.md")):
-                if (
-                    rule.name not in scoped_rules
-                    or not (src_instr / rule.name).is_file()
-                ):
-                    issues.append(f"Stale rule (no source): .claude/rules/{rule.name}")
-
-    # Memory (direct copy, same filename) — feat-008 parity
-    issues.extend(check_memory(src, dst, ".claude"))
-
-    # Static harness infra required for the Claude engine
-    for rel, desc in (
-        ("hooks/guard.py", "guard hook (PreToolUse)"),
-        ("hooks/quality_gate.py", "quality-gate hook (PostToolUse)"),
-        ("hooks/security_post.py", "security-post hook (PostToolUse)"),
-        ("hooks/pre_compact.py", "pre-compact hook (PreCompact)"),
-        ("hooks/session_start.py", "session-start hook (SessionStart)"),
-        ("hooks/session_end.py", "session-end hook (SessionEnd)"),
-        ("hooks/memory_gate.py", "memory-gate hook (PostToolUse size cap)"),
-        ("settings.json", "settings (hook registration)"),
-    ):
-        if not (dst / rel).exists():
-            issues.append(f"Missing {desc}: .claude/{rel}")
-    if not (ROOT / "CLAUDE.md").exists():
-        issues.append(
-            "Missing rulebook: CLAUDE.md (run 'python tools/generate_harness.py --harness claude')"
-        )
-    else:
-        issues.extend(check_claude_md_regenerable())
-
-    return issues
-
-
-def check_claude_md_regenerable() -> list[str]:
-    """Check the committed CLAUDE.md matches what its generator produces.
-
-    CLAUDE.md is generated from `claude_engine.py`'s template, but nothing
-    used to verify that. The two silently diverged: the live file was
-    hand-edited and the template was left behind, so regenerating would
-    have SILENTLY DELETED real content -- the exact failure mode the
-    "GENERATED ... do not edit by hand" banner is supposed to prevent.
-    Comparing here makes that divergence a loud drift error instead.
-
-    Compared on normalized line endings: the point is content parity, and
-    git checks out CRLF on Windows for a LF-committed file, which would
-    otherwise make this fail for everyone on Windows.
-    """
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "claude_engine", ROOT / "tools" / "claude_engine.py"
-    )
-    claude_engine = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(claude_engine)
-
-    live = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
-    expected = claude_engine._CLAUDE_MD_TEMPLATE.format(
-        **claude_engine._claude_md_counts(ROOT)
-    )
-    if live.replace("\r\n", "\n") != expected.replace("\r\n", "\n"):
-        return [
-            "Content drift: CLAUDE.md differs from claude_engine.py's template "
-            "(regenerating would overwrite hand edits -- port them into the "
-            "template, then run 'python tools/generate_harness.py --harness claude')"
-        ]
-    return []
 
 
 def check_shared_state() -> list[str]:
@@ -1919,58 +1711,6 @@ def _key_from_env_file(env_file: Path) -> str:
     return ""
 
 
-def check_api_key_approval(root: Path = ROOT) -> list[str]:
-    """Warn if the active API key is stored as *rejected* in ~/.claude.json.
-
-    Interactive Claude Code asks "use this custom API key?" and records the
-    answer under `customApiKeyResponses`. A stored "no" makes every
-    interactive session fail with "Not logged in - Please run /login".
-
-    The reason this needs a gate: `-p` (print) mode and `--bare` never read
-    that list, so every headless probe authenticates fine while the only
-    path a human uses is dead. That asymmetry already cost one bad fix --
-    a launcher change shipped with five green gates and still broke startup,
-    because no gate could see interactive-only state.
-
-    Environment-dependent, so it never fails the run: it reports a warning
-    and returns [] to keep CI (where no key or config exists) clean.
-
-    Falls back to `.env` when the shell has no key, because the launcher is
-    what loads `.env` -- running the gate from a plain shell in a deployed
-    project would otherwise see nothing and report all-clear on a repo whose
-    interactive sessions are dead.
-    """
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
-    source = "shell environment"
-    if not key:
-        key = _key_from_env_file(root / ".env")
-        source = ".env"
-    config = Path(os.path.expanduser("~/.claude.json"))
-    if not key or len(key) < 20 or not config.exists():
-        return []
-
-    try:
-        data = json.loads(config.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return []
-
-    responses = data.get("customApiKeyResponses", {})
-    if not isinstance(responses, dict):
-        return []
-
-    # Claude Code fingerprints a custom key by its last 20 characters.
-    fingerprint = key[-20:]
-    if fingerprint in responses.get("rejected", []):
-        print(
-            f"[WARN] The ANTHROPIC_API_KEY from {source} is marked *rejected* "
-            "in ~/.claude.json.\n"
-            "  Interactive sessions will fail with 'Not logged in' "
-            "(-p and --bare modes are unaffected, so this hides well).\n"
-            "  Fix: python tools/approve_api_key.py --apply"
-        )
-    return []
-
-
 def check_skill_refs(root: Path = ROOT) -> list[str]:
     """Verify skill names cited as skills resolve to a real skill.
 
@@ -2243,17 +1983,6 @@ def main() -> int:
         run_engine_checks(kilo, ROOT / ".copilot", ".copilot", instruction_suffix=False)
     )
 
-    # .claude/ engine — different subdir names (skills/commands plural) + static infra
-    print("\n--- .claude/ ---")
-    claude_issues = check_claude(kilo, ROOT / ".claude", skip_set=skip_skills)
-    if claude_issues:
-        print("[DRIFT] Claude engine (.claude):")
-        for i in claude_issues:
-            print(f"  {i}")
-        all_issues.extend(claude_issues)
-    else:
-        print("[OK] Claude engine (.claude)")
-
     # .gemini/antigravity/ engine — nested path + skills/ plural, no memory check
     print("\n--- .gemini/ ---")
     gemini_issues = check_gemini(
@@ -2409,12 +2138,6 @@ def main() -> int:
         all_issues.extend(launcher_issues)
     else:
         print("[OK] Launcher defaults")
-
-    # API key approval — can an interactive session actually authenticate?
-    print("\n--- API Key Approval ---")
-    approval_issues = check_api_key_approval(ROOT)
-    all_issues.extend(approval_issues)
-    print("[OK] API key approval (or not applicable)")
 
     # Skill references — does the router point at skills that exist?
     print("\n--- Skill References ---")

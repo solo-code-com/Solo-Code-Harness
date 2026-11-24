@@ -23,7 +23,9 @@ def test_parse_models_output_extracts_ids_and_skips_banner():
 
 
 def test_parse_models_output_ignores_blank_lines():
-    assert antigravity_probe.parse_models_output("\n\ngemini-3.1-pro-low\tPro (Low)\n\n") == ["gemini-3.1-pro-low"]
+    assert antigravity_probe.parse_models_output(
+        "\n\ngemini-3.1-pro-low\tPro (Low)\n\n"
+    ) == ["gemini-3.1-pro-low"]
 
 
 def test_build_report_without_binary_marks_not_found():

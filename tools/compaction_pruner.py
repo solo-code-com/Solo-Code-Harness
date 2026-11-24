@@ -23,6 +23,7 @@ Usage:
     python tools/compaction_pruner.py --self-test
     python tools/compaction_pruner.py --text "..." --bytes 100
 """
+
 from __future__ import annotations
 
 import argparse
@@ -124,7 +125,9 @@ def _self_test() -> None:
     mb = "éééé"
     mb_pruned = prune(mb, 6)
     assert len(mb_pruned.encode("utf-8")) <= 6
-    mb_pruned.encode("utf-8")  # raises UnicodeEncodeError only if already valid; just decodes
+    mb_pruned.encode(
+        "utf-8"
+    )  # raises UnicodeEncodeError only if already valid; just decodes
     mb_pruned.encode("utf-8").decode("utf-8")  # proves valid UTF-8
 
     # Tiny budget falls back to a hard cut that still respects the budget.
@@ -145,7 +148,9 @@ def main() -> int:
     )
     parser.add_argument("--self-test", action="store_true", help="Run self-test")
     parser.add_argument("--text", help="Text to prune (stdin if omitted)")
-    parser.add_argument("--bytes", type=int, default=4000, help="Byte budget (default 4000)")
+    parser.add_argument(
+        "--bytes", type=int, default=4000, help="Byte budget (default 4000)"
+    )
     args = parser.parse_args()
 
     if args.self_test:

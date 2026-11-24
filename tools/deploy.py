@@ -59,7 +59,6 @@ harness_content_fingerprint = content_fingerprint
 # ROOT_FILES and .opencode/ is in DIRS_ALL / DIRS_OPENCODE.
 ROOT_FILES = [
     "AGENTS.md",
-    "CLAUDE.md",
     "kilo.jsonc",
     "opencode.json",
     ".mcp.json",
@@ -69,7 +68,6 @@ ROOT_FILES = [
     "eslint.config.mjs",
     "pyproject.toml",
     "Makefile",
-    "claude-env.ps1",
     "opencode-env.ps1",
     "antigravity-env.sh",
     "opencode-env.sh",
@@ -137,8 +135,6 @@ EXCLUSIVE_HARNESS_DIRS = {
     ".kilo",
     ".copilot",
     ".gemini",
-    ".claude",
-    ".claude-plugin",
     ".opencode",
     ".contracts",
 }
@@ -240,8 +236,6 @@ DIRS_ALL = [
     ".kilo",
     ".copilot",
     ".gemini",
-    ".claude",
-    ".claude-plugin",
     ".opencode",
     ".github",
     ".vscode",
@@ -264,13 +258,6 @@ DIRS_COPILOT = [
     "tools",
 ]
 
-DIRS_CLAUDE = [
-    ".claude",
-    ".claude-plugin",
-    ".github",
-    ".contracts",
-    "tools",
-]
 
 DIRS_OPENCODE = [
     ".opencode",
@@ -279,6 +266,7 @@ DIRS_OPENCODE = [
     # loads it, so ship that
     # location too.
     ".agents/skills",
+    ".agents/workflows",
     ".github",
     ".contracts",
     "tools",
@@ -305,7 +293,6 @@ EXCLUDE_FILES = {
     "usage.jsonl",
     ".DS_Store",
     "Thumbs.db",
-    "settings.local.json",  # .claude/ personal overrides — never deploy
     # Runtime state files — never belong in a deploy
     "token-log.jsonl",  # .kilo/state/token-log.jsonl
     "tool-count.json",  # .kilo/state/tool-count.json
@@ -315,7 +302,6 @@ EXCLUDE_FILES = {
     "deploy.py",
     "garden.py",
     "generate_harness.py",
-    "claude_engine.py",
     "opencode_engine.py",
     "validate_schemas.py",
     "migrate_to_shared_state.py",
@@ -471,8 +457,6 @@ dirs = [
     ".kilo",
     ".copilot",
     ".gemini",
-{local_only_dirs}    ".claude",
-    ".claude-plugin",
     ".opencode",
     ".contracts",
 ]
@@ -497,7 +481,6 @@ shared_dirs = [
 # File gốc harness — KHÔNG phải code dự án
 files = [
     "AGENTS.md",
-    "CLAUDE.md",
     "agent.yaml",
     "kilo.jsonc",
     "opencode.json",
@@ -507,7 +490,6 @@ files = [
     "eslint.config.mjs",
     "Makefile",
     "pyproject.toml",
-    "claude-env.ps1",
     "opencode-env.ps1",
     "antigravity-env.sh",
     "opencode-env.sh",
@@ -796,7 +778,7 @@ created: {timestamp}
 # Solo-Code-CLI's own accumulated memory content (MEMORY.md, project-
 # conventions.md, decisions-archive.md excluded from copy via EXCLUDE_FILES;
 # written fresh here).
-MEMORY_DIRS = [".kilo/memory", ".claude/memory", ".copilot/memory"]
+MEMORY_DIRS = [".kilo/memory", ".copilot/memory"]
 
 
 def _write_blank_memory_templates(target: Path, dirs: list[str], dry_run: bool) -> int:
@@ -1190,19 +1172,19 @@ def _run_command(cmd: list[str], cwd: Path, label: str, dry_run: bool) -> bool:
 
 
 def _print_opencode_skills_note(dirs: list[str]) -> None:
-    """Explain the partial `.claude/` dir that the OpenCode engine ships.
+    """Explain the shared `.agents/skills/` copy that the OpenCode engine ships.
 
     OpenCode loads the vendor-neutral `.agents/skills/` location,
-    so `--engine opencode` ships it. In that case the target's `.claude/` is a
+    so `--engine opencode` ships it. That directory is the vendor-neutral skills
     skills directory only (no agents/hooks) — say so, so it is not mistaken
-    for a full Claude Code setup.
+    library, not an engine-specific one.
     """
     if ".agents/skills" not in dirs:
         return
     print("\n  NOTE: .agents/skills/ ships with the OpenCode engine because OpenCode")
-    print("  loads the Claude-compatible skills location. That makes .claude/ here a")
+    print("  loads the vendor-neutral skills location, so every engine reads one copy.")
     print(
-        "  PARTIAL copy (skills only, no agents/hooks) — not a full Claude Code setup."
+        "  It is shared by all engines, not owned by one CLI — not a full Claude Code setup."
     )
 
 
@@ -1255,8 +1237,7 @@ def scaffold(
         dirs = DIRS_KILO
     elif engine == "copilot":
         dirs = DIRS_COPILOT
-    elif engine == "claude":
-        dirs = DIRS_CLAUDE
+
     elif engine == "opencode":
         dirs = DIRS_OPENCODE
 
@@ -1685,7 +1666,7 @@ def deploy(
     # to see that in the output rather than discover it in a diff. Snapshotted before the copy.
     watched_before = {
         name: (target_path / name).read_bytes()
-        for name in ("AGENTS.md", "CLAUDE.md", ".env.template")
+        for name in ("AGENTS.md", ".env.template")
         if (target_path / name).is_file()
     }
 
@@ -1693,8 +1674,7 @@ def deploy(
         dirs = DIRS_KILO
     elif engine == "copilot":
         dirs = DIRS_COPILOT
-    elif engine == "claude":
-        dirs = DIRS_CLAUDE
+
     elif engine == "opencode":
         dirs = DIRS_OPENCODE
 
@@ -1880,15 +1860,13 @@ def interactive() -> int:
 
     # Ask engine
     while True:
-        engine = (
-            input("Engine (all/kilo/copilot/claude/opencode) [all]: ").strip().lower()
-        )
+        engine = input("Engine (all/kilo/copilot/opencode) [all]: ").strip().lower()
         if not engine:
             engine = "all"
             break
-        if engine in ("all", "kilo", "copilot", "claude", "opencode"):
+        if engine in ("all", "kilo", "copilot", "opencode"):
             break
-        print("  Please enter 'all', 'kilo', 'copilot', 'claude', or 'opencode'.")
+        print("  Please enter 'all', 'kilo', 'copilot', or 'opencode'.")
 
     # Ask dry-run
     dry_run_input = input("Dry run? (y/N): ").strip().lower()
@@ -1952,7 +1930,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--engine",
-        choices=["all", "kilo", "copilot", "claude", "opencode"],
+        choices=["all", "kilo", "copilot", "opencode"],
         default="all",
         help="Which engine harness to deploy (default: all)",
     )

@@ -27,6 +27,7 @@ FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Core Functions ───────────────────────────────────────────────────────────
 
+
 def normalize_output(data: dict[str, Any]) -> dict[str, Any]:
     """
     Normalize output data by stripping timestamps, absolute paths, and
@@ -106,9 +107,7 @@ def replay_snapshot(test_name: str) -> dict[str, Any] | None:
 
 
 def compare_snapshots(
-    expected: dict[str, Any],
-    actual: dict[str, Any],
-    test_name: str
+    expected: dict[str, Any], actual: dict[str, Any], test_name: str
 ) -> bool:
     """
     Compare two snapshots and report differences.
@@ -141,7 +140,7 @@ def compare_snapshots(
         actual_str.splitlines(keepends=True),
         fromfile="expected",
         tofile="actual",
-        lineterm=""
+        lineterm="",
     )
 
     for line in diff:
@@ -151,6 +150,7 @@ def compare_snapshots(
 
 
 # ── Self-Test ────────────────────────────────────────────────────────────────
+
 
 def run_self_test() -> bool:
     """
@@ -168,12 +168,8 @@ def run_self_test() -> bool:
         "status": "success",
         "timestamp": datetime.now().isoformat(),  # Will be stripped
         "path": "/absolute/path/to/file.py",  # Will be normalized
-        "tokens": {
-            "input": 100,
-            "output": 50,
-            "cached": 20
-        },
-        "model": "deepseek-v4-pro"
+        "tokens": {"input": 100, "output": 50, "cached": 20},
+        "model": "deepseek-v4-pro",
     }
 
     # Step 1: Record
@@ -196,8 +192,10 @@ def run_self_test() -> bool:
     new_output["timestamp"] = datetime.now().isoformat()
 
     if not compare_snapshots(loaded, new_output, test_name):
-        print("[FAIL] Self-test failed: snapshots should match after normalization",
-              file=sys.stderr)
+        print(
+            "[FAIL] Self-test failed: snapshots should match after normalization",
+            file=sys.stderr,
+        )
         return False
 
     # Step 4: Test mismatch detection
@@ -222,6 +220,7 @@ def run_self_test() -> bool:
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Snapshot testing framework for CLI output validation"
@@ -229,25 +228,17 @@ def main():
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        "--record",
-        metavar="NAME",
-        help="Record a new snapshot with the given name"
+        "--record", metavar="NAME", help="Record a new snapshot with the given name"
     )
-    group.add_argument(
-        "--replay",
-        metavar="NAME",
-        help="Replay an existing snapshot"
-    )
+    group.add_argument("--replay", metavar="NAME", help="Replay an existing snapshot")
     group.add_argument(
         "--self-test",
         action="store_true",
-        help="Run self-test demonstrating record/replay/compare"
+        help="Run self-test demonstrating record/replay/compare",
     )
 
     parser.add_argument(
-        "--data",
-        type=str,
-        help="JSON string of data to record (for --record mode)"
+        "--data", type=str, help="JSON string of data to record (for --record mode)"
     )
 
     args = parser.parse_args()

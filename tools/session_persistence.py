@@ -56,6 +56,7 @@ def _now() -> str:
 
 # ── Core Functions ───────────────────────────────────────────────────────────
 
+
 def init_db(path: Path | None = None) -> sqlite3.Connection:
     """Open (creating if needed) the sessions SQLite database.
 
@@ -83,11 +84,15 @@ def init_db(path: Path | None = None) -> sqlite3.Connection:
         conn.execute("PRAGMA foreign_keys=ON")
         conn.executescript(SCHEMA_SQL)
     except sqlite3.Error as exc:
-        raise sqlite3.Error(f"Failed to initialize sessions database at {resolved}: {exc}") from exc
+        raise sqlite3.Error(
+            f"Failed to initialize sessions database at {resolved}: {exc}"
+        ) from exc
     return conn
 
 
-def record_session_start(session_id: str, branch: str, commit: str, *, path: Path | None = None) -> None:
+def record_session_start(
+    session_id: str, branch: str, commit: str, *, path: Path | None = None
+) -> None:
     """Record the start of a session.
 
     Inserts a new row with ``status`` = ``active`` and the current UTC time
@@ -116,7 +121,9 @@ def record_session_start(session_id: str, branch: str, commit: str, *, path: Pat
         conn.close()
 
 
-def record_session_end(session_id: str, files_changed: int, status: str, *, path: Path | None = None) -> None:
+def record_session_end(
+    session_id: str, files_changed: int, status: str, *, path: Path | None = None
+) -> None:
     """Record the end of a session.
 
     Sets ``end_time``, ``files_changed``, and ``status`` on the row created
@@ -232,7 +239,9 @@ def get_session(session_id: str, *, path: Path | None = None) -> dict[str, Any] 
     return _row_to_dict(row) if row is not None else None
 
 
-def search_sessions(branch: str | None = None, status: str | None = None, *, path: Path | None = None) -> list[dict[str, Any]]:
+def search_sessions(
+    branch: str | None = None, status: str | None = None, *, path: Path | None = None
+) -> list[dict[str, Any]]:
     """Search sessions by git branch and/or closing status.
 
     Filters are combined with AND; omitted filters match everything. Both
@@ -273,6 +282,7 @@ def search_sessions(branch: str | None = None, status: str | None = None, *, pat
 
 # ── Self-Test ────────────────────────────────────────────────────────────────
 
+
 def run_self_test() -> bool:
     """Exercise every public function against a throwaway temporary database.
 
@@ -290,9 +300,12 @@ def run_self_test() -> bool:
 
         # init_db must be idempotent
         conn = init_db(db)
-        tables = [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()]
+        tables = [
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        ]
         conn.close()
         if "sessions" not in tables:
             print("[FAIL] schema not created", file=sys.stderr)
@@ -325,18 +338,25 @@ def run_self_test() -> bool:
             print(f"[FAIL] list_sessions returned {len(listed)} rows", file=sys.stderr)
             return False
         if listed[0]["id"] != "sess-test-2":
-            print(f"[FAIL] list_sessions not newest-first: {listed[0]['id']}", file=sys.stderr)
+            print(
+                f"[FAIL] list_sessions not newest-first: {listed[0]['id']}",
+                file=sys.stderr,
+            )
             return False
 
         got = get_session("sess-test-1", path=db)
         if got is None:
-            print("[FAIL] get_session returned None for existing session", file=sys.stderr)
+            print(
+                "[FAIL] get_session returned None for existing session", file=sys.stderr
+            )
             return False
         if got["status"] != "completed" or got["files_changed"] != 3:
             print(f"[FAIL] get_session fields wrong: {got}", file=sys.stderr)
             return False
         if get_session("sess-ghost", path=db) is not None:
-            print("[FAIL] get_session should be None for unknown session", file=sys.stderr)
+            print(
+                "[FAIL] get_session should be None for unknown session", file=sys.stderr
+            )
             return False
 
         by_branch = search_sessions(branch="feature/x", path=db)
@@ -363,25 +383,29 @@ def run_self_test() -> bool:
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Solo-Code session tracking (SQLite, local-only)"
     )
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--self-test", action="store_true",
-                       help="Validate against a temp database")
-    group.add_argument("--list", action="store_true",
-                       help="List recent sessions")
-    group.add_argument("--get", metavar="SESSION_ID",
-                       help="Show a single session by id")
-    group.add_argument("--search", action="store_true",
-                       help="Search sessions (combine with --branch/--status)")
-    parser.add_argument("--limit", type=int, default=10,
-                        help="Max sessions for --list (default 10)")
-    parser.add_argument("--branch", type=str,
-                        help="Branch filter for --search")
-    parser.add_argument("--status", type=str,
-                        help="Status filter for --search")
+    group.add_argument(
+        "--self-test", action="store_true", help="Validate against a temp database"
+    )
+    group.add_argument("--list", action="store_true", help="List recent sessions")
+    group.add_argument(
+        "--get", metavar="SESSION_ID", help="Show a single session by id"
+    )
+    group.add_argument(
+        "--search",
+        action="store_true",
+        help="Search sessions (combine with --branch/--status)",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=10, help="Max sessions for --list (default 10)"
+    )
+    parser.add_argument("--branch", type=str, help="Branch filter for --search")
+    parser.add_argument("--status", type=str, help="Status filter for --search")
 
     args = parser.parse_args()
 
@@ -395,9 +419,11 @@ def main() -> int:
             print(f"[FAIL] {exc}", file=sys.stderr)
             return 1
         for s in sessions:
-            print(f"  {s['id']} [{s['status']}] {s['start_time'][:19]} "
-                  f"{s['branch'] or '-'} @ {s['commit_hash'] or '-'} "
-                  f"files={s['files_changed']}")
+            print(
+                f"  {s['id']} [{s['status']}] {s['start_time'][:19]} "
+                f"{s['branch'] or '-'} @ {s['commit_hash'] or '-'} "
+                f"files={s['files_changed']}"
+            )
         return 0
 
     if args.get:
@@ -414,8 +440,10 @@ def main() -> int:
             return 1
         sessions = search_sessions(branch=args.branch, status=args.status)
         for s in sessions:
-            print(f"  {s['id']} [{s['status']}] {s['start_time'][:19]} "
-                  f"{s['branch'] or '-'} @ {s['commit_hash'] or '-'}")
+            print(
+                f"  {s['id']} [{s['status']}] {s['start_time'][:19]} "
+                f"{s['branch'] or '-'} @ {s['commit_hash'] or '-'}"
+            )
         return 0
 
     return 0
