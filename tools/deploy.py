@@ -145,6 +145,7 @@ PROJECT_OWNED_ROOT_FILES = {
 # the harness no longer ships is by definition a leftover from an older
 # deploy, so full stale-cleanup is safe here.
 EXCLUSIVE_HARNESS_DIRS = {
+    ".agents",  # skills + workflows, harness-owned; mcp_config.json is excluded below
     ".kilo",
     ".copilot",
     ".gemini",
@@ -250,6 +251,8 @@ DIRS_ALL = [
     ".copilot",
     ".gemini",
     ".opencode",
+    ".agents/skills",
+    ".agents/workflows",
     ".github",
     ".vscode",
     ".contracts",
@@ -301,6 +304,8 @@ EXCLUDE_DIRS = {
     "logs",  # .kilo/logs/
 }
 EXCLUDE_FILES = {
+    ".agents/mcp_config.json",  # created by the Antigravity IDE, project-local
+    "mcp_config.json",  # same file when matched by basename
     ".env",
     "usage.log",
     "usage.jsonl",
@@ -472,6 +477,7 @@ dirs = [
     ".gemini",
     ".opencode",
     ".contracts",
+    ".agents",
 ]
 
 # Thư mục DÙNG CHUNG — harness đặt file vào đây, nhưng dự án CŨNG sở hữu file

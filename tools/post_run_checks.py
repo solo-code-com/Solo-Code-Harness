@@ -45,16 +45,11 @@ def memory_issues(root: Path) -> list[dict[str, object]]:
                 size = len(path.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
-            if size > MEMORY_CAP_BLOCK:
-                issues.append(
-                    {
-                        "kind": "memory-cap",
-                        "severity": "block",
-                        "path": str(path),
-                        "chars": size,
-                    }
-                )
-            elif size > MEMORY_CAP_WARN:
+            # Advisory even above the hard cap: the old memory_gate blocked a
+            # write to that file, not every unrelated tool call. Blocking a
+            # code task because a memory file is long would teach operators
+            # to ignore this check.
+            if size > MEMORY_CAP_WARN:
                 issues.append(
                     {
                         "kind": "memory-cap",

@@ -18,10 +18,11 @@ def _memory(root: Path, engine: str, name: str, chars: int) -> Path:
     return path
 
 
-def test_memory_over_the_block_cap_is_flagged(tmp_path):
+def test_memory_over_the_block_cap_is_still_only_a_warning(tmp_path):
+    """A long memory file must not fail an unrelated delegation."""
     _memory(tmp_path, ".kilo", "MEMORY.md", checks.MEMORY_CAP_BLOCK + 1)
     issues = checks.memory_issues(tmp_path)
-    assert [i["severity"] for i in issues] == ["block"]
+    assert [i["severity"] for i in issues] == ["warn"]
 
 
 def test_memory_between_warn_and_block_is_a_warning(tmp_path):

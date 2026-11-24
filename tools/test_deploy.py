@@ -219,8 +219,12 @@ def test_every_deployed_dir_is_classified(tmp_path):
     Otherwise it silently defaults to full-wipe cleanup — the exact failure
     mode that destroyed project files in .github/ and tools/.
     """
-    known = deploy.SHARED_DIRS | deploy.EXCLUSIVE_HARNESS_DIRS
-    unclassified = [d for d in deploy.DIRS_ALL if d not in known]
+    # A nested entry (".agents/skills") is classified by its top segment: the
+    # parent directory is harness-owned; the entry only narrows what ships.
+    known = {
+        d.split("/", 1)[0] for d in deploy.SHARED_DIRS | deploy.EXCLUSIVE_HARNESS_DIRS
+    }
+    unclassified = [d for d in deploy.DIRS_ALL if d.split("/", 1)[0] not in known]
     assert not unclassified, (
         f"unclassified deploy dirs {unclassified} — add each to SHARED_DIRS "
         f"(project also owns files there) or EXCLUSIVE_HARNESS_DIRS"

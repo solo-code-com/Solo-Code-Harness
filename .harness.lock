@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-24T07:44:40Z"
+generated_at = "2026-11-24T08:11:50Z"
 mode = "root"
-content_fingerprint = "sha256:609ef141d485365faefea2dbaa7f02af75ef966348cdf1ebb1d47c5b69f7e6e5"
+content_fingerprint = "sha256:384d097dfe162d0282995ed9c2b4dd94018e9c00fa4879452ff330453602a28f"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -42,6 +42,7 @@ dirs = [
     ".gemini",
     ".opencode",
     ".contracts",
+    ".agents",
 ]
 
 # Thư mục DÙNG CHUNG — harness đặt file vào đây, nhưng dự án CŨNG sở hữu file
