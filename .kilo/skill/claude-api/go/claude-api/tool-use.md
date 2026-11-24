@@ -217,4 +217,3 @@ response, err := client.Beta.Messages.New(ctx, anthropic.BetaMessageNewParams{
 ```
 
 ---
-

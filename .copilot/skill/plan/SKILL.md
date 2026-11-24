@@ -1,7 +1,7 @@
 ---
 name: plan
-description: "Plan mode: write an actionable markdown plan to .kilo/plans/, no execution. Bite-sized tasks, exact paths, complete code."
-license: MIT
+description: Plan mode: write an actionable markdown plan to .kilo/plans/, no execution. Bite-sized tasks, exact paths, complete code.
+disable-model-invocation: true
 ---
 
 # Plan Mode

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Worker preflight - which of the harness's workers can run right now.
 
-The repo has seven ways to run a worker (opencode, kilo, codex, antigravity, model_api, dsh)
+The repo has six ways to run a worker (opencode, kilo, antigravity, model_api, dsh)
 and no single command that says which of them is usable. In practice a session finds out one
 at a time, by watching a delegate fail: the Kilo arm timed out in ~40% of runs and Codex
 returned empty replies, and both facts were discovered by trial.
@@ -115,25 +115,6 @@ def check_kilo() -> dict[str, object]:
     return _row("kilo", True, state, "ready" if ok and server_up else "unusable")
 
 
-def check_codex() -> dict[str, object]:
-    """codex: the `codex` executable on PATH or via common install locations."""
-    binary = shutil.which("codex")
-    if not binary:
-        for cand in (
-            TOOLS_DIR.parent / ".solocode" / "npm" / "node_modules" / ".bin" / "codex",
-            Path.home() / ".local" / "bin" / "codex",
-            Path.home() / ".npm-global" / "bin" / "codex",
-            Path("/usr/local/bin/codex"),
-        ):
-            if cand.is_file() and os.access(cand, os.X_OK):
-                binary = str(cand)
-                break
-    if not binary:
-        return _row("codex", False, "not on PATH", "unusable")
-    ok, version = probe_version(binary)
-    return _row("codex", True, version, "ready" if ok else "unusable")
-
-
 def check_antigravity() -> dict[str, object]:
     """antigravity: the `agy` binary the delegate resolves, or running IDE orchestrator."""
     binary = antigravity_delegate.find_agy_binary()
@@ -233,7 +214,6 @@ def check_wsl_sandbox() -> dict[str, object]:
 WORKERS = (
     check_opencode,
     check_kilo,
-    check_codex,
     check_antigravity,
     check_model_api,
     check_dsh,

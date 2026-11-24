@@ -64,8 +64,8 @@ antigravity-sdk-python-main/
 # lints the vendored course's Python files and fails the checklist gate.
 learn-harness-engineering-main/
 
-# Antigravity IDE custom root junction (mirrors .gemini/antigravity/skills locally)
-/.agents/skills/
+# .agents/skills is generated and tracked: it is the vendor-neutral skills copy
+# that OpenCode reads, and it must survive the Claude Code engine's removal.
 
 # Local reference document kept on disk, not part of the harness or the project.
 # Promote it with `git add -f` after removing this rule if it should be tracked.

@@ -1,7 +1,7 @@
 ---
 name: task-delegation
-description: "Analyze tasks for parallel execution, spawn sub-agents via agent_manager, and merge results. Use when: parallel tasks, delegate work, spawn sub-agent, run tasks in background, split work, multi-agent."
-license: MIT
+description: Analyze tasks for parallel execution, spawn sub-agents via agent_manager, and merge results. Use when: parallel tasks, delegate work, spawn sub-agent, run tasks in background, split work, multi-agent.
+disable-model-invocation: true
 ---
 
 # Task Delegation — Parallel Sub-agent Dispatch

@@ -13,4 +13,3 @@ stream.text.each { |text| print(text) }
 ```
 
 ---
-

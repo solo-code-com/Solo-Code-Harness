@@ -24,4 +24,3 @@ foreach ($stream as $event) {
 ```
 
 ---
-

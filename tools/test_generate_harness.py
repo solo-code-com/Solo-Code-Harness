@@ -551,3 +551,18 @@ def test_module_entry_point_exits_with_the_main_status(monkeypatch, capsys):
 
     assert excinfo.value.code == 0
     assert "--harness" in capsys.readouterr().out
+
+
+def test_agents_skills_are_generated_for_any_harness(tmp_path, monkeypatch):
+    """The vendor-neutral skills copy must not depend on the Claude engine run."""
+    _write(
+        tmp_path / ".kilo" / "skill" / "demo" / "SKILL.md",
+        "---\nname: demo\n---\nbody\n",
+    )
+    monkeypatch.setattr(generate_harness, "ROOT_DIR", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["generate_harness.py", "--harness", "opencode"])
+
+    # The engine run may exit non-zero on a minimal tree; what matters here is
+    # that the vendor-neutral copy is produced regardless of --harness.
+    generate_harness.main()
+    assert (tmp_path / ".agents" / "skills" / "demo" / "SKILL.md").is_file()

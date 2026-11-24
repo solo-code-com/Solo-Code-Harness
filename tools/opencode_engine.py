@@ -1051,8 +1051,8 @@ def generate_commands(kilo_root: Path, opencode_root: Path) -> int:
 def prune_duplicate_skills(kilo_root: Path, opencode_root: Path) -> int:
     """Remove any `.opencode/skills/<id>` that mirrors a `.kilo/skill/<id>`.
 
-    OpenCode loads `.opencode/skills/` plus the Claude-compatible
-    `.claude/skills/`, so the same skill id in both registers twice. The
+    OpenCode loads `.opencode/skills/` plus `.agents/skills/`, so the same skill
+    id in both registers twice. The
     `.opencode/skills/` directory itself is now used for instruction-derived
     skills (see generate_instruction_skills), so only mirror ids are pruned --
     never the whole directory.
@@ -1068,7 +1068,7 @@ def prune_duplicate_skills(kilo_root: Path, opencode_root: Path) -> int:
         if d.name in kilo_ids:
             shutil.rmtree(d)
             print(
-                f"  [PRUNE] skills/{d.name}/ (mirrors .kilo/skill — already in .claude/skills)"
+                f"  [PRUNE] skills/{d.name}/ (mirrors .kilo/skill — already in .agents/skills)"
             )
             removed += 1
     if not removed:

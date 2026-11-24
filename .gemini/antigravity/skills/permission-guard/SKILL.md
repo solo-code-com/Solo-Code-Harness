@@ -1,7 +1,7 @@
 ---
 name: permission-guard
-description: "Guard destructive operations — deleting files/dirs, modifying credentials, changing system configs, bulk refactors, database schema changes. Use when: delete, rm, remove, drop, truncate, credentials, config change, bulk edit."
-license: MIT
+description: Guard destructive operations. Use when: delete, rm, remove, drop, truncate, credentials, config change, bulk edit.
+disable-model-invocation: true
 ---
 
 # Permission Guard

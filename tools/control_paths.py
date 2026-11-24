@@ -25,6 +25,8 @@ CONTROL_PATHS: tuple[str, ...] = (
     ".kilo/hooks/",
     ".claude/hooks/",
     ".opencode/",
+    "opencode.json",
+    ".solocode/",
     "AGENTS.md",
     "CLAUDE.md",
     ".mcp.json",

@@ -40,10 +40,8 @@ while IFS= read -r line || [ -n "$line" ]; do
     esac
 done < "$ENV_FILE"
 
-# FreeModel credentials alias
-if [ -n "${OPENAI_API_KEY:-}" ] && [ -z "${FREEMODEL_API_KEY:-}" ]; then
-    export FREEMODEL_API_KEY="$OPENAI_API_KEY"
-fi
+# No FreeModel alias: that provider was removed on 2026-11-23, and re-deriving
+# FREEMODEL_API_KEY here would inject the banned variable into every session.
 
 # Normalize OPENAI_BASE_URL (strip /v1 because config appends it)
 if [ -n "${OPENAI_BASE_URL:-}" ]; then

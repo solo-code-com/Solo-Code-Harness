@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-24T01:06:30Z"
+generated_at = "2026-11-24T01:35:22Z"
 mode = "root"
-content_fingerprint = "sha256:9f11398f79144dde5952864f4810278c4b1ef058e63d46118928cc37d3d2e001"
+content_fingerprint = "sha256:e4f1c176e8447c0fecd68f8ea479bb5e52ee4fae68ecb5e1fbe17572a1ec75c7"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -40,7 +40,6 @@ dirs = [
     ".kilo",
     ".copilot",
     ".gemini",
-    ".agents",
     ".claude",
     ".claude-plugin",
     ".opencode",

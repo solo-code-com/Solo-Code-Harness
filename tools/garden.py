@@ -846,6 +846,12 @@ def check_gemini(
                 )
                 if count == 0:
                     issues.append(".agents/skills contains no valid skills")
+                else:
+                    issues.extend(
+                        check_skill_content(
+                            ROOT / ".kilo" / "skill", agents_skills, ".agents"
+                        )
+                    )
             except OSError as err:
                 issues.append(f".agents/skills is broken: {err}")
 
@@ -874,12 +880,10 @@ def check_opencode(src: Path, dst: Path) -> list[str]:
     issues.extend(_check_parity_dir(src, dst, ".opencode", "agents"))
 
     # Skills: `.opencode/skills/` holds instruction-derived on-demand skills and
-    # must NOT mirror .kilo/skill/* -- those already load from .claude/skills/.
+    # must NOT mirror .kilo/skill/* -- those already load from .agents/skills/.
     dst_skills = dst / "skills"
-    if not (ROOT / ".claude" / "skills").is_dir():
-        issues.append(
-            "Missing skills source: .claude/skills (OpenCode-compatible location)"
-        )
+    if not (ROOT / ".agents" / "skills").is_dir():
+        issues.append("Missing skills source: .agents/skills (vendor-neutral location)")
     src_skill = src / "skill"
     if dst_skills.is_dir() and src_skill.is_dir():
         kilo_ids = {p.name for p in src_skill.iterdir() if p.is_dir()}

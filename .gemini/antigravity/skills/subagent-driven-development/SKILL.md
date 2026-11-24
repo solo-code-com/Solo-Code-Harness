@@ -1,7 +1,7 @@
 ---
 name: subagent-driven-development
 description: Execute plans via task subagents (2-stage review).
-license: MIT
+disable-model-invocation: true
 ---
 
 # Subagent-Driven Development

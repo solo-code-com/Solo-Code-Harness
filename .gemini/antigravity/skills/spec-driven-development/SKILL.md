@@ -1,6 +1,7 @@
 ---
 name: spec-driven-development
-description: "Creates specs before coding. Use when starting a new project, feature, or significant change and no specification exists yet. Use when requirements are unclear, ambiguous, or only exist as a vague idea."
+description: Creates specs before coding. Use when starting a new project, feature, or significant change and no specification exists yet.
+disable-model-invocation: true
 ---
 
 # Spec-Driven Development

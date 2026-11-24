@@ -270,6 +270,15 @@ def main() -> int:
         )
         rc = rc or oc_rc
 
+    # `.agents/skills/` is the vendor-neutral copy OpenCode reads; it outlives the
+    # Claude Code engine, whose own mirror is a separate destination.
+    print("\n--- Agent skills (.agents/skills) ---")
+    engine = _load_claude_engine()
+    generate_skills = getattr(engine, "generate_skills", None)
+    if generate_skills is not None:
+        ag_rc = generate_skills(kilo_root, ROOT_DIR / ".agents", skip_names=skip_names)
+        rc = rc or ag_rc
+
     print("\n--- Agent mirrors (.copilot, .gemini) ---")
     sync_agent_mirrors(kilo_root, ROOT_DIR)
     print("\n--- Instruction mirrors (.copilot, .gemini) ---")

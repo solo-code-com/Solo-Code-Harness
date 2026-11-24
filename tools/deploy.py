@@ -164,7 +164,7 @@ SHARED_DIRS = {".github", ".vscode", "tools"}
 # this repo IS the harness, a target receives a subset). A test asserts
 # root_lock_dirs == EXCLUSIVE_HARNESS_DIRS | LOCAL_ONLY_HARNESS_DIRS, so a new
 # engine dir cannot be silently omitted when the lock is regenerated.
-LOCAL_ONLY_HARNESS_DIRS = {".agents"}
+LOCAL_ONLY_HARNESS_DIRS: set[str] = set()
 
 # Files the harness shipped into SHARED_DIRS in earlier versions and no
 # longer ships. These are the only shared-dir paths cleanup may delete
@@ -276,9 +276,9 @@ DIRS_OPENCODE = [
     ".opencode",
     # `.opencode/skills/` (instruction-derived, on-demand skills) ships inside
     # `.opencode`. The .kilo/skill library is not mirrored there — OpenCode
-    # loads it from the Claude-compatible `.claude/skills/`, so ship that
+    # loads it, so ship that
     # location too.
-    ".claude/skills",
+    ".agents/skills",
     ".github",
     ".contracts",
     "tools",
@@ -806,7 +806,7 @@ def _write_blank_memory_templates(target: Path, dirs: list[str], dry_run: bool) 
     written = 0
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     # Only write memory for engines whose full root is deployed — a partial
-    # path like ".claude/skills" (OpenCode's Claude-compatible skills source)
+    # path like ".agents/skills" (the vendor-neutral skills source)
     # must not create a stray ".claude/memory/" the engine never reads.
     deployed_roots = set(dirs)
     for mem_rel in MEMORY_DIRS:
@@ -1192,14 +1192,14 @@ def _run_command(cmd: list[str], cwd: Path, label: str, dry_run: bool) -> bool:
 def _print_opencode_skills_note(dirs: list[str]) -> None:
     """Explain the partial `.claude/` dir that the OpenCode engine ships.
 
-    OpenCode loads the Claude-compatible `.claude/skills/` location natively,
+    OpenCode loads the vendor-neutral `.agents/skills/` location,
     so `--engine opencode` ships it. In that case the target's `.claude/` is a
     skills directory only (no agents/hooks) — say so, so it is not mistaken
     for a full Claude Code setup.
     """
-    if ".claude/skills" not in dirs:
+    if ".agents/skills" not in dirs:
         return
-    print("\n  NOTE: .claude/skills/ ships with the OpenCode engine because OpenCode")
+    print("\n  NOTE: .agents/skills/ ships with the OpenCode engine because OpenCode")
     print("  loads the Claude-compatible skills location. That makes .claude/ here a")
     print(
         "  PARTIAL copy (skills only, no agents/hooks) — not a full Claude Code setup."

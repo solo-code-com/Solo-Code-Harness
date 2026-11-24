@@ -1,6 +1,6 @@
 ---
 name: gemini-delegation
-description: Routes UI verification, visual inspection, broad read-heavy audits, or independent review to Gemini in Antigravity IDE via manual file handoff (inbox/outbox). Headless agy.exe delegation is retired.
+description: Routes read-heavy work, broad scoped changes, and independent review to Gemini through the Antigravity headless CLI, selecting gemini-3.8-flash high/medium/low by task complexity. Use GUI inbox/outbox handoff only when a rendered UI needs human verification.
 ---
 
 # Gemini/Antigravity Delegation — Headless Worker

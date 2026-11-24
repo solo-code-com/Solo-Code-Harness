@@ -1,7 +1,7 @@
 ---
 name: requesting-code-review
-description: "Pre-commit review: security scan, quality gates, auto-fix."
-license: MIT
+description: Pre-commit review: security scan, quality gates, auto-fix.
+disable-model-invocation: true
 ---
 
 # Pre-Commit Code Verification

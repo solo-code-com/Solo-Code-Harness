@@ -464,10 +464,28 @@ FORBIDDEN_IN_PROMPT: tuple[str, ...] = (
 )
 
 
+#: Shapes that need a pattern rather than a substring: a force-push refspec can be
+#: written with a leading +, and rm flags can be split across tokens.
+_PROMPT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("git push +refspec", re.compile(r"git\s+push[^\n]{0,60}\s\+\S+")),
+    (
+        "rm recursive+force",
+        re.compile(r"\brm\b[^\n]{0,30}-[a-z]*r[a-z]*[^\n]{0,20}-[a-z]*f"),
+    ),
+    (
+        "rm force+recursive",
+        re.compile(r"\brm\b[^\n]{0,30}-[a-z]*f[a-z]*[^\n]{0,20}-[a-z]*r"),
+    ),
+)
+
+
 def match_prompt(text: str) -> str | None:
-    """Return the first forbidden fragment in ``text``, ignoring case."""
+    """Return the first forbidden fragment or shape in ``text``, ignoring case."""
     lowered = text.lower()
     for fragment in FORBIDDEN_IN_PROMPT:
         if fragment in lowered:
             return fragment
+    for label, pattern in _PROMPT_PATTERNS:
+        if pattern.search(lowered):
+            return label
     return None

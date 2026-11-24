@@ -30,7 +30,7 @@ Các tài liệu trong `docs/` được phân thành 3 nhóm trạng thái:
 | [`audit-2026-09-11.md`](docs/audit-2026-09-11.md) | Kiểm định & Sức khỏe | 2026-09-11 | OpenCode CLI | `Historical Archive` | Rà soát và chuẩn hoá tính nhất quán giữa cấu hình harness, docs và test. |
 | [`handoff-2026-09-11.md`](docs/handoff-2026-09-11.md) | Bàn giao & Quy trình | 2026-09-11 | OpenCode CLI | `Historical Archive` | Biên bản bàn giao phiên làm việc và yêu cầu Claude Code phân tích độc lập. |
 | [`deepseek-cross-review-antigravity.md`](docs/deepseek-cross-review-antigravity.md) | Cross-Review | 2026-08-28 | Orchestrator | `Historical Archive` | Đề cương yêu cầu review vòng 1 cho tích hợp `agy.exe` headless worker. |
-| [`codex-antigravity-cross-review-report.md`](docs/codex-antigravity-cross-review-report.md) | Cross-Review | 2026-08-28 | Codex | `Historical Archive` | Báo cáo kết quả rà soát Antigravity headless worker (danh mục phát hiện F1–F11). |
+| `codex-antigravity-cross-review-report.md` (removed 2026-11-23, Codex engine decommissioned) | Cross-Review | 2026-08-28 | Codex | `Historical Archive` | Báo cáo kết quả rà soát Antigravity headless worker (danh mục phát hiện F1–F11). |
 | [`deepseek-cross-review-antigravity-round2.md`](docs/deepseek-cross-review-antigravity-round2.md) | Cross-Review | 2026-08-29 | Orchestrator | `Historical Archive` | Đề cương review vòng 2 về tính ổn định, concurrency và an toàn subprocess. |
 | [`review-open-code-review-2026-09-16.md`](docs/review-open-code-review-2026-09-16.md) | Cross-Review | 2026-09-16 | Kilo | `Historical Archive` | Phân tích bài học từ `open-code-review` và đề xuất nâng cấp hệ thống harness. |
 | [`deepseek-harness-upgrade-review-plan.md`](docs/deepseek-harness-upgrade-review-plan.md) | Cross-Review | 2026-09-26 | ChatGPT | `Historical Archive` | Đề cương phản biện kế hoạch đánh giá & nâng cấp harness (validator generic 52/100). **?? g?p 2026-10-16** v?o [`archive-harness-upgrade-review-and-audit-reports-2026.md`](docs/archive-harness-upgrade-review-and-audit-reports-2026.md) ? file n?y nay l? con tr?. |
@@ -78,7 +78,7 @@ Theo dõi tiến trình củng cố chất lượng và dọn dẹp drift cấu 
 Hồ sơ đối chiếu và kiểm tra chéo giữa các tác tử AI độc lập:
 - Bộ tài liệu review Antigravity Headless Worker:
   - Yêu cầu ban đầu: [`deepseek-cross-review-antigravity.md`](docs/deepseek-cross-review-antigravity.md)
-  - Kết quả rà soát F1–F11: [`codex-antigravity-cross-review-report.md`](docs/codex-antigravity-cross-review-report.md)
+  - Kết quả rà soát F1–F11: `codex-antigravity-cross-review-report.md` (removed 2026-11-23, Codex engine decommissioned)
   - Yêu cầu review vòng 2: [`deepseek-cross-review-antigravity-round2.md`](docs/deepseek-cross-review-antigravity-round2.md)
 - Rà soát công cụ bên ngoài:
   - [`review-open-code-review-2026-09-16.md`](docs/review-open-code-review-2026-09-16.md): Báo cáo thẩm định bộ công cụ `open-code-review`.

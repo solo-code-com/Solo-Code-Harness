@@ -39,6 +39,14 @@ BANNED_HOSTS = frozenset(
 )
 
 #: Config files a project may use to declare its own providers.
+#: The OpenCode CLI also reads a user-level config, so a banned provider there is
+#: reachable from every project. Kept as a module constant so tests can point it
+#: at a temporary home instead of the real one.
+HOME_CONFIG_FILES = (
+    Path.home() / ".config" / "opencode" / "opencode.json",
+    Path.home() / ".config" / "opencode" / "opencode.jsonc",
+)
+
 PROVIDER_CONFIG_FILES = (
     Path(".opencode") / "opencode.json",
     Path(".opencode") / "opencode.jsonc",
@@ -102,6 +110,7 @@ def refusal_for_project(
         return None
 
     root = Path(start or ".").resolve()
+
     for relative in PROVIDER_CONFIG_FILES:
         candidate = root / relative
         try:
@@ -115,6 +124,20 @@ def refusal_for_project(
             return (
                 f"tier={tier} refuses provider {host} declared in {candidate}. "
                 "Remove the banned provider from this project's config."
+            )
+
+    for candidate in HOME_CONFIG_FILES:
+        try:
+            if not candidate.is_file():
+                continue
+            text = candidate.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        host = banned_host(text)
+        if host:
+            return (
+                f"tier={tier} refuses provider {host} declared in {candidate}. "
+                "Remove it from the user-level OpenCode config."
             )
 
     for name in var_names:

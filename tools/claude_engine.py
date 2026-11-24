@@ -85,8 +85,28 @@ def _copy_if_changed(src: Path, dst: Path) -> None:
 def _copy_tree_if_changed(src: Path, dst: Path) -> None:
     """Synchronize a generated directory without rewriting an identical tree."""
     source_paths = {path.relative_to(src) for path in src.rglob("*")}
+
+    # Normalise the trailing newline for text files. The repository's own
+    # end-of-file hook rejects a file without one, so a verbatim copy turns every
+    # regeneration into hook churn. Comparison and write both use these bytes, so
+    # the generated tree is stable.
+    def _normalized(rel: Path, data: bytes) -> bytes:
+        if rel.suffix.lower() in {
+            ".md",
+            ".txt",
+            ".py",
+            ".json",
+            ".yml",
+            ".yaml",
+            ".sh",
+            ".ps1",
+            ".js",
+        }:
+            return data if data.endswith(b"\n") else data + b"\n"
+        return data
+
     source_files = {
-        path.relative_to(src): path.read_bytes()
+        path.relative_to(src): _normalized(path.relative_to(src), path.read_bytes())
         for path in src.rglob("*")
         if path.is_file()
     }
