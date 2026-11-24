@@ -34,7 +34,7 @@ SECRET_SCANNER = Path(".github") / "scripts" / "security_scan.py"
 def memory_issues(root: Path) -> list[dict[str, object]]:
     """Flag memory files over the cap the retired memory_gate enforced."""
     issues: list[dict[str, object]] = []
-    for engine in (".kilo", ".copilot"):
+    for engine in (".kilo",):
         memory_dir = root / engine / "memory"
         if not memory_dir.is_dir():
             continue

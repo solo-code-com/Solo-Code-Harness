@@ -989,12 +989,6 @@ _ENGINE_LAYOUT = {
         "instruction": "instruction",
         "rules": "rules",
     },
-    ".copilot": {
-        "skill": "skill",
-        "agent": "agents",
-        "command": "command",
-        "instruction": "instruction",
-    },
     ".gemini": {
         "skill": "skills",
         "agent": "agents",
@@ -1013,7 +1007,7 @@ _ENGINE_LAYOUT = {
 _ENGINE_ROOT = {".gemini": Path(".gemini") / "antigravity"}
 
 # Matches an engine mention anywhere on the line, e.g. "`.gemini/` commands (14)".
-_ENGINE_MENTION = re.compile(r"`?(\.(?:kilo|claude|copilot|gemini|opencode))/")
+_ENGINE_MENTION = re.compile(r"`?(\.(?:kilo|gemini|opencode))/")
 
 # A count in prose may carry thousands separators: "1,000 agents" must read as
 # 1000. Matching the grouped form as one capture stops the comma from starting
@@ -1061,7 +1055,6 @@ def check_doc_counts(root: Path = ROOT) -> list[str]:
         "AGENTS.md",
         "CLAUDE.md",
         "README.md",
-        ".github/copilot-instructions.md",
         ".gemini/antigravity/AGENTS.md",
         ".claude-plugin/plugin.json",
         ".claude-plugin/marketplace.json",
@@ -1494,11 +1487,9 @@ _DOC_FILES_TO_SCAN: list[str] = [
     "AGENTS.md",
     "CLAUDE.md",
     "README.md",
-    ".github/copilot-instructions.md",
     ".gemini/antigravity/AGENTS.md",
     ".kilo/instruction/harness-checklist.md",
     ".claude/instruction/harness-checklist.md",
-    ".copilot/instruction/harness-checklist.md",
 ]
 
 
@@ -1742,7 +1733,6 @@ def check_skill_refs(root: Path = ROOT) -> list[str]:
     skill_dirs = [
         ".kilo/skill",
         ".claude/skills",
-        ".copilot/skill",
         ".gemini/antigravity/skills",
     ]
     for d in skill_dirs:
@@ -1773,7 +1763,6 @@ def check_skill_refs(root: Path = ROOT) -> list[str]:
 _SYMLINK_SCAN_DIRS: tuple[str, ...] = (
     ".kilo",
     ".claude",
-    ".copilot",
     ".gemini",
     ".opencode",
     ".agents",
@@ -1976,12 +1965,6 @@ def main() -> int:
         all_issues.extend(symlink_issues)
     else:
         print("[OK] No symlinks in harness directories")
-
-    # .copilot/ engine — direct copy, no suffix
-    print("--- .copilot/ ---")
-    all_issues.extend(
-        run_engine_checks(kilo, ROOT / ".copilot", ".copilot", instruction_suffix=False)
-    )
 
     # .gemini/antigravity/ engine — nested path + skills/ plural, no memory check
     print("\n--- .gemini/ ---")

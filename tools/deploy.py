@@ -152,7 +152,6 @@ PROJECT_OWNED_ROOT_FILES = {
 EXCLUSIVE_HARNESS_DIRS = {
     ".agents",  # skills + workflows, harness-owned; mcp_config.json is excluded below
     ".kilo",
-    ".copilot",
     ".gemini",
     ".opencode",
     ".contracts",
@@ -253,7 +252,6 @@ def _legacy_harness_leftovers(target: Path) -> list[str]:
 # Directories to copy (relative to ROOT)
 DIRS_ALL = [
     ".kilo",
-    ".copilot",
     ".gemini",
     ".opencode",
     ".agents/skills",
@@ -268,14 +266,6 @@ DIRS_KILO = [
     ".kilo",
     ".github",
     ".contracts",
-    "tools",
-]
-
-DIRS_COPILOT = [
-    ".copilot",
-    ".github",
-    ".contracts",
-    ".vscode",
     "tools",
 ]
 
@@ -478,7 +468,6 @@ content_fingerprint = "{content_fingerprint}"
 # Thư mục harness — toàn bộ nội dung là harness, KHÔNG chứa code dự án
 dirs = [
     ".kilo",
-    ".copilot",
     ".gemini",
     ".opencode",
     ".contracts",
@@ -692,53 +681,6 @@ def _transform_agent_frontmatter(source_text: str, filename: str) -> str:
     return f"---\n{copilot_frontmatter}---\n{body_md.strip()}\n"
 
 
-def _copy_copilot_agents_to_github(
-    target: Path, dry_run: bool = False
-) -> tuple[int, int]:
-    """Copy .copilot/agents/*.md → .github/agents/*.agent.md for Copilot discovery.
-
-    Copilot reads custom agents from .github/agents/*.agent.md, not .copilot/agents/.
-    Returns (new_count, updated_count).
-    """
-    copilot_agents_src = ROOT / ".copilot" / "agents"
-    github_agents_dst = target / ".github" / "agents"
-
-    if not copilot_agents_src.is_dir():
-        return 0, 0
-
-    new_count, updated_count = 0, 0
-    github_agents_dst.mkdir(parents=True, exist_ok=True)
-
-    for src_file in sorted(copilot_agents_src.glob("*.md")):
-        dst_name = src_file.stem + ".agent.md"
-        dst_file = github_agents_dst / dst_name
-
-        if dry_run:
-            exists = "[UPD]" if dst_file.exists() else "[NEW]"
-            print(
-                f"  [DRY] {exists} .github/agents/{dst_name} (from .copilot/agents/{src_file.name})"
-            )
-            new_count += 1
-            continue
-
-        source_text = src_file.read_text(encoding="utf-8")
-        transformed = _transform_agent_frontmatter(source_text, src_file.stem)
-
-        old_text = dst_file.read_text(encoding="utf-8") if dst_file.exists() else ""
-
-        if old_text != transformed:
-            dst_file.parent.mkdir(parents=True, exist_ok=True)
-            dst_file.write_text(transformed, encoding="utf-8")
-            if old_text:
-                print(f"  [UPD] .github/agents/{dst_name}")
-                updated_count += 1
-            else:
-                print(f"  [NEW] .github/agents/{dst_name}")
-                new_count += 1
-
-    return new_count, updated_count
-
-
 BLANK_MEMORY_MD = """# Memory Index
 
 > Persistent cross-session memory for THIS project. The AI reads this at
@@ -802,7 +744,7 @@ created: {timestamp}
 # Solo-Code-CLI's own accumulated memory content (MEMORY.md, project-
 # conventions.md, decisions-archive.md excluded from copy via EXCLUDE_FILES;
 # written fresh here).
-MEMORY_DIRS = [".kilo/memory", ".copilot/memory"]
+MEMORY_DIRS = [".kilo/memory"]
 
 
 def _write_blank_memory_templates(target: Path, dirs: list[str], dry_run: bool) -> int:
@@ -870,12 +812,6 @@ def _shared_harness_paths(dirs: list[str]) -> list[str]:
         for item in src.rglob("*"):
             if item.is_file() and should_copy(item):
                 paths.add(item.relative_to(ROOT).as_posix())
-    # .github/agents/*.agent.md are generated at deploy time from
-    # .copilot/agents/, so they never appear in the source tree.
-    copilot_agents = ROOT / ".copilot" / "agents"
-    if ".github" in dirs and copilot_agents.is_dir():
-        for f in copilot_agents.glob("*.md"):
-            paths.add(f".github/agents/{f.stem}.agent.md")
     return sorted(paths)
 
 
@@ -1271,8 +1207,6 @@ def scaffold(
     # ── Step 2: Copy harness files ───────────────────────────────
     if engine == "kilo":
         dirs = DIRS_KILO
-    elif engine == "copilot":
-        dirs = DIRS_COPILOT
 
     elif engine == "opencode":
         dirs = DIRS_OPENCODE
@@ -1328,12 +1262,6 @@ def scaffold(
     _print_opencode_skills_note(dirs)
 
     # ── Step 2.4: Generate .github/agents/ for Copilot ───────────
-    if engine in ("all", "copilot"):
-        print("\n--- .github/agents/ (Copilot) ---")
-        cn, cu = _copy_copilot_agents_to_github(target_path, dry_run)
-        total_new += cn
-        total_upd += cu
-
     # ── Step 2.45: Blank memory templates (never leak our own memory) ──
     print("\n--- Project Memory (blank templates) ---")
     total_new += _write_blank_memory_templates(target_path, dirs, dry_run)
@@ -1728,8 +1656,6 @@ def deploy(
 
     if engine == "kilo":
         dirs = DIRS_KILO
-    elif engine == "copilot":
-        dirs = DIRS_COPILOT
 
     elif engine == "opencode":
         dirs = DIRS_OPENCODE
@@ -1791,29 +1717,6 @@ def deploy(
     _print_opencode_skills_note(dirs)
 
     # ── Step 2.4: Generate .github/agents/ for Copilot ───────────
-    if engine in ("all", "copilot"):
-        print("\n--- .github/agents/ (Copilot) ---")
-        cn, cu = _copy_copilot_agents_to_github(target_path, dry_run)
-        total_new += cn
-        total_upd += cu
-
-        # Clean up stale .github/agents/ files not in .copilot/agents/
-        copilot_agents_src = ROOT / ".copilot" / "agents"
-        github_agents_dir = target_path / ".github" / "agents"
-        if copilot_agents_src.is_dir() and github_agents_dir.is_dir():
-            expected_names = {
-                f.stem + ".agent.md" for f in copilot_agents_src.glob("*.md")
-            }
-            stale_removed = 0
-            for existing in sorted(github_agents_dir.glob("*.agent.md")):
-                if existing.name not in expected_names:
-                    if dry_run:
-                        print(f"  [STALE] Would remove: .github/agents/{existing.name}")
-                    else:
-                        existing.unlink()
-                        print(f"  [STALE] Removed: .github/agents/{existing.name}")
-                    stale_removed += 1
-
     # ── Step 2.45: Blank memory templates (never leak our own memory) ──
     print("\n--- Project Memory (blank templates) ---")
     _write_blank_memory_templates(target_path, dirs, dry_run)
@@ -1916,13 +1819,13 @@ def interactive() -> int:
 
     # Ask engine
     while True:
-        engine = input("Engine (all/kilo/copilot/opencode) [all]: ").strip().lower()
+        engine = input("Engine (all/kilo/opencode) [all]: ").strip().lower()
         if not engine:
             engine = "all"
             break
-        if engine in ("all", "kilo", "copilot", "opencode"):
+        if engine in ("all", "kilo", "opencode"):
             break
-        print("  Please enter 'all', 'kilo', 'copilot', or 'opencode'.")
+        print("  Please enter 'all', 'kilo', or 'opencode'.")
 
     # Ask dry-run
     dry_run_input = input("Dry run? (y/N): ").strip().lower()
@@ -1986,7 +1889,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--engine",
-        choices=["all", "kilo", "copilot", "opencode"],
+        choices=["all", "kilo", "opencode"],
         default="all",
         help="Which engine harness to deploy (default: all)",
     )

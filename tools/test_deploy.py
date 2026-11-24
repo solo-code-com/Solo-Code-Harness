@@ -500,20 +500,6 @@ def test_harness_test_files_are_never_deployed(tmp_path):
         assert not deploy.should_copy(f), f"harness test file would deploy: {f.name}"
 
 
-def test_generated_agent_files_are_declared(tmp_path):
-    """.github/agents/*.agent.md are generated at deploy time.
-
-    They exist in no source dir, so a manifest-derived boundary misses them
-    and a model would read them as project code.
-    """
-    declared = set(deploy._shared_harness_paths(deploy.DIRS_ALL))
-    agents = list((deploy.ROOT / ".copilot" / "agents").glob("*.md"))
-    assert agents, "expected .copilot/agents/*.md to exist"
-    for a in agents:
-        rel = f".github/agents/{a.stem}.agent.md"
-        assert rel in declared, f"generated agent file not declared as harness: {rel}"
-
-
 # ─── boundary docs must not contradict the shared-dir reality ───────────────
 
 BOUNDARY_DOCS = [

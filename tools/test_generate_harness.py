@@ -33,7 +33,6 @@ if str(ROOT) not in sys.path:
 from tools import garden, generate_harness, opencode_engine  # noqa: E402
 
 MIRRORS = [
-    (".copilot", Path(".copilot") / "instruction"),
     (".gemini/antigravity", Path(".gemini") / "antigravity" / "instruction"),
 ]
 
@@ -95,14 +94,14 @@ def test_garden_remediation_command_actually_fixes_drift(tmp_path):
     cannot diverge again.
     """
     root = _fake_tree(tmp_path)
-    src, dst = root / ".kilo", root / ".copilot"
+    src, dst = root / ".kilo", root / ".gemini" / "antigravity"
     _write(dst / "instruction" / "rules-git.md", "DRIFTED\n")
 
-    assert garden.check_instruction_content(src, dst, ".copilot"), (
+    assert garden.check_instruction_content(src, dst, ".gemini"), (
         "expected garden to report drift before sync"
     )
     generate_harness.sync_instruction_mirrors(src, root)
-    assert not garden.check_instruction_content(src, dst, ".copilot"), (
+    assert not garden.check_instruction_content(src, dst, ".gemini"), (
         "garden still reports drift after running its own remediation"
     )
 
@@ -132,53 +131,13 @@ def _fake_memory_tree(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_memory_sync_repairs_drift(tmp_path):
-    root = _fake_memory_tree(tmp_path)
-    _write(root / MEMORY_MIRROR / "MEMORY.md", "DRIFTED\n")
-
-    assert generate_harness.sync_memory_mirrors(root / ".kilo", root) == 1
-    assert (root / MEMORY_MIRROR / "MEMORY.md").read_text(
-        encoding="utf-8"
-    ) == "SOURCE\n"
-
-
-def test_memory_sync_is_idempotent(tmp_path):
-    root = _fake_memory_tree(tmp_path)
-    assert generate_harness.sync_memory_mirrors(root / ".kilo", root) == 0
-
-
-def test_memory_sync_does_not_invent_files(tmp_path):
-    root = _fake_memory_tree(tmp_path)
-    _write(root / ".kilo" / "memory" / "kilo-only.md", "X\n")
-    generate_harness.sync_memory_mirrors(root / ".kilo", root)
-    assert not (root / MEMORY_MIRROR / "kilo-only.md").exists()
-
-
-def test_garden_memory_remediation_actually_fixes_drift(tmp_path):
-    """garden's advertised fix command must clear the memory drift it reports."""
-    root = _fake_memory_tree(tmp_path)
-    src, dst = root / ".kilo", root / ".copilot"
-    _write(dst / "memory" / "MEMORY.md", "DRIFTED\n")
-
-    assert garden.check_memory(src, dst, ".copilot"), "expected drift before sync"
-    generate_harness.sync_memory_mirrors(src, root)
-    assert not garden.check_memory(src, dst, ".copilot"), (
-        "garden still reports memory drift after running its own remediation"
-    )
-
-
-def test_real_repo_memory_mirrors_are_in_sync():
-    issues = garden.check_memory(ROOT / ".kilo", ROOT / ".copilot", ".copilot")
-    assert not issues, f".copilot memory drift in repo: {issues}"
-
-
 def test_memory_md_is_under_the_hard_cap():
     """MEMORY.md is injected every session and blocked by memory_gate at 8k.
 
     Checked for every engine copy, since the hook reads .claude/memory/ while
     .kilo/ is the source people edit.
     """
-    for engine in (".kilo", ".claude", ".copilot"):
+    for engine in (".kilo",):
         f = ROOT / engine / "memory" / "MEMORY.md"
         if not f.is_file():
             continue
@@ -189,7 +148,6 @@ def test_memory_md_is_under_the_hard_cap():
 # ─── skill body mirrors ──────────────────────────────────────────────────────
 
 SKILL_MIRRORS = [
-    (".copilot", Path(".copilot") / "skill"),
     (".gemini/antigravity", Path(".gemini") / "antigravity" / "skills"),
 ]
 
@@ -198,10 +156,6 @@ def _fake_skill_tree(tmp_path: Path) -> Path:
     _write(
         tmp_path / ".kilo" / "skill" / "plan" / "SKILL.md",
         "---\ndescription: Kilo plan\n---\n# Plan\nCommon instruction body.\n",
-    )
-    _write(
-        tmp_path / ".copilot" / "skill" / "plan" / "SKILL.md",
-        '---\ndescription: "Copilot plan"\nlicense: MIT\n---\n# Plan\nCommon instruction body.\n',
     )
     _write(
         tmp_path / ".gemini" / "antigravity" / "skills" / "plan" / "SKILL.md",
@@ -214,23 +168,12 @@ def test_skill_body_sync_repairs_drift(tmp_path):
     root = _fake_skill_tree(tmp_path)
     # Introduce drift in body of mirrors
     _write(
-        root / ".copilot" / "skill" / "plan" / "SKILL.md",
-        '---\ndescription: "Copilot plan"\nlicense: MIT\n---\n# Plan\nDRIFTED body.\n',
-    )
-    _write(
         root / ".gemini" / "antigravity" / "skills" / "plan" / "SKILL.md",
         "---\ndescription: Gemini plan\n---\n# Plan\nDRIFTED body.\n",
     )
 
     synced = generate_harness.sync_skill_body_mirrors(root / ".kilo", root)
     assert synced == len(SKILL_MIRRORS)
-
-    copilot_text = (root / ".copilot" / "skill" / "plan" / "SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    assert "license: MIT" in copilot_text
-    assert "Common instruction body." in copilot_text
-    assert "DRIFTED" not in copilot_text
 
     gemini_text = (
         root / ".gemini" / "antigravity" / "skills" / "plan" / "SKILL.md"
@@ -460,7 +403,6 @@ def test_split_frontmatter_without_a_block_keeps_the_whole_text():
 # ─── agent mirrors ───────────────────────────────────────────────────────────
 
 AGENT_MIRRORS = [
-    (".copilot", Path(".copilot") / "agents"),
     (".gemini/antigravity", Path(".gemini") / "antigravity" / "agents"),
 ]
 

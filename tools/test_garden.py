@@ -212,24 +212,6 @@ def test_split_frontmatter_without_delimiters():
 # ─── Live repo regression guard ─────────────────────────────────────────────
 
 
-def test_live_repo_has_zero_memory_content_drift():
-    kilo = ROOT / ".kilo"
-    for engine_dir, label in ((ROOT / ".copilot", ".copilot"),):
-        issues = garden.check_memory(kilo, engine_dir, label)
-        assert issues == [], f"{label} memory drift: {issues}"
-
-
-def test_check_memory_covers_decisions_archive():
-    """check_memory() scans every *.md in memory/, so decisions-archive.md
-    (cold storage, uncapped by memory_gate) must still be parity-checked --
-    it's exempt from the SIZE cap, not from the drift check."""
-    kilo = ROOT / ".kilo"
-    assert (kilo / "memory" / "decisions-archive.md").is_file()
-    assert (ROOT / ".copilot" / "memory" / "decisions-archive.md").is_file()
-    issues = garden.check_memory(kilo, ROOT / ".copilot", ".copilot")
-    assert not any("decisions-archive" in i for i in issues)
-
-
 def test_live_repo_has_zero_skill_content_drift():
     kilo = ROOT / ".kilo"
     assert (

@@ -26,7 +26,7 @@ def test_memory_over_the_block_cap_is_still_only_a_warning(tmp_path):
 
 
 def test_memory_between_warn_and_block_is_a_warning(tmp_path):
-    _memory(tmp_path, ".copilot", "MEMORY.md", checks.MEMORY_CAP_WARN + 1)
+    _memory(tmp_path, ".kilo", "MEMORY.md", checks.MEMORY_CAP_WARN + 1)
     issues = checks.memory_issues(tmp_path)
     assert [i["severity"] for i in issues] == ["warn"]
 

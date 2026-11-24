@@ -145,28 +145,11 @@ def sync_instruction_mirrors(kilo_root: Path, root: Path) -> int:
     synced = _sync_mirror_dir(
         kilo_root / "instruction",
         [
-            root / ".copilot" / "instruction",
             root / ".gemini" / "antigravity" / "instruction",
         ],
         root,
     )
     print(f"Instruction mirrors synced: {synced}")
-    return synced
-
-
-def sync_memory_mirrors(kilo_root: Path, root: Path) -> int:
-    """Copy .kilo/memory/*.md to the .copilot/ mirror.
-
-    .copilot/
-    was left to be "manually kept" (see garden.check_memory's docstring),
-    which is the same gap that made garden's remediation advice a no-op for
-    instructions. Memory files are byte-for-byte copies with no per-engine
-    transform, so garden diffs them exactly and this is mechanical.
-    """
-    synced = _sync_mirror_dir(
-        kilo_root / "memory", [root / ".copilot" / "memory"], root
-    )
-    print(f"Memory mirrors synced: {synced}")
     return synced
 
 
@@ -193,7 +176,6 @@ def sync_skill_body_mirrors(kilo_root: Path, root: Path) -> int:
         return 0
 
     mirrors = [
-        root / ".copilot" / "skill",
         root / ".gemini" / "antigravity" / "skills",
     ]
 
@@ -232,7 +214,6 @@ def sync_agent_mirrors(kilo_root: Path, root: Path) -> int:
     if not src_dir.is_dir():
         return 0
     mirrors = [
-        root / ".copilot" / "agents",
         root / ".gemini" / "antigravity" / "agents",
     ]
     synced = 0
@@ -280,8 +261,6 @@ def main() -> int:
     sync_agent_mirrors(kilo_root, ROOT_DIR)
     print("\n--- Instruction mirrors (.copilot, .gemini) ---")
     sync_instruction_mirrors(kilo_root, ROOT_DIR)
-    print("\n--- Memory mirrors (.copilot) ---")
-    sync_memory_mirrors(kilo_root, ROOT_DIR)
     print("\n--- Skill body mirrors (.copilot, .gemini) ---")
     sync_skill_body_mirrors(kilo_root, ROOT_DIR)
     return rc
