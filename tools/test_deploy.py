@@ -1131,3 +1131,27 @@ def test_root_lock_generation_raises_when_a_declared_path_is_missing(
     else:
         raise AssertionError("root mode must raise on a missing declared path")
     assert not (tmp_path / ".harness.lock").exists()
+
+
+def test_retired_engine_dir_is_removed_from_a_target(tmp_path):
+    """A target deployed before the removal must not keep the dead engine."""
+    stale = tmp_path / ".claude" / "agents" / "x.md"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("x\n", encoding="utf-8")
+
+    removed = deploy._cleanup_stale_files(tmp_path, [], dry_run=False)
+
+    assert removed == 1
+    assert not (tmp_path / ".claude").exists()
+
+
+def test_retired_engine_dir_is_only_reported_in_a_dry_run(tmp_path, capsys):
+    stale = tmp_path / ".claude" / "hooks" / "g.py"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("x\n", encoding="utf-8")
+
+    removed = deploy._cleanup_stale_files(tmp_path, [], dry_run=True)
+
+    assert removed == 1
+    assert stale.exists(), "dry run must not delete"
+    assert "Would remove" in capsys.readouterr().out

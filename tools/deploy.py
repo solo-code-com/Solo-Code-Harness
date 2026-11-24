@@ -101,6 +101,19 @@ DEV_ONLY_ROOT_FILES = {
 RETIRED_ROOT_FILES = {
     "opencode.ps1",  # removed v4.0.0 (launcher superseded by opencode.json)
     "jcode.ps1",  # removed v4.1.0 (jcode engine retired)
+    "CLAUDE.md",  # removed 2026-11-24 with the Claude Code engine
+    "claude-env.ps1",  # ditto
+    "codex-env.ps1",  # removed 2026-11-24 with the Codex CLI
+    "codex-env.sh",  # ditto
+}
+
+#: Directories the harness used to own outright and no longer ships. A target
+#: deployed before the removal keeps a dead engine there otherwise: cleanup walks
+#: only the dirs the current engine list names, so an unknown directory is never
+#: visited at all.
+RETIRED_EXCLUSIVE_DIRS = {
+    ".claude",  # Claude Code engine, removed 2026-11-24
+    ".claude-plugin",  # its plugin manifest
 }
 
 # The complete set of root-level filenames the harness is permitted to
@@ -1498,6 +1511,26 @@ def _cleanup_stale_files(
     """
     source_manifest = _build_source_manifest(dirs)
     removed = 0
+
+    # Directories the harness used to own and no longer ships. They are outside
+    # `dirs`, so the walk below would never see them; a target upgraded across
+    # the removal would keep a dead engine forever.
+    for retired in sorted(RETIRED_EXCLUSIVE_DIRS):
+        stale_root = target_path / retired
+        if not stale_root.is_dir():
+            continue
+        for item in sorted(stale_root.rglob("*")):
+            if not item.is_file():
+                continue
+            rel = item.relative_to(target_path).as_posix()
+            if dry_run:
+                print(f"  [STALE] Would remove: {rel}")
+            else:
+                item.unlink()
+                print(f"  [STALE] Removed: {rel}")
+            removed += 1
+        if not dry_run:
+            shutil.rmtree(stale_root, ignore_errors=True)
 
     # Collect target files inside harness dirs
     for d in dirs:
