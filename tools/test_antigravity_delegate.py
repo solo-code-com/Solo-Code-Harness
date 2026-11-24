@@ -18,6 +18,7 @@ for _entry in (str(ROOT), str(TOOLS)):
     sys.path.insert(0, _entry)
 
 import protected_state  # noqa: E402
+import restore  # noqa: E402
 import session_registry  # noqa: E402
 
 from tools import antigravity_delegate, shared_state  # noqa: E402
@@ -1096,3 +1097,51 @@ def test_protected_state_still_checked_with_allow_control_paths(
     err = capsys.readouterr().err
     assert ".solocode/executor-mode" in err
     assert "[control-path] worker changed protected state" in err
+
+
+def test_snapshot_writes_captures_by_default(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "run_agy_cli",
+        lambda **kwargs: ({"text": "done", "error": None}, 0),
+    )
+
+    fake_snap = SimpleNamespace(run_id="restore-test")
+    monkeypatch.setattr(restore, "capture", lambda *a, **k: fake_snap)
+
+    code = antigravity_delegate.main(_wrapper_argv(ws))
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "[restore] snapshot=restore-test" in err
+
+
+def test_no_snapshot_writes_skips_capture(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "run_agy_cli",
+        lambda **kwargs: ({"text": "done", "error": None}, 0),
+    )
+
+    captured = []
+    monkeypatch.setattr(restore, "capture", lambda *a, **k: captured.append(a))
+
+    argv = _wrapper_argv(ws) + ["--no-snapshot-writes"]
+    code = antigravity_delegate.main(argv)
+    assert code == 0
+    assert len(captured) == 0

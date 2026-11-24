@@ -137,6 +137,11 @@ reviews, because its tokens are free. Gemini runs on a finite plan quota and die
    tree: `opencode_delegate.py --worktree` builds one from HEAD, refuses when the
    tree is dirty, and prints the branch to merge. Without that flag, run one
    writing worker at a time.
+3. A run that can write captures the target tree first and prints the snapshot
+   id; `python tools/restore.py apply <id> --yes` puts every file back byte for
+   byte, including uncommitted work that `git checkout` would have destroyed.
+   Read-only runs do not capture, and `--restore-on-failure` is the explicit way
+   to undo automatically.
 3. Demand **evidence, not confidence**: a `| Claim | Command run | Output |`
    table. Never accept "Confident: Yes".
 4. Give the measurement, never the answer.

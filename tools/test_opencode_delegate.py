@@ -34,6 +34,7 @@ for _entry in (str(ROOT), str(TOOLS)):
 import failure_ledger  # noqa: E402
 import opencode_engine  # noqa: E402
 import protected_state  # noqa: E402
+import restore  # noqa: E402
 import session_control  # noqa: E402
 import session_registry  # noqa: E402
 import worktree  # noqa: E402
@@ -2422,3 +2423,133 @@ def test_protected_state_still_checked_with_allow_control_paths(
     err = capsys.readouterr().err
     assert "[control-path] worker changed protected state:" in err
     assert changed_path in err
+
+
+def test_snapshot_writes_captures_by_default(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    monkeypatch.setattr(
+        opencode_delegate, "run_opencode_cli", lambda **_kw: _ok_result()
+    )
+
+    fake_snap = SimpleNamespace(run_id="restore-test")
+    monkeypatch.setattr(restore, "capture", lambda *a, **k: fake_snap)
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--cascade",
+            "off",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "[restore] snapshot=restore-test" in err
+
+
+def test_no_snapshot_writes_skips_capture(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    monkeypatch.setattr(
+        opencode_delegate, "run_opencode_cli", lambda **_kw: _ok_result()
+    )
+
+    captured = []
+    monkeypatch.setattr(restore, "capture", lambda *a, **k: captured.append(a))
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--cascade",
+            "off",
+            "--no-snapshot-writes",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code == 0
+    assert len(captured) == 0
+
+
+def test_restore_on_failure_reverts(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **_kw: {
+            "text": "",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": "worker crashed",
+        },
+    )
+
+    fake_snap = SimpleNamespace(run_id="restore-test")
+    monkeypatch.setattr(restore, "capture", lambda *a, **k: fake_snap)
+
+    apply_calls = []
+    monkeypatch.setattr(
+        restore, "apply", lambda *a, **k: apply_calls.append((a, k)) or {"restore": 1}
+    )
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--cascade",
+            "off",
+            "--restore-on-failure",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code == 2
+    assert len(apply_calls) == 1
+    err = capsys.readouterr().err
+    assert "[restore] reverted:" in err

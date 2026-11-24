@@ -35,6 +35,11 @@ try:
 except ImportError:  # pragma: no cover - script-dir import path
     from tools import protected_state  # noqa: E402
 
+try:
+    import restore
+except ImportError:  # pragma: no cover - script-dir import path
+    from tools import restore  # noqa: E402
+
 DEFAULT_MODEL = "gemini-3.8-flash-medium"
 DEFAULT_TIMEOUT_SECONDS = 600
 DIRECTORY_LOCK_ENGINE = "gemini"
@@ -520,6 +525,19 @@ def main(argv: list[str] | None = None) -> int:
         help="permit writes into node_modules, build, dist, .venv, venv or target",
     )
     parser.add_argument(
+        "--no-snapshot-writes",
+        action="store_true",
+        help=(
+            "skip capturing the target tree; the run then cannot be undone "
+            "byte for byte"
+        ),
+    )
+    parser.add_argument(
+        "--restore-on-failure",
+        action="store_true",
+        help="put the captured tree back when the run reports an error",
+    )
+    parser.add_argument(
         "--auto-approve", action="store_true", help="Allow writes inside --allow-dir"
     )
     parser.add_argument(
@@ -629,6 +647,17 @@ def main(argv: list[str] | None = None) -> int:
             with contextlib.suppress(Exception):
                 protected_gates = protected_state.gate_fingerprint(Path(target_dir))
         run_started = time.time()
+        restore_snapshot = None
+        # A read-only run cannot write, so it has nothing to undo.
+        if not args.no_snapshot_writes and args.auto_approve:
+            try:
+                restore_snapshot = restore.capture(ROOT, Path(target_dir))
+                _stderr(
+                    f"[restore] snapshot={restore_snapshot.run_id} "
+                    f"(undo: python tools/restore.py apply {restore_snapshot.run_id} --yes)"
+                )
+            except Exception as exc:  # noqa: BLE001 - capture is best effort
+                _stderr(f"[restore] unavailable: {exc}")
         if args.allow_control_paths:
             _stderr(
                 "[control-path] --allow-control-paths given: control-path gate disabled for this run"
@@ -747,6 +776,13 @@ def main(argv: list[str] | None = None) -> int:
                 "resume this task with --conversation <id>."
             )
             return exit_code if exit_code == 124 else 6
+        if restore_snapshot is not None and result.get("error"):  # noqa: SIM102
+            if args.restore_on_failure:
+                try:
+                    counts = restore.apply(ROOT, restore_snapshot, delete_new=True)
+                    _stderr(f"[restore] reverted: {counts}")
+                except Exception as exc:  # noqa: BLE001 - never mask the run error
+                    _stderr(f"[restore] revert failed: {exc}")
         if result.get("error"):
             _stderr(str(result["error"]))
             return exit_code if exit_code == 124 else 2

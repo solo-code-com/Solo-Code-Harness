@@ -1275,6 +1275,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="permit writes into node_modules, build, dist, .venv, venv or target",
     )
+    parser.add_argument(
+        "--no-snapshot-writes",
+        action="store_true",
+        help=(
+            "skip capturing the target tree; the run then cannot be undone "
+            "byte for byte"
+        ),
+    )
+    parser.add_argument(
+        "--restore-on-failure",
+        action="store_true",
+        help="put the captured tree back when the run reports an error",
+    )
 
     args = parser.parse_args(argv)
     args.directory = str(Path(args.directory).resolve())
@@ -1415,6 +1428,19 @@ def main(argv: list[str] | None = None) -> int:
         with contextlib.suppress(Exception):
             before_gates = protected.gate_fingerprint(ROOT)
     run_started = time.time()
+    restore_snapshot = None
+    restore_module = _load_sibling("restore")
+    # Only a run that can write has anything to undo. The orchestrator agent has
+    # no write permission, so capturing for it would copy the tree for nothing.
+    if not args.no_snapshot_writes and args.agent != ORCHESTRATOR_AGENT:
+        try:
+            restore_snapshot = restore_module.capture(ROOT, Path(args.directory))
+            _stderr(
+                f"[restore] snapshot={restore_snapshot.run_id} "
+                f"(undo: python tools/restore.py apply {restore_snapshot.run_id} --yes)"
+            )
+        except Exception as exc:  # noqa: BLE001 - capture is best effort
+            _stderr(f"[restore] unavailable: {exc}")
     before_target = None
     if len(models_to_try) > 1 or getattr(args, "cascade", "auto") != "off":
         # Only the cascade needs this second baseline; a single-arm run should
@@ -1636,6 +1662,14 @@ def main(argv: list[str] | None = None) -> int:
         if result.get("error"):
             _stderr(f"Error: {result['error']}")
         return scope_code
+
+    if restore_snapshot is not None and result.get("error"):  # noqa: SIM102
+        if args.restore_on_failure:
+            try:
+                counts = restore_module.apply(ROOT, restore_snapshot, delete_new=True)
+                _stderr(f"[restore] reverted: {counts}")
+            except Exception as exc:  # noqa: BLE001 - never mask the run error
+                _stderr(f"[restore] revert failed: {exc}")
 
     if result.get("error"):
         if result.get("timed_out") and result.get("text"):
