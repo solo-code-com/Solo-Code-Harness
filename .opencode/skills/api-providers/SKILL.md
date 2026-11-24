@@ -131,7 +131,7 @@ async def call_deepseek(prompt: str, system: str = "", model: str = "deepseek-ch
 | **Long-context analysis** | OpenCode | `opencode-go/gemini-3.5-flash` or `opencode-go/kimi-k3` |
 | **Direct DeepSeek API** | DeepSeek | `deepseek-flash` or `deepseek-v4-pro` |
 
-The fence is opt-in: `tools/opencode_delegate.py --sandbox {auto,win,wsl}` defaults to `auto`, which picks `wsl` when the fence is usable and `win` otherwise. It is fail-closed - a mount that cannot be built makes the fence script itself exit 69, and the wrapper surfaces that as its ordinary non-zero worker failure instead of running unfenced.
+The fence is opt-in: `tools/opencode_delegate.py --sandbox {auto,win,wsl}` defaults to `auto`, which picks `wsl` when the fence is usable and `win` otherwise. It is fail-closed: a mount that cannot be built makes the fence script itself exit 69. The wrapper surfaces that as its ordinary non-zero worker failure instead of running unfenced.
 
 ## Error Handling
 
