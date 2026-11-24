@@ -330,15 +330,15 @@ EXCLUDE_FILES = {
     "project-conventions.md",
     "harness-design-intent.md",
     "decisions-archive.md",
-    # Shared skill skip-list (consumed by both claude_engine and
-    # opencode_engine generation via generate_harness.py) -- dev-only.
+    # Shared skill skip-list (consumed by the engine generators via
+    # generate_harness.py) -- dev-only.
     "opencode-skip-skills.txt",
 }
 
 # Default README template for scaffolded projects
 README_TEMPLATE = """# {project_name}
 
-> Scaffolded from [Solo-Code-CLI](https://github.com/Solo-Code-CLI) — AI agent harness with Kilo Code + OpenCode + Claude Code + Copilot + Gemini engines. This is a RUNTIME-ONLY copy: Solo-Code-CLI's own dev tooling, tests, and internal docs were intentionally excluded (see "Harness Boundaries" below).
+> Scaffolded from [Solo-Code-CLI](https://github.com/Solo-Code-CLI) — AI agent harness with Kilo Code + OpenCode + Gemini engines. This is a RUNTIME-ONLY copy: Solo-Code-CLI's own dev tooling, tests, and internal docs were intentionally excluded (see "Harness Boundaries" below).
 
 {description}
 
@@ -375,9 +375,7 @@ python .github/scripts/boundary_audit.py .
 
 - **[Kilo Code](https://kilo.ai)** — source-of-truth: agents, skills, commands, hooks, memory, orchestrators
 - **[OpenCode](https://opencode.ai)** — primary agent engine: agents, skills, commands, `opencode.json`
-- **[Claude Code](https://claude.com/claude-code)** — orchestrator: subagents, skills, commands, hooks, `CLAUDE.md`
-- **[Copilot](https://github.com/features/copilot)** — agents, skills, commands, prompts
-- **[Gemini](https://gemini.google.com)** — additional AI assistant config
+- **[Gemini](https://gemini.google.com)** — independent read, audit and review worker via the Antigravity CLI
 
 ## Important: Harness Boundaries
 
@@ -385,8 +383,8 @@ This project was scaffolded with **Solo-Code Harness** — an AI agent disciplin
 
 | Contains | Purpose |
 |----------|---------|
-| `.kilo/`, `.copilot/`, `.gemini/`, `.claude/`, `.claude-plugin/`, `.contracts/` | Wholly harness — AI agent rules, skills, hooks. No project code lives here. |
-| `AGENTS.md`, `CLAUDE.md`, `kilo.jsonc`, `.harness.lock` | Agent behavior configuration |
+| `.kilo/`, `.opencode/`, `.agents/`, `.gemini/`, `.contracts/` | Wholly harness — AI agent rules, skills, hooks. No project code lives here. |
+| `AGENTS.md`, `kilo.jsonc`, `opencode.json`, `.harness.lock` | Agent behavior configuration |
 
 **`.github/`, `.vscode/` and `tools/` are SHARED.** The harness puts files
 there, but they are also where your project keeps its own CI workflows,

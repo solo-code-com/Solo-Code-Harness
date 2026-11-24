@@ -628,9 +628,9 @@ def check_opencode(src: Path, dst: Path) -> list[str]:
       .kilo/command -> .opencode/commands (plural, copied verbatim)
       .kilo/instruction -> .opencode/skills/<id>/SKILL.md (on-demand skills;
                      v2 loads only AGENTS.md for always-on rules)
-    The .kilo/skill/* library is NOT mirrored: v2 loads .opencode/skills/,
-    .claude/skills/ and .agents/skills/, so a mirror of the same ids would
-    register every skill twice; those load from .claude/skills/ alone (this
+    The .kilo/skill/* library is NOT mirrored: v2 loads .opencode/skills/ and
+    .agents/skills/, so a mirror of the same ids would register every skill
+    twice; those load from .agents/skills/ alone (this
     check flags mirror ids under .opencode/skills/).
     Plus root opencode.json (v1-safe: model default + legacy `permission`) and
     .opencode/opencode.json (v2-only `providers`).
@@ -652,7 +652,7 @@ def check_opencode(src: Path, dst: Path) -> list[str]:
             if d.name in kilo_ids:
                 issues.append(
                     f"Duplicate skill: .opencode/skills/{d.name} mirrors .kilo/skill/{d.name} "
-                    "(already loaded from .claude/skills — remove the mirror)"
+                    "(already loaded from .agents/skills — remove the mirror)"
                 )
 
     # Commands: .kilo/command/*.md must exist in .opencode/commands/*.md
@@ -1637,7 +1637,6 @@ def check_skill_refs(root: Path = ROOT) -> list[str]:
 
     skill_dirs = [
         ".kilo/skill",
-        ".claude/skills",
         ".gemini/antigravity/skills",
     ]
     for d in skill_dirs:

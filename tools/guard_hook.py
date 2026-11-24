@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 """
-solocode-guard (Claude Code hook) — PreToolUse safety gate.
+solocode-guard -- the PreToolUse safety gate.
 
-Port of .opencode/plugins/solocode-guard.js to a Claude Code PreToolUse hook.
-Stdlib-only Python (no jq/bash) for Windows portability.
-
-Wired via .claude/settings.json:
-    "hooks": { "PreToolUse": [ { "matcher": "Bash|Edit|Write|MultiEdit",
-        "hooks": [ { "type": "command",
-            "command": "python .claude/hooks/guard.py" } ] } ] }
+The rules live in tools/guard_rules.py so a delegation wrapper can reuse them
+without running this hook. Callers: tools/opencode_delegate.py and
+tools/antigravity_delegate.py run match_prompt() before they spawn a worker,
+and .kilo/hooks/pre-tool-use/gate-guard.js carries the same rule table for the
+interactive Kilo session. Stdlib-only Python (no jq/bash) for Windows.
 
 Protocol:
   - Reads the tool call JSON from stdin: {tool_name, tool_input, ...}.
   - Bash: blocks destructive commands and leaked secrets in the command string.
   - Edit/Write/MultiEdit: blocks writes to protected config files and blocks
     content containing hardcoded secrets.
-  - Blocks by printing a PreToolUse deny decision to stdout AND exiting 2
-    (stderr feedback) — both are honored by Claude Code.
+  - Blocks by printing a deny decision to stdout and exiting 2.
   - Allows by exiting 0 with no output (normal permission flow applies).
 """
 

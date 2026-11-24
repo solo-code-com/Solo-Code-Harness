@@ -84,7 +84,7 @@ def validate_agent(file_path: Path) -> list[str]:
     # SPEC.md §7.1 -- the contract is description + mode + at least one
     # permission key. `description` is not cosmetic: it is the trigger text an
     # engine matches to model-invoke the agent, so an agent without one is
-    # silently unreachable. Deriving it per engine (claude_engine's fallback)
+    # silently unreachable. Deriving it per engine (the retired Claude engine's fallback)
     # hid that for months, which is why this is now enforced on the source.
     missing = sorted(AGENT_REQUIRED_KEYS - fm.keys())
     if missing:

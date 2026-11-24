@@ -32,8 +32,6 @@ def audit():
 
 SKILL_MIRRORS = [
     ".kilo/skill",
-    ".claude/skills",
-    ".copilot/skill",
     ".gemini/antigravity/skills",
 ]
 
