@@ -41,7 +41,7 @@ that the bundle mounts through `@deepseek-ai/dsh-mcp-client` as server name
 | `security_scan` | Runs `.github/scripts/security_scan.py` over a path inside the workspace. |
 | `shared_state` | Reads `.solocode/shared-state.db` views: `show`, `features`, `sessions`, `locks`, `memory`, `validate`. |
 | `model_catalog` | Compares provider model catalogs; `probe` calls one model per entry. |
-| `delegate` | Runs one worker engine (`opencode`, `codex`, `kilo`, `dsh`) with a self-contained brief and returns its evidence. |
+| `delegate` | Runs one worker engine (`opencode`, `kilo`, `dsh`) with a self-contained brief and returns its evidence. |
 | `route` | Routes a task by type (`simple`→opencode, `complex`/`review`→codex, `verify`→dsh), returns a claim/command/output evidence table, and appends the decision to `.solocode/dsh-routing.jsonl`. `dry_run` returns the decision without spawning. |
 | `gate` | Runs one gate: `lint`, `lint_budget`, `schemas`, `drift`, `tests`, `secrets`, or `all` (`checklist --fast`). |
 

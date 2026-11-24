@@ -180,10 +180,13 @@ def audit_file(path: Path) -> list[dict[str, object]] | None:
     return violations
 
 
-def collect(paths: list[str]) -> tuple[int, list[dict[str, object]]]:
-    """(files read, violations) for the resolved targets, each file counted once."""
+def collect(
+    paths: list[str],
+) -> tuple[int, list[dict[str, object]], list[dict[str, object]]]:
+    """(files read, violations, warnings) for the resolved targets."""
     checked = 0
     violations: list[dict[str, object]] = []
+    warnings: list[dict[str, object]] = []
     seen: set[str] = set()
     for path in targets(paths):
         key = os.path.normcase(os.path.abspath(path))
@@ -195,7 +198,56 @@ def collect(paths: list[str]) -> tuple[int, list[dict[str, object]]]:
             continue
         checked += 1
         violations.extend(found)
-    return checked, violations
+        if path.name == "opencode.json" and path.parent.name == ".opencode":
+            warnings.extend(missing_provider_keys(path.parent.parent))
+    return checked, violations, warnings
+
+
+def missing_provider_keys(project_root: Path) -> list[dict[str, object]]:
+    """Providers a project declares but has no key for.
+
+    The deploy ships a provider block that reads a variable from `.env`. A
+    project without that variable still works through the global provider, but
+    any model from the shipped provider fails at request time with an auth
+    error. Reported as a warning, never a violation: the project may simply not
+    intend to use it.
+    """
+    config = project_root / ".opencode" / "opencode.json"
+    if not config.is_file():
+        return []
+    try:
+        data = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    env_file = project_root / ".env"
+    env_keys: set[str] = set()
+    if env_file.is_file():
+        try:
+            for line in env_file.read_text(
+                encoding="utf-8", errors="replace"
+            ).splitlines():
+                if "=" in line and not line.lstrip().startswith("#"):
+                    env_keys.add(line.split("=", 1)[0].strip())
+        except OSError:
+            pass
+    providers = data.get("providers")
+    if not isinstance(providers, dict):
+        return []
+    warnings: list[dict[str, object]] = []
+    for name, spec in providers.items():
+        if not isinstance(spec, dict):
+            continue
+        for var in spec.get("env") or []:
+            if var not in env_keys:
+                warnings.append(
+                    {
+                        "kind": "missing-key",
+                        "provider": name,
+                        "var": var,
+                        "path": str(config),
+                    }
+                )
+    return warnings
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -221,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: no such path: {', '.join(missing)}", file=sys.stderr)
         return 2
 
-    checked, violations = collect(args.paths)
+    checked, violations, warnings = collect(args.paths)
 
     if args.json:
         print(
@@ -240,7 +292,15 @@ def main(argv: list[str] | None = None) -> int:
                 f"[VIOLATION] {violation['path']}:{violation['line']} "
                 f"{violation['kind']} {violation['detail']}"
             )
-        print(f"checked {checked} target(s), {len(violations)} violation(s)")
+        for warning in warnings:
+            print(
+                f"[WARN] {warning['path']}: provider {warning['provider']} "
+                f"reads {warning['var']}, which this project does not set"
+            )
+        print(
+            f"checked {checked} target(s), {len(violations)} violation(s), "
+            f"{len(warnings)} warning(s)"
+        )
 
     return 1 if violations else 0
 

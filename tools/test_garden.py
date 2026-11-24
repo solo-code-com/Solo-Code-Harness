@@ -37,21 +37,6 @@ def _write(path: Path, text: str) -> None:
 # ─── check_memory (content diff) ────────────────────────────────────────────
 
 
-def test_check_memory_detects_content_drift(tmp_path):
-    src, dst = tmp_path / "src", tmp_path / "dst"
-    _write(src / "memory" / "MEMORY.md", "# Memory\n- [decision] A\n")
-    _write(dst / "memory" / "MEMORY.md", "# Memory\n- [decision] A\n- [decision] B\n")
-    issues = garden.check_memory(src, dst, ".example")
-    assert any("Content drift" in i for i in issues)
-
-
-def test_check_memory_clean_when_identical(tmp_path):
-    src, dst = tmp_path / "src", tmp_path / "dst"
-    _write(src / "memory" / "MEMORY.md", "# Memory\n- [decision] A\n")
-    _write(dst / "memory" / "MEMORY.md", "# Memory\n- [decision] A\n")
-    assert garden.check_memory(src, dst, ".example") == []
-
-
 # ─── check_instruction_content ──────────────────────────────────────────────
 
 

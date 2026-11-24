@@ -113,3 +113,31 @@ def test_comment_lines_are_not_wiring(tmp_path):
         encoding="utf-8",
     )
     assert audit.audit_file(env) == []
+
+
+def _project_with_provider(root, env_lines):
+    cfg = root / ".opencode"
+    cfg.mkdir(parents=True, exist_ok=True)
+    (cfg / "opencode.json").write_text(
+        '{"providers": {"deepseek": {"env": ["DEEPSEEK_API_KEY"]}}}', encoding="utf-8"
+    )
+    (root / ".env").write_text(env_lines, encoding="utf-8")
+
+
+def test_missing_provider_key_is_a_warning(tmp_path):
+    _project_with_provider(tmp_path, "OTHER=1\n")
+    warnings = audit.missing_provider_keys(tmp_path)
+    assert [w["var"] for w in warnings] == ["DEEPSEEK_API_KEY"]
+
+
+def test_present_provider_key_is_silent(tmp_path):
+    _project_with_provider(tmp_path, "DEEPSEEK_API_KEY=sk-x\n")
+    assert audit.missing_provider_keys(tmp_path) == []
+
+
+def test_warnings_do_not_change_the_exit_code(tmp_path, capsys):
+    _project_with_provider(tmp_path, "OTHER=1\n")
+    assert audit.main([str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "[WARN]" in out
+    assert "warning(s)" in out

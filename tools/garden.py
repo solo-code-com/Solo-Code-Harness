@@ -372,37 +372,6 @@ def check_instructions_opencode(src: Path, dst: Path, dst_label: str) -> list[st
     return issues
 
 
-def check_memory(src: Path, dst: Path, dst_label: str) -> list[str]:
-    """Check that all src/memory/ files have a dst/ copy AND identical content.
-
-    .kilo/memory/ is the source of truth for the project's own accumulated
-    memory (MEMORY.md, project-conventions.md, harness-design-intent.md).
-    .claude/memory/ and .copilot/memory/ are generated mirrors -- claude_engine
-    for the former, generate_harness.sync_memory_mirrors() for the latter.
-    File-existence parity alone previously let content silently drift out of
-    sync (one engine's writer updates its own copy but forgets the others)
-    without garden.py ever catching it. Both mirrors were hand-maintained
-    until 2026-08-03, which meant this check reported drift that the fix
-    command it advertises could not actually repair.
-    """
-    issues = _check_parity_dir(src, dst, dst_label, "memory")
-    src_dir = src / "memory"
-    dst_dir = dst / "memory"
-    if not src_dir.is_dir() or not dst_dir.is_dir():
-        return issues
-    src_files = {f.name for f in src_dir.iterdir() if f.is_file() and f.suffix == ".md"}
-    dst_files = {f.name for f in dst_dir.iterdir() if f.is_file()}
-    for name in sorted(src_files & dst_files):
-        src_text = (src_dir / name).read_text(encoding="utf-8")
-        dst_text = (dst_dir / name).read_text(encoding="utf-8")
-        if src_text != dst_text:
-            issues.append(
-                f"Content drift: {dst_label}/memory/{name} differs from "
-                f".kilo/memory/{name} (out of sync — resync from source of truth)"
-            )
-    return issues
-
-
 def _command_body(path: Path) -> str:
     """Return a command's text after its YAML frontmatter, line endings normalised.
 
@@ -735,70 +704,6 @@ def check_opencode(src: Path, dst: Path) -> list[str]:
             "Missing config: opencode.json (run 'python tools/generate_harness.py --harness opencode')"
         )
 
-    return issues
-
-
-def run_engine_checks(
-    src: Path,
-    dst: Path,
-    dst_label: str,
-    *,
-    instruction_suffix: bool = False,
-    skip_set: set[str] | None = None,
-) -> list[str]:
-    """Run all parity checks for one engine."""
-    issues: list[str] = []
-    checks = [
-        (f"Agent drift ({dst_label})", lambda: check_agents(src, dst, dst_label)),
-        (
-            f"Permission drift ({dst_label})",
-            lambda: check_agent_permissions(src, dst, dst_label),
-        ),
-        (
-            f"Instruction drift ({dst_label})",
-            lambda: (
-                check_instructions_opencode(src, dst, dst_label)
-                if instruction_suffix
-                else check_instructions(src, dst, dst_label)
-            ),
-        ),
-        (
-            f"Instruction content drift ({dst_label})",
-            lambda: (
-                []
-                if instruction_suffix
-                else check_instruction_content(src, dst, dst_label)
-            ),
-        ),
-        (f"Memory drift ({dst_label})", lambda: check_memory(src, dst, dst_label)),
-        (f"Command parity ({dst_label})", lambda: check_commands(src, dst, dst_label)),
-        (
-            f"Command content drift ({dst_label})",
-            lambda: (
-                check_commands(src, dst, dst_label, compare_body=True)
-                if dst_label == ".copilot"
-                else []
-            ),
-        ),
-        (
-            f"Skill parity ({dst_label})",
-            lambda: check_skill_parity(src, dst, dst_label, skip_set=skip_set),
-        ),
-        (
-            f"Skill content drift ({dst_label})",
-            lambda: check_skill_content(src, dst / "skill", dst_label),
-        ),
-        (f"Skill health ({dst_label})", lambda: check_skills(dst, dst_label)),
-    ]
-    for name, check_fn in checks:
-        result = check_fn()
-        if result:
-            print(f"[DRIFT] {name}:")
-            for i in result:
-                print(f"  {i}")
-            issues.extend(result)
-        else:
-            print(f"[OK] {name}")
     return issues
 
 

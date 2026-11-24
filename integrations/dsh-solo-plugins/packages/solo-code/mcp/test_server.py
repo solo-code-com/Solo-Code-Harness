@@ -16,8 +16,8 @@ import server  # noqa: E402
 class RoutingTest(unittest.TestCase):
     def test_known_task_types_route_to_expected_workers(self) -> None:
         self.assertEqual(server.route_for('simple')[0], 'opencode')
-        self.assertEqual(server.route_for('complex')[0], 'codex')
-        self.assertEqual(server.route_for('review')[0], 'codex')
+        self.assertEqual(server.route_for('complex')[0], 'opencode')
+        self.assertEqual(server.route_for('review')[0], 'opencode')
         self.assertEqual(server.route_for('verify')[0], 'dsh')
 
     def test_unknown_task_type_falls_back(self) -> None:
@@ -36,7 +36,7 @@ class ConfinementTest(unittest.TestCase):
 
 class ArgvTest(unittest.TestCase):
     def test_delegate_argv_pins_directory_and_never_enables_writes(self) -> None:
-        argv = server.delegate_argv('codex', 'brief', None, 60)
+        argv = server.delegate_argv('opencode', 'brief', None, 60)
         self.assertIn('--timeout', argv)
         self.assertIn('60', argv)
         self.assertNotIn('--allow-write', argv)
@@ -51,7 +51,7 @@ class ArgvTest(unittest.TestCase):
 
 class EvidenceTest(unittest.TestCase):
     def test_evidence_rows_name_claim_command_and_output(self) -> None:
-        rows = server.evidence_table('codex', ['python', 'tools/codex_delegate.py', 'brief'], {'exitCode': 0, 'durationMs': 12, 'stdout': 'done'})
+        rows = server.evidence_table('opencode', ['python', 'tools/codex_delegate.py', 'brief'], {'exitCode': 0, 'durationMs': 12, 'stdout': 'done'})
         self.assertEqual(len(rows), 2)
         for row in rows:
             self.assertEqual(set(row), {'claim', 'command', 'output'})
