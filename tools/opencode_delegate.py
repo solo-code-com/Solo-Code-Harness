@@ -2,7 +2,7 @@
 """
 opencode_delegate.py — CLI-based delegation wrapper for OpenCode workers.
 
-ORCHESTRATION MODEL: Claude Code is ALWAYS the orchestrator.
+ORCHESTRATION MODEL: Jev, running in OpenCode, is ALWAYS the orchestrator.
 This script uses `opencode run` to send a single stateless prompt to OpenCode
 and parses the JSON events stream. The orchestrator must read and verify every result.
 
@@ -89,6 +89,16 @@ DEEPSEEK_V41_FLASH_CHAIN = [
     "commandcode/deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-flash",
 ]
+
+# Kilo is the last arm, not the first: OpenCode reaches DeepSeek V4.1 Flash
+# through the opencode-go plan and the Command Code key, and only a failure on
+# both justifies paying the relay cost of a separate server.
+#
+# The id differs from the OpenCode form. Measured 2026-11-24 against a live
+# server: "opencode-go/deepseek-v4.1-flash" answered in 26.5s, while
+# "opencode-go/deepseek/deepseek-v4.1-flash" and
+# "commandcode/deepseek/deepseek-v4.1-flash" both returned "Unknown error".
+KILO_FALLBACK_MODEL = "opencode-go/deepseek-v4.1-flash"
 
 QUOTA_ERROR_MARKERS = (
     "quota",
@@ -235,6 +245,15 @@ def _snapshot(root: Path) -> dict[str, str] | None:
         return _load_sibling("workspace_snapshot").snapshot_workspace(root)
     except OSError:
         return None
+
+
+def changed_workspace_paths(
+    before: dict[str, str], after: dict[str, str] | None
+) -> list[str]:
+    """Return created, modified, and deleted paths between two snapshots."""
+    if after is None:
+        return []
+    return _load_sibling("workspace_snapshot").changed_workspace_paths(before, after)
 
 
 def _git_porcelain(root: Path) -> str:
@@ -1012,6 +1031,77 @@ def _tier_refusal(directory: str) -> str | None:
     return tier_gate.refusal_for_project(directory)
 
 
+def _retryable_failure(result: dict[str, Any]) -> bool:
+    """True when a failed attempt may be retried on the next arm.
+
+    A policy refusal is never retried. Scope, control-path and tier verdicts are
+    this harness saying no, and a second arm would either repeat them or write
+    where the first arm was forbidden to.
+    """
+    if not result.get("error"):
+        return False
+    lowered = str(result.get("error", "")).lower()
+    return not any(
+        marker in lowered
+        for marker in ("scope", "control-path", "control path", "tier")
+    )
+
+
+def _run_kilo_fallback(prompt: str, args: argparse.Namespace) -> dict[str, Any] | None:
+    """Run the same brief on the Kilo arm; None when that arm cannot be used.
+
+    --ensure-server is passed because a dead server is the one failure this arm
+    invites; the call is idempotent and cheap when the server is already up.
+    """
+    delegate = Path(__file__).resolve().parent / "kilo_cli_delegate.py"
+    if not delegate.is_file():
+        _stderr("[cascade] kilo arm unavailable: tools/kilo_cli_delegate.py is missing")
+        return None
+    argv = [
+        sys.executable,
+        str(delegate),
+        prompt,
+        "--model",
+        KILO_FALLBACK_MODEL,
+        "--directory",
+        args.directory,
+        "--timeout",
+        str(args.timeout),
+        "--ensure-server",
+    ]
+    # The prompt already carries this wrapper's guardrail whenever the caller
+    # left it on, and the caller may have turned it off on purpose, so the arm is
+    # always told not to add a second one.
+    argv.append("--no-guardrail")
+    _stderr(f"[cascade] kilo arm: --model {KILO_FALLBACK_MODEL}")
+    try:
+        proc = subprocess.run(  # noqa: S603 - fixed argv, the prompt is data
+            argv,
+            cwd=str(ROOT),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            check=False,
+        )
+    except Exception as exc:  # noqa: BLE001 - the arm is optional
+        _stderr(f"[cascade] kilo arm failed to start: {type(exc).__name__}")
+        return None
+    if proc.returncode != 0:
+        _stderr(f"[cascade] kilo arm exited {proc.returncode}")
+        if proc.stderr:
+            _stderr(proc.stderr[-2000:])
+        return None
+    return {
+        "text": proc.stdout,
+        "events": [],
+        "session_id": None,
+        "tokens": None,
+        "cost": None,
+        "error": None,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     _make_streams_encoding_safe()
     parser = argparse.ArgumentParser(
@@ -1083,6 +1173,15 @@ def main(argv: list[str] | None = None) -> int:
         "usable, else win; win runs the Windows CLI; wsl forces the WSL namespace "
         "fence. The jev orchestrator cannot run under wsl: its auth lives in the "
         "Windows OpenCode service.",
+    )
+    parser.add_argument(
+        "--cascade",
+        choices=("auto", "off"),
+        default="auto",
+        help=(
+            "auto: retry on the next arm when OpenCode fails and the tree is "
+            "unchanged; off: single arm"
+        ),
     )
 
     args = parser.parse_args(argv)
@@ -1224,6 +1323,29 @@ def main(argv: list[str] | None = None) -> int:
             f"[opencode_delegate] Model {used_model} exhausted/failed ({error_msg[:80]}), "
             f"falling back to {next_model}..."
         )
+
+    if result.get("error") and getattr(args, "cascade", "auto") != "off":
+        if not _retryable_failure(result):
+            _stderr("[cascade] skipped: policy refusal, not an arm failure")
+        else:
+            changed_now = (
+                changed_workspace_paths(before, _snapshot(ROOT))
+                if before is not None
+                else []
+            )
+            if changed_now:
+                _stderr(
+                    "[cascade] skipped: the failed arm already changed "
+                    + str(len(changed_now))
+                    + " path(s) in the tree"
+                )
+            else:
+                error_text = str(result.get("error"))[:80]
+                _stderr(f"[cascade] opencode arm failed ({error_text})")
+                kilo_result = _run_kilo_fallback(prompt, args)
+                if kilo_result is not None:
+                    result = kilo_result
+                    used_model = KILO_FALLBACK_MODEL
 
     elapsed = time.monotonic() - start
 

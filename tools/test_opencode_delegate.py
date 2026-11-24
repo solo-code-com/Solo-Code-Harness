@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -36,6 +37,28 @@ import session_control  # noqa: E402
 import session_registry  # noqa: E402
 
 from tools import opencode_delegate  # noqa: E402
+
+#: Captured before any fixture replaces it, so one test can call the real arm.
+_REAL_RUN_KILO_FALLBACK = opencode_delegate._run_kilo_fallback
+
+
+@pytest.fixture(autouse=True)
+def no_real_kilo_arm(monkeypatch):
+    """Keep every test single-arm unless it opts in.
+
+    The cascade spawns tools/kilo_cli_delegate.py, and that wrapper can start a
+    Kilo server when --ensure-server is in play. A test that merely exercises an
+    error path must not do that, so the arm is replaced by a spy that records the
+    call and reports the arm unavailable. Tests that need a result patch over it.
+    """
+    calls: list[str] = []
+
+    def spy(prompt, _args):
+        calls.append(prompt)
+        return None
+
+    monkeypatch.setattr(opencode_delegate, "_run_kilo_fallback", spy)
+    return calls
 
 
 @pytest.fixture(autouse=True)
@@ -550,7 +573,16 @@ def _ok_result() -> dict:
 
 
 def _scope_argv(ws: Path) -> list[str]:
-    return ["do it", "--no-guardrail", "--directory", str(ws / "src")]
+    # Single arm: these tests exercise the OpenCode path itself, and a cascade
+    # would spawn the real Kilo wrapper on every error case they cover.
+    return [
+        "do it",
+        "--no-guardrail",
+        "--cascade",
+        "off",
+        "--directory",
+        str(ws / "src"),
+    ]
 
 
 def test_main_reports_a_change_outside_the_target_directory(
@@ -1641,3 +1673,246 @@ def test_destructive_prompt_is_refused_before_spawning(monkeypatch, tmp_path, ca
     )
     assert code == 2
     assert "refused" in capsys.readouterr().err
+
+
+# ── cascade fallback tests ───────────────────────────────────────────────────
+
+
+def test_cascade_skips_policy_refusal(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+
+    kilo_called = []
+    monkeypatch.setattr(
+        opencode_delegate,
+        "_run_kilo_fallback",
+        lambda *args, **kwargs: kilo_called.append(True),
+    )
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **_kw: {
+            "text": "",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": "scope violation",
+        },
+    )
+
+    code = opencode_delegate.main(
+        ["do task", "--no-guardrail", "--directory", str(ws / "src")]
+    )
+    assert code != 0
+    assert not kilo_called
+    err = capsys.readouterr().err
+    assert "[cascade] skipped: policy refusal" in err
+
+
+def test_cascade_skips_when_tree_changed(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+
+    snaps = [{"file.txt": "hash1"}, {"file.txt": "hash2"}]
+    monkeypatch.setattr(
+        opencode_delegate,
+        "_snapshot",
+        lambda _root: snaps.pop(0) if snaps else {"file.txt": "hash2"},
+    )
+
+    kilo_called = []
+    monkeypatch.setattr(
+        opencode_delegate,
+        "_run_kilo_fallback",
+        lambda *args, **kwargs: kilo_called.append(True),
+    )
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **_kw: {
+            "text": "",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": "arm failure",
+        },
+    )
+
+    code = opencode_delegate.main(
+        ["do task", "--no-guardrail", "--directory", str(ws / "src")]
+    )
+    assert code != 0
+    assert not kilo_called
+    err = capsys.readouterr().err
+    assert (
+        "[cascade] skipped: the failed arm already changed 1 path(s) in the tree" in err
+    )
+
+
+def test_cascade_uses_kilo_when_tree_clean(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        opencode_delegate, "_snapshot", lambda _root: {"file.txt": "hash1"}
+    )
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    kilo_called = []
+
+    def fake_kilo(*_args, **_kwargs):
+        kilo_called.append(True)
+        return {
+            "text": "KILO SUCCESS OUTPUT",
+            "events": [],
+            "session_id": "kilo-1",
+            "tokens": None,
+            "cost": None,
+            "error": None,
+        }
+
+    monkeypatch.setattr(opencode_delegate, "_run_kilo_fallback", fake_kilo)
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **_kw: {
+            "text": "",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": "opencode crashed",
+        },
+    )
+
+    code = opencode_delegate.main(
+        ["do task", "--no-guardrail", "--directory", str(ws / "src")]
+    )
+    assert code == 0
+    assert kilo_called
+    out, err = capsys.readouterr()
+    assert "KILO SUCCESS OUTPUT" in out
+    assert "[cascade] opencode arm failed (opencode crashed)" in err
+
+
+def test_cascade_off_never_calls_kilo(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+
+    kilo_called = []
+    monkeypatch.setattr(
+        opencode_delegate,
+        "_run_kilo_fallback",
+        lambda *args, **kwargs: kilo_called.append(True),
+    )
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **_kw: {
+            "text": "",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": "arm crashed",
+        },
+    )
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--cascade",
+            "off",
+            "--no-guardrail",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code != 0
+    assert not kilo_called
+    err = capsys.readouterr().err
+    assert "[cascade]" not in err
+
+
+def test_retryable_failure_classification():
+    assert (
+        opencode_delegate._retryable_failure({"error": "CLI process exited 1"}) is True
+    )
+    assert opencode_delegate._retryable_failure({"error": "connection timeout"}) is True
+    assert (
+        opencode_delegate._retryable_failure(
+            {"error": "scope: paths changed outside directory"}
+        )
+        is False
+    )
+    assert (
+        opencode_delegate._retryable_failure(
+            {"error": "control-path violation detected"}
+        )
+        is False
+    )
+    assert (
+        opencode_delegate._retryable_failure({"error": "control path violation"})
+        is False
+    )
+    assert (
+        opencode_delegate._retryable_failure({"error": "tier refusal for provider"})
+        is False
+    )
+    assert opencode_delegate._retryable_failure({"error": None}) is False
+    assert opencode_delegate._retryable_failure({"error": ""}) is False
+    assert opencode_delegate._retryable_failure({}) is False
+
+
+def test_kilo_arm_never_adds_a_second_guardrail(monkeypatch):
+    """The prompt already carries one guardrail; the arm must not add another.
+
+    Measured 2026-11-24: with two preambles the Kilo worker spent its budget
+    reading files and timed out on a one-line prompt.
+    """
+    seen: dict[str, list[str]] = {}
+    monkeypatch.setattr(
+        opencode_delegate, "_run_kilo_fallback", _REAL_RUN_KILO_FALLBACK
+    )
+
+    class Proc:
+        returncode = 0
+        stdout = "OK\n"
+        stderr = ""
+
+    def fake_run(argv, **_kwargs):
+        seen["argv"] = argv
+        return Proc()
+
+    monkeypatch.setattr(opencode_delegate.subprocess, "run", fake_run)
+    ns = SimpleNamespace(directory="src", timeout=42, no_guardrail=False)
+    result = opencode_delegate._run_kilo_fallback("brief", ns)
+
+    assert result is not None and result["text"] == "OK\n"
+    argv = seen["argv"]
+    assert "--no-guardrail" in argv
+    assert argv[argv.index("--model") + 1] == opencode_delegate.KILO_FALLBACK_MODEL
+    assert argv[argv.index("--timeout") + 1] == "42"
+    assert argv[argv.index("--directory") + 1] == "src"
+    assert "--ensure-server" in argv

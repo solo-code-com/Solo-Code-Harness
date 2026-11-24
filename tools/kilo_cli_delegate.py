@@ -2,7 +2,7 @@
 """
 kilo_cli_delegate.py — CLI-based delegation wrapper for Kilo workers.
 
-ORCHESTRATION MODEL: Claude Code / Kilo Code is ALWAYS the orchestrator.
+ORCHESTRATION MODEL: Jev is ALWAYS the orchestrator; this wrapper is one of its arms.
 This script uses `kilo run --attach` to send a single stateless prompt to a
 running Kilo server and parses the JSON events stream. The orchestrator must
 read and verify every result.
