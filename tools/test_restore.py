@@ -313,3 +313,21 @@ def test_cli_subcommands(tmp_path: Path, capsys) -> None:
     captured_prune = capsys.readouterr()
     assert "Pruned 1 snapshots:" in captured_prune.out
     assert len(restore.list_snapshots(root)) == 0
+
+
+def test_capture_works_inside_an_ignored_parent(tmp_path):
+    """A worktree lives under .solocode, which the snapshot ignores.
+
+    Judging the target against the repository root called every path in it
+    ignored, so capture returned nothing and the run had no undo at all.
+    """
+    root = tmp_path
+    target = root / ".solocode" / "worktrees" / "w" / "probe"
+    target.mkdir(parents=True)
+    (target / "a.txt").write_text("x", encoding="utf-8")
+
+    snap = restore.capture(root, target)
+    assert len(snap.entries) == 1
+
+    (target / "a.txt").write_text("y", encoding="utf-8")
+    assert len(restore.plan(root, snap)["restore"]) == 1

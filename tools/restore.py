@@ -148,7 +148,10 @@ def capture(
         for d in sorted(dirnames):
             sub_dir = Path(dirpath) / d
             rel_sub = sub_dir.relative_to(abs_root)
-            if workspace_snapshot.is_snapshot_ignored(rel_sub):
+            # Judged against the captured directory, not the repository root: a
+            # git worktree lives under .solocode, so a root-relative test would
+            # call every path in it ignored and capture nothing.
+            if workspace_snapshot.is_snapshot_ignored(sub_dir.relative_to(abs_dir)):
                 continue
             if sub_dir.is_symlink():
                 rel_str = rel_sub.as_posix()
@@ -169,7 +172,7 @@ def capture(
         for f in sorted(filenames):
             item_path = Path(dirpath) / f
             rel_item = item_path.relative_to(abs_root)
-            if workspace_snapshot.is_snapshot_ignored(rel_item):
+            if workspace_snapshot.is_snapshot_ignored(item_path.relative_to(abs_dir)):
                 continue
             rel_str = rel_item.as_posix()
             if item_path.is_symlink():
@@ -323,7 +326,9 @@ def plan(root: Path, snapshot: Snapshot) -> dict[str, list[str]]:
             for d in sorted(dirnames):
                 sub_dir = Path(dirpath) / d
                 rel_sub = sub_dir.relative_to(abs_root)
-                if workspace_snapshot.is_snapshot_ignored(rel_sub):
+                if workspace_snapshot.is_snapshot_ignored(
+                    sub_dir.relative_to(abs_walk_dir)
+                ):
                     continue
                 if sub_dir.is_symlink():
                     rel_str = rel_sub.as_posix()
@@ -343,7 +348,9 @@ def plan(root: Path, snapshot: Snapshot) -> dict[str, list[str]]:
             for f in sorted(filenames):
                 item_path = Path(dirpath) / f
                 rel_item = item_path.relative_to(abs_root)
-                if workspace_snapshot.is_snapshot_ignored(rel_item):
+                if workspace_snapshot.is_snapshot_ignored(
+                    item_path.relative_to(abs_walk_dir)
+                ):
                     continue
                 rel_str = rel_item.as_posix()
                 found_paths.add(rel_str)
