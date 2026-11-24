@@ -4,7 +4,7 @@ Thank you for considering contributing to the Solo-Code AI Agent Harness.
 
 ## What We Build
 
-Solo-Code is a discipline layer for AI coding agents — rules, skills, hooks, and verification gates that transform any AI coding assistant into a disciplined engineer. We maintain the harness across five engines: OpenCode, Claude Code, Kilo Code, GitHub Copilot, and Gemini/Antigravity.
+Solo-Code is a discipline layer for AI coding agents — rules, skills, hooks, and verification gates that transform any AI coding assistant into a disciplined engineer. We maintain the harness across three engines: OpenCode, Kilo Code, and Gemini/Antigravity.
 
 ## How to Contribute
 

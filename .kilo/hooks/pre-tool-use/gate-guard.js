@@ -12,7 +12,7 @@
  *
  * Cross-platform tool name support:
  *   Claude Code: Bash | Kilo: bash | Gemini: run_command, execute
- *   Copilot: runCommand, terminal | Cursor: execute_command
+ *   the other engine: runCommand, terminal | Cursor: execute_command
  */
 
 'use strict';
@@ -750,7 +750,7 @@ process.stdin.on('end', () => {
   const SHELL_TOOLS = new Set([
     'Bash', 'bash',           // Claude Code, Kilo
     'run_command', 'execute', // Gemini/Antigravity
-    'runCommand', 'terminal', // Copilot
+    'runCommand', 'terminal', // the other engine
     'execute_command', 'shell', 'RunCommand', // Cursor, generic
   ]);
 

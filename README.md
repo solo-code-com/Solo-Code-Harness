@@ -27,9 +27,9 @@ make check
 make test              # Harness tests
 make security-scan     # Secret detection
 make validate          # Schema validation (.kilo/ agents + skills)
-make garden            # Drift detection (.kilo <-> .claude / .copilot)
+make garden            # Drift detection (.kilo <-> .agents / .opencode / .gemini)
 
-# Integration tests (Copilot structure + shared state)
+# Integration tests (shared state)
 python tools/test_integration.py
 
 # No-skips test policy
@@ -58,11 +58,9 @@ python tools/deploy.py scaffold /path/to/new-project --name my-app --description
 # Kilo-only engine
 python tools/deploy.py scaffold /path/to/new-project --engine kilo
 
-# Copilot-only engine
-python tools/deploy.py scaffold /path/to/new-project --engine copilot
 ```
 
-Scaffold creates the directory, copies engine configs (Kilo + Claude Code + Copilot + Gemini, runtime-only — see "Deploy is runtime-only" note above), generates `.gitignore` and `README.md`, runs `git init`, and prints post-setup instructions.
+Scaffold creates the directory, copies engine configs (Kilo + OpenCode + Gemini, runtime-only — see "Deploy is runtime-only" note above), generates `.gitignore` and `README.md`, runs `git init`, and prints post-setup instructions.
 
 ### Deploy to an existing project
 
@@ -94,12 +92,10 @@ python tools/deploy.py
 
 | Directory | Purpose |
 |---|---|
-| `.copilot/` | GitHub Copilot: agents (16), skills (54), commands (15), instruction (10), memory (4). Manually kept in parity with `.kilo/`; checked (not generated) by `tools/garden.py`. |
 | `.kilo/` | **Generation root** — every generated engine is produced from this directory. Kilo Code: agents (16), skills (54), commands (15, incl. `ship`), hooks, memory, instruction. Edit here first. The Kilo runtime hooks still live here, but the repository targets OpenCode v2, not the Kilo application. |
 | `.gemini/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
 | `.github/` | Shared scripts: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py`, `security-allowlist.txt` + `copilot-instructions.md`, `prompts/` |
 | `tools/` | Generator (`generate_harness.py`, `skills_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` |
-| `.vscode/` | VS Code settings + MCP config for Copilot |
 
 ## Model Providers & the 3-Role Pipeline
 
@@ -230,7 +226,7 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | Drift | `make garden` | `.kilo` ↔ `.claude` (generated) / `.copilot` / `.gemini` parity, with documented command exceptions |
 | Document truth | `make garden` | Counts, cited paths, documented CLI flags, enforcement claims and skill references must match reality — see [SPEC.md §7.2.1](SPEC.md) |
 | Harness Tests | `make test` | Generator + shared-state (`tools/test_*.py`) |
-| Integration | `python tools/test_integration.py` | Copilot structure + shared state schema |
+| Integration | `python tools/test_integration.py` | shared state schema |
 | Security | `make security-scan` | Hardcoded secrets |
 | Gitleaks | `make gitleaks` | Secret scan over the whole tree with `.gitleaks.toml` (the harness's own scanner runs separately) |
 | Boundary | `python .github/scripts/boundary_audit.py .` | No project files leaked into harness dirs |
@@ -257,27 +253,6 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | `/ship` | Pre-launch checklist |
 | `/commit` | Create conventional commit |
 | `/debug` | Systematic debugging workflow |
-
-## Copilot Setup (VS Code)
-
-```bash
-# Open project in VS Code — Copilot auto-loads:
-#   .github/copilot-instructions.md   (rulebook)
-#   .github/prompts/*.prompt.md       (chat commands)
-#   .vscode/settings.json             (Copilot config)
-#   .vscode/mcp.json                  (MCP servers)
-```
-
-**Copilot Chat Commands** — type `#` in Copilot Chat and select:
-
-| Command | Purpose |
-|---|---|
-| `verify` | Run all verification gates |
-| `plan` | Create an implementation plan |
-| `decide` | Architectural decision record |
-| `ship` | Pre-launch checklist |
-| `commit` | Create conventional commit |
-| `debug` | Systematic debugging workflow |
 
 ## Claude Code Setup
 
@@ -397,7 +372,7 @@ make check
 make test              # Harness tests
 make security-scan     # Phát hiện secret trong code
 make validate          # Schema validation (.kilo/ agents + skills)
-make garden            # Drift detection (.kilo <-> .claude / .copilot)
+make garden            # Drift detection (.kilo <-> .agents / .opencode / .gemini)
 
 # Integration tests (cấu trúc Copilot + shared state)
 python tools/test_integration.py
@@ -428,7 +403,6 @@ python tools/deploy.py scaffold /path/to/new-project --name my-app --description
 python tools/deploy.py scaffold /path/to/new-project --engine kilo
 
 # Chỉ engine Copilot
-python tools/deploy.py scaffold /path/to/new-project --engine copilot
 ```
 
 Scaffold tạo thư mục, copy config engine (Kilo + Claude Code + Copilot + Gemini, chỉ phần runtime), sinh `.gitignore` và `README.md`, chạy `git init`, và in hướng dẫn post-setup.
@@ -463,12 +437,10 @@ python tools/deploy.py
 
 | Thư mục | Mục đích |
 |---|---|
-| `.copilot/` | GitHub Copilot: agents (16), skills (54), commands (15), instruction (10), memory (4). Giữ song song thủ công với `.kilo/`; `tools/garden.py` chỉ kiểm tra, không tự sinh. |
 | `.kilo/` | **Gốc sinh mã** — các engine được sinh tự động từ thư mục này. Kilo Code: agents (16), skills (54), commands (15, gồm `ship`), hooks, memory, instruction. Sửa ở đây trước tiên. Kilo runtime hooks vẫn nằm ở đây, nhưng repository nhắm tới OpenCode v2 và Claude Code, không phải ứng dụng Kilo. |
 | `.gemini/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
 | `.github/` | Script dùng chung: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py` + `copilot-instructions.md`, `prompts/` |
 | `tools/` | Generator (`generate_harness.py`, `skills_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` (runtime dep của Claude session hooks) |
-| `.vscode/` | VS Code settings + MCP config cho Copilot |
 
 > **Kho chính thức:** <https://github.com/solo-code-com/Solo-Code-Harness> (MIT). Version engine
 > `4.3.1` đóng dấu ở `.harness.lock`, `agent.yaml`, `pyproject.toml`; SPEC giữ version tài liệu

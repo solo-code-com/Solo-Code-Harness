@@ -1,6 +1,6 @@
 ---
 name: solo-code-harness
-description: "Deploy, configure, and maintain the Solo-Code multi-agent harness across Copilot, Claude, Gemini, and Kilo. Use when: deploy harness, setup copilot, setup claude, setup gemini, setup kilo, configure AI agents, install AI harness, solo-code setup, initialize project."
+description: "Deploy, configure, and maintain the Solo-Code multi-agent harness across OpenCode, Gemini, and Kilo. Use when: deploy harness, setup copilot, setup claude, setup gemini, setup kilo, configure AI agents, install AI harness, solo-code setup, initialize project."
 license: MIT
 ---
 
@@ -16,7 +16,6 @@ The harness lives in four platform-specific directories at the project root:
 
 | Platform | Directory | Auto-loads |
 |----------|-----------|------------|
-| GitHub Copilot / Cursor | `.github/` | `copilot-instructions.md` + PreToolUse hooks |
 | Claude Code | `.claude/` | `CLAUDE.md` |
 | Gemini | `.gemini/antigravity/` | `AGENTS.md` + skills |
 | Kilo | `.kilo/` + `kilo.json` + `AGENTS.md` | `AGENTS.md`, `command/`, `agent/`, `skill/` |
@@ -36,13 +35,6 @@ Copy to target project:
 AGENTS.md
 kilo.json
 .kilo/
-```
-
-### Deploy Copilot harness only
-Copy to target project:
-```
-.github/
-.vscode/
 ```
 
 ---
@@ -122,7 +114,6 @@ The harness uses three layers of protection:
 ## Cross-Harness Consistency
 
 When editing shared concepts (behavior rules, security rules, project conventions), update ALL four harnesses:
-- `.github/copilot-instructions.md`
 - `CLAUDE.md`
 - `.gemini/antigravity/AGENTS.md`
 - `AGENTS.md` (Kilo root)

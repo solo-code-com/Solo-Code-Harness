@@ -21,7 +21,6 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 # ─── Harness directories ───────────────────────────────────────────────────
 HARNESS_DIRS = [
     ".kilo",
-    ".copilot",
     ".gemini",
     ".claude",
     ".claude-plugin",

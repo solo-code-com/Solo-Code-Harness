@@ -16,7 +16,7 @@
   "Solo-Code Engineer có kỷ luật". KHÔNG phải app chạy độc lập.
 - Engine hỗ trợ thật (đã cài đặt + verify 2026-10-16): **Kilo Code** (nguồn gốc),
   **Claude Code** (generate từ Kilo), **OpenCode v2** (engine chính: `@opencode/cli`
-  + `@opencode/plugin`, config sinh bởi `tools/opencode_engine.py`), **GitHub Copilot**
+  + `@opencode/plugin`, config sinh bởi `tools/opencode_engine.py`)
   (mirror thủ công), **Gemini/Antigravity** (mirror thủ công + human-relay handoff, và
   CLI headless `agy` dùng làm worker).
 - `.opencode/` từng bị gỡ ở v4.0.0 rồi **đưa lại thành engine chính ở v4.2.0** — tài
@@ -74,7 +74,7 @@ Nếu plugin bắt đầu chứa code tự dựng lại native capability → v�
 
 ## 1. Cấu trúc thư mục [HARD]
 
-Phải tồn tại các thư mục: `.claude/` `.copilot/` `.github/` `.gemini/` `.kilo/` `.vscode/`
+Phải tồn tại các thư mục: `.github/` `.gemini/` `.kilo/` `.vscode/`
 
 > Kiểm chứng: `python .github/scripts/boundary_audit.py .` — clean.
 
@@ -185,7 +185,7 @@ xem `/debug`), testing, file-editing, brainstorming, api-design, planning,
 verify, orchestration.
 
 > Kiểm chứng một phần tự động: `python tools/garden.py` (parity + content
-> drift giữa `.kilo/` nguồn và `.claude/`/`.copilot/`/`.gemini/` mirror,
+> drift giữa `.kilo/` nguồn và `.opencode/`/`.gemini/` mirror,
 > gồm cả `check_skill_content()` — bỏ qua khác biệt frontmatter hợp lệ,
 > chỉ so khớp phần body).
 
@@ -295,7 +295,7 @@ lớn kể từ v3.3.0:
 ## 8. Memory xuyên phiên [SOFT — nghiệm thu tay, size cap HARD]
 
 - Mỗi nền tảng có thư mục memory riêng (`.kilo/memory/`, `.claude/memory/`,
-  `.copilot/memory/`). `.kilo/memory/` là nguồn gốc; `.claude/` được
+  `). `.kilo/memory/` là nguồn gốc; `.claude/` được
   regenerate/sync, `.copilot/` giữ song song thủ công (`garden.py` kiểm
   tra content, không chỉ tên file).
 - 4 file chính: `MEMORY.md`, `project-conventions.md`,

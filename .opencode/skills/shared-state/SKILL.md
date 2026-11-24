@@ -7,7 +7,7 @@ description: "Auto-loaded at session start. Mọi engine **đọc** được `.s
 
 > Auto-loaded at session start. Mọi engine **đọc** được `.solocode/shared-state.db` (SQLite).
 > Chỉ hook lifecycle hoặc một lệnh gọi `SharedState` tường minh mới **ghi** vào đó. Kilo có hook
-> nhưng chỉ ghi `.kilo/state/*.json`; OpenCode, Copilot và Gemini không có lifecycle hook, nên
+> nhưng chỉ ghi `.kilo/state/*.json`; OpenCode và Gemini không có lifecycle hook, nên
 > session của chúng không để lại row nào.
 > File này KHÔNG được commit vào git — chỉ tồn tại local trên máy đang chạy các engine.
 
@@ -37,7 +37,7 @@ ghi vào `.solocode/sessions.db`; `pre_compact.py` ghi checkpoint vào
 Kilo Code có hook vòng đời riêng nhưng chỉ ghi file JSON trong `.kilo/state/`,
 không đụng tới hai store đó.
 
-OpenCode, Copilot và Gemini **không** có lifecycle hook, nên phiên của chúng không
+OpenCode và Gemini **không** có lifecycle hook, nên phiên của chúng không
 tự động được ghi lại: đừng giả định có dòng mới trong bảng session sau một phiên như
 vậy. Nếu cần lưu, gọi `SharedState.add_session_entry` từ code —
 `.claude/hooks/pre_compact.py` dòng 88 là ví dụ đang chạy.
