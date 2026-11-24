@@ -43,6 +43,7 @@ except ImportError:  # pragma: no cover - script-dir import path
 DEFAULT_MODEL = "gemini-3.8-flash-medium"
 DEFAULT_TIMEOUT_SECONDS = 600
 DIRECTORY_LOCK_ENGINE = "gemini"
+WORKTREE_ERROR_EXIT_CODE = 7
 USAGE_LOG = ROOT / ".solocode" / "antigravity-usage.jsonl"
 
 EVIDENCE_BOUNDARY = """
@@ -525,6 +526,19 @@ def main(argv: list[str] | None = None) -> int:
         help="permit writes into node_modules, build, dist, .venv, venv or target",
     )
     parser.add_argument(
+        "--worktree",
+        action="store_true",
+        help=(
+            "run the worker in a fresh git worktree from HEAD, so two writers "
+            "cannot see each other; the tree must be clean"
+        ),
+    )
+    parser.add_argument(
+        "--worktree-allow-dirty",
+        action="store_true",
+        help="proceed even though uncommitted changes will not be in the worktree",
+    )
+    parser.add_argument(
         "--no-snapshot-writes",
         action="store_true",
         help=(
@@ -588,6 +602,53 @@ def main(argv: list[str] | None = None) -> int:
     target_dir = Path(args.target_dir).resolve()
     if not target_dir.is_dir():
         parser.error(f"--target-dir is not a directory: {target_dir}")
+
+    worktree_created = None
+    original_target = target_dir
+    if args.worktree:
+        worktree = _load_sibling("worktree")
+        dirty = worktree.dirty_paths(target_dir)
+        if dirty and not args.worktree_allow_dirty:
+            _stderr(
+                "[worktree] refused: uncommitted changes would not exist in the "
+                "worktree, so the worker would edit a different tree"
+            )
+            for changed in dirty[:10]:
+                _stderr(f"  {changed}")
+            _stderr("[worktree] commit first, or pass --worktree-allow-dirty")
+            return WORKTREE_ERROR_EXIT_CODE
+        if worktree.repo_root(target_dir) is None:
+            _stderr("[worktree] refused: --target-dir is not inside a git work tree")
+            return WORKTREE_ERROR_EXIT_CODE
+        try:
+            worktree_created = worktree.create(
+                worktree.repo_root(target_dir), worktree.slugify(args.prompt)
+            )
+        except worktree.WorktreeError as exc:
+            _stderr(f"[worktree] {exc}")
+            return WORKTREE_ERROR_EXIT_CODE
+        target_dir = worktree_created.path
+        _stderr(f"[worktree] path={worktree_created.path}")
+        _stderr(f"[worktree] branch={worktree_created.branch}")
+        if dirty:
+            _stderr(
+                f"[worktree] warning: {len(dirty)} uncommitted path(s) are not in "
+                "the worktree"
+            )
+
+    if worktree_created is not None and args.allow_dir:
+        allowed_path = Path(args.allow_dir)
+        if allowed_path.is_absolute():
+            try:
+                args.allow_dir = (
+                    allowed_path.resolve().relative_to(original_target).as_posix()
+                )
+            except ValueError:
+                _stderr(
+                    "[worktree] --allow-dir is outside --target-dir; name it "
+                    "relative to the worktree instead"
+                )
+                return WORKTREE_ERROR_EXIT_CODE
     try:
         _, allowed_relative = (
             resolve_allowed_directory(args.allow_dir, target_dir)
@@ -792,6 +853,11 @@ def main(argv: list[str] | None = None) -> int:
         _stderr(
             f"model={args.model} elapsed={time.monotonic() - started:.1f}s exit={exit_code}"
         )
+        if worktree_created is not None:
+            _stderr(f"[worktree] branch={worktree_created.branch}")
+            status = worktree.summary(worktree_created.path)
+            _stderr("[worktree] " + (status if status else "no changes"))
+            _stderr("[worktree] kept on disk; merge the branch, then remove it")
         return 0
     finally:
         if locked:

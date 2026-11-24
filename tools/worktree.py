@@ -77,6 +77,15 @@ def dirty_paths(root: Path) -> list[str]:
     return [line[3:].strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
+def repo_root(path: Path) -> Path | None:
+    """The enclosing git work tree root, or None when the path is not in one."""
+    start = path if path.is_dir() else path.parent
+    proc = _git(start, "rev-parse", "--show-toplevel")
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    return Path(proc.stdout.strip()).resolve()
+
+
 def create(
     root: Path, slug: str, *, base: str = "HEAD", stamp: str | None = None
 ) -> Worktree:

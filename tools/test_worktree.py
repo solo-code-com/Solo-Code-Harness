@@ -25,6 +25,7 @@ from worktree import (  # noqa: E402
     dirty_paths,
     make_stamp,
     remove,
+    repo_root,
     slugify,
     summary,
 )
@@ -132,3 +133,18 @@ def test_remove_deletes_directory(tmp_path: Path):
     assert wt.path.exists()
     remove(repo, wt.path)
     assert not wt.path.exists()
+
+
+@git_required
+def test_repo_root_finds_root_from_subdirectory(tmp_path: Path):
+    repo = init_repo(tmp_path / "repo")
+    sub = repo / "sub" / "nested"
+    sub.mkdir(parents=True)
+    assert repo_root(sub) == repo.resolve()
+
+
+@git_required
+def test_repo_root_returns_none_outside_repository(tmp_path: Path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    assert repo_root(outside) is None

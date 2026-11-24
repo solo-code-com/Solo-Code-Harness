@@ -50,6 +50,16 @@ from typing import Any
 
 TOOLS_DIR = Path(__file__).resolve().parent
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(TOOLS_DIR))
+
+try:
+    import worktree
+except ImportError:  # pragma: no cover - script-dir import path
+    from tools import worktree  # noqa: E402
+
 DEFAULT_SERVER = "http://127.0.0.1:14096"
 DEFAULT_MODEL = "opencode-go/beam-free"
 
@@ -582,8 +592,56 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Start the Kilo server first (kilo_server_manager.py ensure) if it is down",
     )
+    parser.add_argument(
+        "--worktree",
+        action="store_true",
+        help=(
+            "run the worker in a fresh git worktree from HEAD, so two writers "
+            "cannot see each other; the tree must be clean"
+        ),
+    )
+    parser.add_argument(
+        "--worktree-allow-dirty",
+        action="store_true",
+        help="proceed even though uncommitted changes will not be in the worktree",
+    )
 
     args = parser.parse_args(argv)
+
+    worktree_created = None
+    if args.worktree:
+        start = Path(args.directory).resolve()
+        root = worktree.repo_root(start)
+        if root is None:
+            print(
+                "[worktree] refused: --directory is not inside a git work tree",
+                file=sys.stderr,
+            )
+            return 7
+        dirty = worktree.dirty_paths(root)
+        if dirty and not args.worktree_allow_dirty:
+            print(
+                "[worktree] refused: uncommitted changes would not exist in the "
+                "worktree",
+                file=sys.stderr,
+            )
+            for changed in dirty[:10]:
+                print(f"  {changed}", file=sys.stderr)
+            print(
+                "[worktree] commit first, or pass --worktree-allow-dirty",
+                file=sys.stderr,
+            )
+            return 7
+        try:
+            worktree_created = worktree.create(root, worktree.slugify(args.prompt))
+        except worktree.WorktreeError as exc:
+            print(f"[worktree] {exc}", file=sys.stderr)
+            return 7
+        args.directory = str(
+            (worktree_created.path / start.relative_to(root)).resolve()
+        )
+        print(f"[worktree] path={worktree_created.path}", file=sys.stderr)
+        print(f"[worktree] branch={worktree_created.branch}", file=sys.stderr)
 
     # ── Server precondition ──
     # Checked before anything is spawned: a dead server is cheaper to report than
@@ -669,6 +727,12 @@ def main(argv: list[str] | None = None) -> int:
         tokens = result["tokens"]
         _stderr(
             f"tokens: in={tokens.get('input')} out={tokens.get('output')} total={tokens.get('total')}"
+        )
+
+    if worktree_created is not None:
+        print(f"[worktree] branch={worktree_created.branch}", file=sys.stderr)
+        print(
+            "[worktree] kept on disk; merge the branch, then remove it", file=sys.stderr
         )
 
     return 0

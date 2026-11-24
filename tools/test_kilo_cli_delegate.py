@@ -30,6 +30,7 @@ for _entry in (str(ROOT), str(TOOLS)):
     sys.path.insert(0, _entry)
 
 import session_registry  # noqa: E402
+import worktree  # noqa: E402
 
 from tools import kilo_cli_delegate  # noqa: E402
 
@@ -977,3 +978,69 @@ def test_main_reports_token_usage(monkeypatch, capsys):
 
     assert kilo_cli_delegate.main(["x", "--no-guardrail"]) == 0
     assert "tokens: in=3 out=4 total=7" in capsys.readouterr().err
+
+
+# ── worktree support ─────────────────────────────────────────────────────────
+
+
+def test_worktree_refuses_a_dirty_tree(monkeypatch, tmp_path, capsys):
+    _reach_the_runner(monkeypatch)
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: ["src/x.py"])
+    monkeypatch.setattr(worktree, "repo_root", lambda _root: tmp_path)
+
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **kwargs: run_called.append(kwargs) or _ok_result(),
+    )
+    popen_called: list[object] = []
+    monkeypatch.setattr(
+        kilo_cli_delegate.subprocess,
+        "Popen",
+        lambda *a, **k: popen_called.append(a),
+    )
+
+    code = kilo_cli_delegate.main(["hello", "--no-guardrail", "--worktree"])
+
+    assert code == 7
+    assert len(run_called) == 0
+    assert len(popen_called) == 0
+    err = capsys.readouterr().err
+    assert (
+        "[worktree] refused: uncommitted changes would not exist in the worktree" in err
+    )
+
+
+def test_worktree_swaps_the_directory(monkeypatch, tmp_path):
+    _reach_the_runner(monkeypatch)
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    wt_path = ws / ".solocode" / "worktrees" / "task-1"
+    wt_path.mkdir(parents=True)
+    fake_wt = SimpleNamespace(path=wt_path, branch="jev/task-1")
+
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: [])
+    monkeypatch.setattr(worktree, "repo_root", lambda _root: ws)
+    monkeypatch.setattr(worktree, "create", lambda *a, **k: fake_wt)
+
+    seen_dir: list[str] = []
+
+    def fake_run(**kwargs):
+        seen_dir.append(kwargs.get("directory"))
+        return _ok_result()
+
+    monkeypatch.setattr(kilo_cli_delegate, "run_kilo_cli", fake_run)
+
+    code = kilo_cli_delegate.main(
+        ["hello", "--no-guardrail", "--worktree", "--directory", str(ws)]
+    )
+
+    assert code == 0
+    assert len(seen_dir) == 1
+    handed = Path(seen_dir[0]).resolve()
+    assert handed == wt_path.resolve()
+    assert handed.is_relative_to(wt_path.resolve())

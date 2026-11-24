@@ -20,6 +20,7 @@ for _entry in (str(ROOT), str(TOOLS)):
 import protected_state  # noqa: E402
 import restore  # noqa: E402
 import session_registry  # noqa: E402
+import worktree  # noqa: E402
 
 from tools import antigravity_delegate, shared_state  # noqa: E402
 
@@ -1145,3 +1146,50 @@ def test_no_snapshot_writes_skips_capture(monkeypatch, tmp_path, capsys):
     code = antigravity_delegate.main(argv)
     assert code == 0
     assert len(captured) == 0
+
+
+def test_worktree_refuses_a_dirty_tree(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: ["src/x.py"])
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        antigravity_delegate, "run_agy_cli", lambda **kwargs: run_called.append(kwargs)
+    )
+
+    code = antigravity_delegate.main(["task", "--target-dir", str(ws), "--worktree"])
+    assert code == 7
+    assert len(run_called) == 0
+    err = capsys.readouterr().err
+    assert (
+        "[worktree] refused: uncommitted changes would not exist in the worktree" in err
+    )
+
+
+def test_worktree_swaps_the_target_dir(monkeypatch, tmp_path):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    seen_target_dir: list[Path] = []
+
+    def fake_run(**kwargs):
+        seen_target_dir.append(kwargs.get("target_dir"))
+        return {"text": "done", "error": None}, 0
+
+    monkeypatch.setattr(antigravity_delegate, "run_agy_cli", fake_run)
+
+    wt_path = ws / ".solocode" / "worktrees" / "task-1"
+    wt_path.mkdir(parents=True)
+    fake_wt = SimpleNamespace(path=wt_path, branch="jev/task-1")
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: [])
+    monkeypatch.setattr(worktree, "repo_root", lambda _root: ws)
+    monkeypatch.setattr(worktree, "create", lambda *a, **k: fake_wt)
+    monkeypatch.setattr(worktree, "summary", lambda _path: "")
+
+    code = antigravity_delegate.main(["task", "--target-dir", str(ws), "--worktree"])
+    assert code == 0
+    assert seen_target_dir == [wt_path]

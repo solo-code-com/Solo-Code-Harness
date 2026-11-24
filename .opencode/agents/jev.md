@@ -182,8 +182,8 @@ reviews, because its tokens are free. Gemini runs on a finite plan quota and die
    snapshot of the whole workspace, so a second writer running at the same time
    looks like this run's violation. Inspect `git status` and the diff after
    every delegation. Two writers may run at once only when each gets its own
-   tree: `opencode_delegate.py --worktree` builds one from HEAD, refuses when the
-   tree is dirty, and prints the branch to merge. Without that flag, run one
+   tree: `--worktree` on any of the three wrappers builds one from HEAD, refuses
+   when the tree is dirty, and prints the branch to merge. Without it, run one
    writing worker at a time.
 3. A run that can write captures the target tree first and prints the snapshot
    id; `python tools/restore.py apply <id> --yes` puts every file back byte for

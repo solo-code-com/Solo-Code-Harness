@@ -301,9 +301,8 @@ delegating anything that **writes**:
 - The wrapper takes a `tools/shared_state.py` directory lock; do not bypass it.
 - Name the writable directory with `--allow-dir` and forbid everything else.
 - Never delegate a write that overlaps a file being edited in this session. The
-  OpenCode arm removes the overlap with `--worktree`: it builds a worktree from
-  HEAD, refuses when the tree is dirty, and prints the branch to merge. agy has
-  no such flag yet, so the serial rule still applies to it.
+  Antigravity wrapper removes the overlap with `--worktree`: it builds a worktree
+  from HEAD, refuses when the tree is dirty, and prints the branch to merge.
 
 Gemini also keeps its own artifacts outside the repo at
 `~/.gemini/antigravity-ide/brain/<session-uuid>/` (`*.md` + `.metadata.json`,
