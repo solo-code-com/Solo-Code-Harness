@@ -1,5 +1,5 @@
 ---
-description: "Solo-Code AI Agent Harness — root rulebook for multi-engine (Kilo + Claude Code + Copilot + Gemini) development"
+description: "Solo-Code AI Agent Harness — root rulebook for multi-engine (Kilo + OpenCode + Gemini) development"
 mode: primary
 color: "#166534"
 permissions:
@@ -24,7 +24,9 @@ permissions:
 
 > **CRITICAL:** Read this file fully before taking any action. These rules are NON-NEGOTIABLE.
 
-This file serves **Kilo** (reads `.kilo/` for hooks/skills/memory — source of truth), **OpenCode** (reads `.opencode/` + `opencode.json`, generated from `.kilo/`; it also loads this file and the vendor-neutral `.agents/skills/` location), and **GitHub Copilot** (reads `.copilot/` for agents/skills/commands, `.github/copilot-instructions.md` for rulebook). Sections referencing `.kilo/` paths are Kilo-specific; other engines ignore them and use their own generated/mirrored equivalents. (`.opencode/` was removed in v4.0.0, then reintroduced in v4.2.0 as a first-class primary engine — see `.harness.lock`.)
+This file serves **Kilo** (reads `.kilo/` for hooks/skills/memory — source of truth), **OpenCode** (reads `.opencode/` + `opencode.json`, generated from `.kilo/`; it also loads this file and the vendor-neutral `.agents/skills/` location). Sections referencing `.kilo/` paths are Kilo-specific; other engines ignore them and use their own generated/mirrored equivalents. (`.opencode/` was removed in v4.0.0, then reintroduced in v4.2.0 as a first-class primary engine — see `.harness.lock`.)
+
+**Data-tier marker.** The tier gate resolves `.harness-tier` upward from the working directory: `client`, `personal` or `public`. Missing, unreadable or invalid means `client`, the strictest tier. The wrappers refuse to start when the resolved tier is `client` and a provider on the banned list is declared by the project config or exported by an environment variable. No project sets a marker today, on purpose - the default is the safe one. Add `personal` or `public` only when a project must reach a provider that `client` refuses; the marker is a permission, not a preference.
 
 **Session hooks (OpenCode v2):** `.opencode/plugins/harness/index.js` restores the two behaviours that survived the Claude engine: a `<harness state>branch=… sha=… dirty=…` block on every model call (the old `session_start`) and a checkpoint written before compaction (the old `pre_compact`). It exports a plain `{id, setup}` definition so a missing `@opencode/plugin` cannot break a session, every hook body is guarded, and failures land in `.solocode/harness-plugin.log`.
 
@@ -38,7 +40,7 @@ This project is powered by **Solo-Code Harness** — an AI agent discipline laye
 
 | If the file path starts with... | Then it is... | Action |
 |----------------------------------|---------------|--------|
-| `.kilo/`, `.copilot/`, `.gemini/`, `.opencode/`, `.agents/` | Harness engine | Rules/skills/hooks for AI behavior — not project logic |
+| `.kilo/`, `.gemini/`, `.opencode/`, `.agents/` | Harness engine | Rules/skills/hooks for AI behavior — not project logic |
 | `.contracts/` | Harness sub-agent contracts | Status contracts for delegated agents |
 | `.github/`, `.vscode/`, `tools/` | **Shared** — harness *and* project | The harness ships files here, but the project also keeps its own CI workflows, `CODEOWNERS`, dependabot config, editor settings and dev scripts. Only the exact paths under `[shared_files]` in `.harness.lock` are harness; **everything else here is project code**. |
 | `AGENTS.md`, `agent.yaml`, `kilo.jsonc`, `opencode.json`, `.mcp.json`, `.ruff.toml`, `.gitleaks.toml`, `Makefile`, `opencode-env.ps1`, `init.sh`, `verify.sh`, `extensions_config.json`, `.harness.lock`, `.solocode/`, `.pre-commit-config.yaml`, `.github/pull_request_template.md` | Harness config | Agent behavior configuration — not application config |
@@ -204,14 +206,14 @@ soon-to-be-compacted summary.**
 1. A real decision - architecture choice, engine/tool adoption, a fix that changes
    established behavior, a policy change - gets one bullet immediately, not at end of
    session.
-2. One run of `python tools/generate_harness.py` (any `--harness` value) syncs
-   `.claude/memory/` via the engine generator and `.copilot/memory/` via
-   `sync_memory_mirrors`; nothing is copied by hand. `.gemini/` has no memory mirror
-   (see `check_gemini()` in `tools/garden.py`).
-3. Claude Code's `PreCompact` hook (`.claude/hooks/pre_compact.py`) logs an objective
-   checkpoint (git branch/sha, trigger type, timestamp) and reminds you - a hook is a
-   deterministic script, so it cannot write the decision prose. Treat the reminder as a
-   prompt to do step 1.
+2. One run of `python tools/generate_harness.py` (any `--harness` value) syncs the
+   instruction, agent and skill-body mirrors; nothing is copied by hand. No engine keeps
+   a MEMORY.md mirror since the Copilot and Claude engines were removed, so
+   `.kilo/memory/` is the only copy.
+3. The OpenCode plugin writes an objective checkpoint (branch, sha, message count) to
+   `.solocode/context-checkpoint.json` before compaction, and `.opencode/plugins/harness`
+   logs its own failures. A checkpoint is a reminder, not the decision: writing the bullet
+   above is still yours to do.
 4. Engines without such a hook apply the rule by hand: when a session runs long,
    checkpoint to `MEMORY.md` instead of trusting the engine's own summarization.
 
