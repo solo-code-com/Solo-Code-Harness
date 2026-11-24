@@ -449,10 +449,18 @@ FORBIDDEN_IN_PROMPT: tuple[str, ...] = (
     "git push -f",
     "git reset --hard",
     "git clean -fd",
-    "rm -rf /",
-    "rm -rf ~",
+    "git clean -xdf",
+    "rm -rf",
+    "rm -fr",
+    "remove-item -recurse",
+    "remove-item -force",
+    "mkfs",
+    "shred",
+    "format c:",
     "drop table",
     "drop database",
+    "drop schema",
+    "truncate table",
 )
 
 

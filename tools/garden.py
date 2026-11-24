@@ -93,6 +93,35 @@ def _doc_scan_skip_dirs(root: Path) -> set[str]:
     return skip
 
 
+_HISTORICAL_DOCS_FILE = Path("tools") / "config" / "historical-docs.txt"
+_HISTORICAL_CACHE: dict[str, frozenset[str]] = {}
+
+
+def historical_docs(root: Path) -> frozenset[str]:
+    """Repo-relative docs exempt from the doc citation checks.
+
+    A historical record quotes paths that existed when it was written; removing
+    a tool does not make the record wrong. The list is a file so the exemption
+    is reviewable, and a test asserts every entry still exists -- an exemption
+    for a file that is gone would be an invisible hole.
+    """
+    key = str(root)
+    cached = _HISTORICAL_CACHE.get(key)
+    if cached is not None:
+        return cached
+    try:
+        text = (root / _HISTORICAL_DOCS_FILE).read_text(encoding="utf-8")
+    except OSError:
+        text = ""
+    entries = frozenset(
+        line.split("#", 1)[0].strip().replace("\\", "/")
+        for line in text.splitlines()
+        if line.split("#", 1)[0].strip()
+    )
+    _HISTORICAL_CACHE[key] = entries
+    return entries
+
+
 def _load_skip_skills() -> set[str]:
     """Read opencode-skip-skills.txt — skills intentionally excluded."""
     if not SKIP_FILE.is_file():
@@ -1383,6 +1412,8 @@ def check_doc_paths(root: Path = ROOT) -> list[str]:
             continue
         if any(part in skip_dirs for part in rel_parts):
             continue
+        if md.relative_to(root).as_posix() in historical_docs(root):
+            continue
         # Archives and plan snapshots describe history; paths may be gone by design.
         posix = md.as_posix()
         if (
@@ -1485,6 +1516,8 @@ def check_doc_flags(root: Path = ROOT) -> list[str]:
             continue
         if any(part in skip_dirs for part in rel_parts):
             continue
+        if md.relative_to(root).as_posix() in historical_docs(root):
+            continue
         posix = md.as_posix()
         if "decisions-archive" in md.name or "/plans/" in posix:
             continue
@@ -1567,6 +1600,8 @@ def check_enforcement_claims(root: Path = ROOT) -> list[str]:
         except ValueError:
             continue
         if any(part in skip_dirs for part in rel_parts):
+            continue
+        if md.relative_to(root).as_posix() in historical_docs(root):
             continue
         posix = md.as_posix()
         if "decisions-archive" in md.name or "/plans/" in posix:

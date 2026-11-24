@@ -36,10 +36,10 @@ This project is powered by **Solo-Code Harness** — an AI agent discipline laye
 
 | If the file path starts with... | Then it is... | Action |
 |----------------------------------|---------------|--------|
-| `.kilo/`, `.copilot/`, `.gemini/`, `.claude/`, `.claude-plugin/`, `.opencode/`, `.agents/`, `.codex/` | Harness engine | Rules/skills/hooks for AI behavior — not project logic |
+| `.kilo/`, `.copilot/`, `.gemini/`, `.claude/`, `.claude-plugin/`, `.opencode/`, `.agents/` | Harness engine | Rules/skills/hooks for AI behavior — not project logic |
 | `.contracts/` | Harness sub-agent contracts | Status contracts for delegated agents |
 | `.github/`, `.vscode/`, `tools/` | **Shared** — harness *and* project | The harness ships files here, but the project also keeps its own CI workflows, `CODEOWNERS`, dependabot config, editor settings and dev scripts. Only the exact paths under `[shared_files]` in `.harness.lock` are harness; **everything else here is project code**. |
-| `AGENTS.md`, `agent.yaml`, `kilo.jsonc`, `opencode.json`, `.mcp.json`, `.ruff.toml`, `.gitleaks.toml`, `Makefile`, `claude-env.ps1`, `codex-env.ps1`, `opencode-env.ps1`, `init.sh`, `verify.sh`, `extensions_config.json`, `.harness.lock`, `.solocode/`, `.pre-commit-config.yaml`, `.github/pull_request_template.md`, `CLAUDE.md` | Harness config | Agent behavior configuration — not application config |
+| `AGENTS.md`, `agent.yaml`, `kilo.jsonc`, `opencode.json`, `.mcp.json`, `.ruff.toml`, `.gitleaks.toml`, `Makefile`, `claude-env.ps1`, `opencode-env.ps1`, `init.sh`, `verify.sh`, `extensions_config.json`, `.harness.lock`, `.solocode/`, `.pre-commit-config.yaml`, `.github/pull_request_template.md`, `CLAUDE.md` | Harness config | Agent behavior configuration — not application config |
 | **Everything else** | **Project code** | Your actual application — this is what you modify |
 
 **Key rule:** Never modify harness files to fix a project bug. Never modify project files to fix a harness issue. Read `.harness.lock` for the authoritative boundary list.
@@ -170,8 +170,8 @@ Key enforcement points:
 
 Cross-engine session state lives in `.solocode/shared-state.db` (SQLite, local-only,
 never committed), read and written through `tools/shared_state.py`'s `SharedState`
-class. Engines with a lifecycle hook write it automatically; the rest call the module
-directly (`tools/codex_session.py` for Codex).
+class. Engines with a lifecycle hook write it automatically; the rest call
+`SharedState.add_session_entry` directly.
 
 **Feature/task tracking is NOT in SQLite.** The `features` and `shared_memory_*` tables
 remain for compatibility but nothing calls `set_feature_status()`. Track tasks with
@@ -293,7 +293,7 @@ evidence is reliable; their self-assessment is not. Re-run their commands,
 run the real gates, and mutation-test any new check they write.
 - When running an A/B drill, keep the verifier outside every worker's readable tree: a
   worker rooted at the drill directory can read a sibling `verifier/` folder (measured:
-  a Codex arm found and ran the external suite itself, so only the arm fenced to its own
+  a worker arm found and ran the external suite itself, so only the arm fenced to its own
   subdirectory stayed blind).
 - Re-count the numbers in a worker's evidence table, not just its verdict. A review that
   returned PASS with a real command per row still reported 10 tests for a 5-test file and

@@ -35,7 +35,6 @@ ROOT = Path.cwd()
 
 DELEGATES = {
     'opencode': ('tools/opencode_delegate.py', True),
-    'codex': ('tools/codex_delegate.py', True),
     'kilo': ('tools/kilo_cli_delegate.py', True),
     'dsh': ('tools/dsh_delegate.py', False),
 }
@@ -118,8 +117,8 @@ def tool_model_catalog(args: dict[str, Any]) -> dict[str, Any]:
 
 ROUTING: dict[str, tuple[str, str]] = {
     'simple': ('opencode', 'mechanical change: cheapest capable worker'),
-    'complex': ('codex', 'reasoning-heavy task: independent model with evidence'),
-    'review': ('codex', 'independent review: a second model catches different defects'),
+    'complex': ('opencode', 'reasoning-heavy task: same delegate as simple, larger brief'),
+    'review': ('opencode', 'independent review: a second pass catches different defects'),
     'verify': ('dsh', 'verification run through the harness profile'),
 }
 FALLBACK_ROUTE = ('opencode', 'unclassified task: fallback worker')
@@ -165,7 +164,7 @@ def evidence_table(executor: str, argv: list[str], result: dict[str, Any]) -> li
 
 
 def tool_delegate(args: dict[str, Any]) -> dict[str, Any]:
-    executor = str(args.get('executor', 'codex'))
+    executor = str(args.get('executor', 'opencode'))
     if executor not in DELEGATES:
         raise ValueError(f'unsupported executor: {executor}')
     prompt = str(args.get('prompt', '')).strip()
@@ -286,7 +285,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         'inputSchema': {
             'type': 'object',
             'properties': {
-                'executor': {'type': 'string', 'enum': ['opencode', 'codex', 'kilo', 'dsh']},
+                'executor': {'type': 'string', 'enum': ['opencode', 'kilo', 'dsh']},
                 'prompt': {'type': 'string', 'description': 'Self-contained brief; inline every path and rule the worker needs.'},
                 'model': {'type': 'string', 'description': 'Optional provider/model override.'},
                 'timeout': {'type': 'integer', 'description': 'Seconds before the worker is abandoned (max 900).'},
@@ -322,7 +321,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 'task_type': {
                     'type': 'string',
                     'enum': ['simple', 'complex', 'review', 'verify'],
-                    'description': 'simple=opencode; complex/review=codex; verify=dsh.',
+                    'description': 'simple/complex/review=opencode; verify=dsh.',
                 },
                 'model': {'type': 'string', 'description': 'Optional provider/model override.'},
                 'timeout': {'type': 'integer', 'description': 'Seconds before the worker is abandoned (max 900).'},

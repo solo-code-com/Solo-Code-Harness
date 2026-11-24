@@ -70,10 +70,8 @@ ROOT_FILES = [
     "pyproject.toml",
     "Makefile",
     "claude-env.ps1",
-    "codex-env.ps1",
     "opencode-env.ps1",
     "antigravity-env.sh",
-    "codex-env.sh",
     "opencode-env.sh",
     "init.sh",
     ".env.template",
@@ -136,7 +134,6 @@ PROJECT_OWNED_ROOT_FILES = {
 # the harness no longer ships is by definition a leftover from an older
 # deploy, so full stale-cleanup is safe here.
 EXCLUSIVE_HARNESS_DIRS = {
-    ".codex",
     ".kilo",
     ".copilot",
     ".gemini",
@@ -188,7 +185,6 @@ LEGACY_HARNESS_DOCS = {
     "audit-2026-08-15.md",
     "audit-2026-09-04.md",
     "audit-2026-09-11.md",
-    "codex-antigravity-cross-review-report.md",
     "deepseek-cross-review-antigravity-round2.md",
     "deepseek-cross-review-antigravity.md",
     "deepseek-harness-upgrade-acceptance.md",
@@ -241,7 +237,6 @@ def _legacy_harness_leftovers(target: Path) -> list[str]:
 
 # Directories to copy (relative to ROOT)
 DIRS_ALL = [
-    ".codex",
     ".kilo",
     ".copilot",
     ".gemini",
@@ -284,14 +279,6 @@ DIRS_OPENCODE = [
     # loads it from the Claude-compatible `.claude/skills/`, so ship that
     # location too.
     ".claude/skills",
-    ".github",
-    ".contracts",
-    "tools",
-]
-
-DIRS_CODEX = [
-    ".codex",
-    ".claude/hooks",
     ".github",
     ".contracts",
     "tools",
@@ -481,7 +468,6 @@ content_fingerprint = "{content_fingerprint}"
 [boundaries]
 # Thư mục harness — toàn bộ nội dung là harness, KHÔNG chứa code dự án
 dirs = [
-    ".codex",
     ".kilo",
     ".copilot",
     ".gemini",
@@ -522,10 +508,8 @@ files = [
     "Makefile",
     "pyproject.toml",
     "claude-env.ps1",
-    "codex-env.ps1",
     "opencode-env.ps1",
     "antigravity-env.sh",
-    "codex-env.sh",
     "opencode-env.sh",
     "init.sh",
     ".env.template",
@@ -676,9 +660,12 @@ def _transform_agent_frontmatter(source_text: str, filename: str) -> str:
                 and perm_key in tool_map
             ):
                 allowed_tools.append(tool_map[perm_key])
-        elif perm_key in permissions and permissions[perm_key] in ("allow", "ask"):
-            if perm_key in tool_map:
-                allowed_tools.append(tool_map[perm_key])
+        elif (
+            perm_key in permissions
+            and permissions[perm_key] in ("allow", "ask")
+            and perm_key in tool_map
+        ):
+            allowed_tools.append(tool_map[perm_key])
 
     # Build Copilot-format frontmatter
     copilot_frontmatter = f'description: "{description}"\n'
@@ -1272,8 +1259,7 @@ def scaffold(
         dirs = DIRS_CLAUDE
     elif engine == "opencode":
         dirs = DIRS_OPENCODE
-    elif engine == "codex":
-        dirs = DIRS_CODEX
+
     else:
         dirs = DIRS_ALL
 
@@ -1711,8 +1697,7 @@ def deploy(
         dirs = DIRS_CLAUDE
     elif engine == "opencode":
         dirs = DIRS_OPENCODE
-    elif engine == "codex":
-        dirs = DIRS_CODEX
+
     else:
         dirs = DIRS_ALL
 
@@ -1967,7 +1952,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--engine",
-        choices=["all", "kilo", "copilot", "claude", "opencode", "codex"],
+        choices=["all", "kilo", "copilot", "claude", "opencode"],
         default="all",
         help="Which engine harness to deploy (default: all)",
     )

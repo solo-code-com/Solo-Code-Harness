@@ -79,7 +79,6 @@ def test_workers_ready_requires_cli_and_wrapper(tmp_path, monkeypatch):
     by_id = {w["id"]: w for w in mod.workers(tmp_path)}
     assert by_id["gemini"]["ready"] is True
     assert by_id["opencode"]["ready"] is False  # CLI present? no -> not ready
-    assert by_id["codex"]["ready"] is False  # CLI not on PATH in this test
     assert all(w["note"] is None for w in by_id.values())  # no worker is 'pending'
 
 
@@ -127,18 +126,6 @@ def test_build_argv_kilo_and_dsh():
     ]
 
 
-def test_build_argv_codex_with_write():
-    mod = _load()
-    assert mod.build_argv("codex", "b", "gpt-6.1-sol", {"allow_write": True}) == [
-        sys.executable,
-        "tools/codex_delegate.py",
-        "b",
-        "--model",
-        "gpt-6.1-sol",
-        "--allow-write",
-    ]
-
-
 def test_build_argv_rejects_unknown_worker():
     mod = _load()
     with pytest.raises(ValueError):
@@ -147,7 +134,7 @@ def test_build_argv_rejects_unknown_worker():
 
 def test_validate_run_accepts_and_rejects():
     mod = _load()
-    for worker in ("gemini", "opencode", "kilo", "dsh", "codex"):
+    for worker in ("gemini", "opencode", "kilo", "dsh"):
         mod.validate_run(worker, "x", None, set())
     mod.validate_run("gemini", "x", "prov/key", {"prov/key"})
     for args in (
@@ -327,7 +314,7 @@ def test_state_reports_executor_mode_and_sandboxes(server, monkeypatch):
     assert status == 200
     payload = json.loads(body)
     assert payload["executor_mode"] is False
-    assert "codex" in payload["sandboxes"]
+    assert "opencode" in payload["sandboxes"]
 
 
 def test_executor_mode_endpoint_toggles(server, monkeypatch):

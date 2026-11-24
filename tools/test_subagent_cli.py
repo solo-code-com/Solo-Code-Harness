@@ -28,7 +28,7 @@ def _load():
 
 def test_every_worker_wrapper_exists():
     mod = _load()
-    assert {w.id for w in mod.WORKERS} == {"opencode", "kilo", "dsh", "codex", "gemini"}
+    assert {w.id for w in mod.WORKERS} == {"opencode", "kilo", "dsh", "gemini"}
     for worker in mod.WORKERS:
         assert (ROOT / worker.wrapper).is_file(), worker.wrapper
 
@@ -66,16 +66,7 @@ def test_provider_is_a_runtime_and_advertises_read_bash_only():
 def test_build_argv_per_worker():
     mod = _load()
     q = mod.SubagentRequest
-    assert mod.build_argv(
-        "codex", q(prompt="p", model="gpt-6.1-sol", options={"allow_write": True})
-    ) == [
-        sys.executable,
-        "tools/codex_delegate.py",
-        "p",
-        "--model",
-        "gpt-6.1-sol",
-        "--allow-write",
-    ]
+
     assert (
         mod.build_argv("gemini", q(prompt="p", options={"allow_tools": True}))[-1]
         == "--allow-tools"
@@ -188,8 +179,8 @@ def test_select_provider_defaults_to_cheapest_capable():
 
 def test_select_provider_honours_explicit_worker():
     mod = _load()
-    req = mod.SubagentRequest(prompt="p", options={"worker": "codex"})
-    assert mod.select_provider(req).id == "codex"
+    req = mod.SubagentRequest(prompt="p", options={"worker": "gemini"})
+    assert mod.select_provider(req).id == "gemini"
 
 
 def test_select_provider_errors():
@@ -227,9 +218,9 @@ def test_select_provider_falls_through_for_a_review():
 def test_select_provider_router_does_not_override_an_explicit_worker():
     mod = _load()
     request = mod.SubagentRequest(
-        prompt="survey the repo for auth calls", options={"worker": "codex"}
+        prompt="survey the repo for auth calls", options={"worker": "gemini"}
     )
-    assert mod.select_provider(request).id == "codex"
+    assert mod.select_provider(request).id == "gemini"
 
 
 def test_select_provider_survives_a_failing_router(monkeypatch):

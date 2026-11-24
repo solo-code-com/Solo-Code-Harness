@@ -18,7 +18,7 @@
   **Claude Code** (generate từ Kilo), **OpenCode v2** (engine chính: `@opencode/cli`
   + `@opencode/plugin`, config sinh bởi `tools/opencode_engine.py`), **GitHub Copilot**
   (mirror thủ công), **Gemini/Antigravity** (mirror thủ công + human-relay handoff, và
-  CLI headless `agy` dùng làm worker), **Codex** (`codex-cli 0.162.1` qua `codex-env.ps1`).
+  CLI headless `agy` dùng làm worker).
 - `.opencode/` từng bị gỡ ở v4.0.0 rồi **đưa lại thành engine chính ở v4.2.0** — tài
   liệu nào còn nói "đã gỡ bỏ vật lý" là lỗi thời.
 - Cursor **không** được hỗ trợ thật (không có `.cursor/`) — nếu tài liệu cũ
@@ -59,16 +59,15 @@ Nếu plugin bắt đầu chứa code tự dựng lại native capability → v�
 
 > Kiểm chứng: `python tools/garden.py` — 0 drift.
 
-## 0.2 Pipeline 4 vai trò [HARD — mô tả sản phẩm]
+## 0.2 Pipeline 3 vai trò [HARD — mô tả sản phẩm]
 
 | Vai trò | Ai | Việc |
 |---|---|---|
 | **Điều phối** | **Jev** — agent chạy trên **model JEV** (`openrouter/jev-router`) | Nhận bài, chia task, gọi worker qua CLI, thu kết quả, chạy gate; quyết định định tuyến do `tools/router.py` ghi, và chuỗi fallback của brain khai là `routing_brains` trong `tools/config/model-roles.json` |
-| **Ra đề bài + verify** | **Codex / ChatGPT** (`gpt-6.1-sol`, effort `medium`, đổi được bằng `--model`/`--effort`) | Viết brief cho thay đổi; **verify** kết quả trả về (read-only). Codex là tùy chọn và không có trên máy này: khi thiếu nó, Jev tự viết brief và DeepSeek thẩm tra lại kết quả, còn nghiệm thu vẫn kết thúc bằng các gate |
 | **Code sâu** | **DeepSeek V4.1 Flash** qua OpenCode CLI; `dsh` cho việc DeepSeek-native | Cài đặt theo brief |
 | **Việc nhanh nhẹ** | **Gemini 3.8 Flash** qua Antigravity CLI | Tra cứu/đọc nhanh — token free |
 
-- **Fallback:** khi Codex không ổn định, **DeepSeek viết brief và thẩm tra lại kết quả của Gemini**; Jev vẫn điều phối. Fallback này là mặc định vì Codex không được cài trên máy này.
+- **Mặc định:** **Jev tự viết brief**, **DeepSeek thẩm tra lại kết quả của Gemini**; Jev vẫn điều phối.
 - Jev **chỉ điều phối**: `edit: deny` trong agent config, và wrapper chạy agent này **không kèm `--auto`** để deny có hiệu lực thật.
 - Verify live 2026-10-16: Jev→Codex `CODEX_VIA_JEV_OK` · DeepSeek `DEEPSEEK_ARM_OK` · Gemini `GEMINI_ARM_OK` · Codex trực tiếp `CODEX_ARM_OK`, và trả đúng `DEFAULT_MODEL=gpt-6.1-sol DEFAULT_EFFORT=medium`.
 - **Giới hạn đã đo:** nhánh DeepSeek **từ chối task tài liệu quy mô lớn** (2 lần liên tiếp không ghi file: một lần exit 2, một lần hỏi lại "viết vào đâu") — dùng nó cho task hẹp với đường dẫn đích tường minh. Nhánh **dsh đã verify 2026-10-16** (`DSH_ARM_OK`, 7s) sau 3 điều kiện: `pnpm build` trong checkout, `DSH_CLIENT_COMMIT_HASH` (checkout không có `.git`), và **bỏ `DEEPSEEK_BASE_URL`** khỏi môi trường (nếu còn, dsh 404 vì protocol `messages` của nó).

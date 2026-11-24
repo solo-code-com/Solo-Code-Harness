@@ -14,7 +14,7 @@ một snapshot, sẽ cũ theo thời gian:
 
 | Bảng | Rows (snapshot) | Ai ghi |
 |---|---:|---|
-| `session_log` | 1000 | **Tự động** — `pre_compact.py` (Claude) + `codex_session.py` (Codex) |
+| `session_log` | 1000 | **Tự động** — `pre_compact.py` (Claude) |
 | `active_locks` | 1 | Writer lấy lock theo path; tự hết hạn sau `LOCK_TIMEOUT_HOURS` = 2 giờ |
 | `features` | 0 | Không ai — dùng git log + `MEMORY.md` thay thế |
 | `shared_memory_*` | 0 | Không ai — `MEMORY.md` đã làm việc này |
@@ -35,7 +35,7 @@ không đụng tới hai store đó.
 OpenCode, Copilot và Gemini **không** có lifecycle hook, nên phiên của chúng không
 tự động được ghi lại: đừng giả định có dòng mới trong bảng session sau một phiên như
 vậy. Nếu cần lưu, gọi `SharedState.add_session_entry` từ code —
-`tools/codex_session.py` dòng 46 là ví dụ đang chạy.
+`.claude/hooks/pre_compact.py` dòng 88 là ví dụ đang chạy.
 
 ### Hai SQLite store — đừng nhầm
 
@@ -44,7 +44,7 @@ và **không** phải hai nguồn sự thật cho cùng một dữ liệu:
 
 | Store | Bảng | Writer | Reader | Mục đích |
 |---|---|---|---|---|
-| `.solocode/shared-state.db` | `session_log`, `active_locks`, `shared_memory_*` | `pre_compact.py`, `codex_session.py`, `codex_guard.py` (locks) | `tools/shared_state.py` CLI, `garden.py`, `test_integration.py` | Nhật ký sự kiện đa engine + khoá file |
+| `.solocode/shared-state.db` | `session_log`, `active_locks`, `shared_memory_*` | `pre_compact.py`, `acquire_lock` (locks) | `tools/shared_state.py` CLI, `garden.py`, `test_integration.py` | Nhật ký sự kiện đa engine + khoá file |
 | `.solocode/sessions.db` | `sessions` | `.claude/hooks/session_start.py`, `session_end.py` (qua `session_persistence`) | `session_persistence.py`, `session_analytics.py`, `session_start.py` | Vòng đời phiên (start/end/duration/files/status) cho analytics |
 
 Quyết định (2026-09-26): **giữ song song, ghi rõ vai trò**, không hợp nhất khi chưa

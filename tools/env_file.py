@@ -1,7 +1,7 @@
 """Load the project `.env` into the process environment for the CLI delegates.
 
 Why this exists: the delegates spawn their CLI directly instead of going through
-`opencode-env.ps1` / `codex-env.ps1`, so anything the launcher *synthesises* from `.env` is
+`opencode-env.ps1`, so anything the launcher *synthesises* from `.env` is
 missing. The concrete failure this fixes (measured 2026-10-16): the generated OpenCode config
 declares the `freemodel` provider with `env: ["FREEMODEL_API_KEY"]`, the launcher derives that
 from `OPENAI_API_KEY`, and a delegate that bypasses the launcher starts OpenCode without the
@@ -34,7 +34,6 @@ NORMALIZE_BASE_URLS = ()
 MODEL_OVERRIDES: dict[str, str] = {
     "opencode": "SOLOCODE_MODEL_OPENCODE",
     "kilo": "SOLOCODE_MODEL_KILO",
-    "codex": "SOLOCODE_MODEL_CODEX",
     "antigravity": "SOLOCODE_MODEL_ANTIGRAVITY",
 }
 

@@ -4,7 +4,7 @@
 Serves one page on 127.0.0.1 that lets the operator:
 
   - see which worker CLIs are installed on this machine (agy, opencode, kilo,
-    dsh, codex) and whether their delegate wrapper exists,
+    dsh) and whether their delegate wrapper exists,
   - see the configured providers/models and which `.env` keys exist,
   - compose a brief and run it through the matching `tools/*_delegate.py`.
 
@@ -59,7 +59,6 @@ _WORKER_SPEC: list[tuple[str, str, str, str, str | None]] = [
     ("opencode", "OpenCode / DeepSeek", "opencode", "tools/opencode_delegate.py", None),
     ("kilo", "Kilo CLI", "kilo", "tools/kilo_cli_delegate.py", None),
     ("dsh", "DeepSeek Harness (dsh)", "dsh", "tools/dsh_delegate.py", None),
-    ("codex", "Codex / ChatGPT", "codex", "tools/codex_delegate.py", None),
     (
         "jev",
         "JEV orchestrator (OpenCode agent)",
@@ -161,13 +160,7 @@ def build_argv(
         return argv
     if worker == "dsh":
         return [py, "tools/dsh_delegate.py", brief]
-    if worker == "codex":
-        argv = [py, "tools/codex_delegate.py", brief]
-        if model:
-            argv += ["--model", model]
-        if flags.get("allow_write"):
-            argv.append("--allow-write")
-        return argv
+
     raise ValueError(f"worker not runnable: {worker!r}")
 
 
@@ -242,7 +235,6 @@ _EXECUTOR_OFF = frozenset({"off", "0", "disabled", "false", "no"})
 # wrapper enforces no write boundary of its own.
 _SANDBOX = {
     "gemini": "read-only (writes need --allow-dir + --auto-approve)",
-    "codex": "read-only (writes need --allow-write)",
     "opencode": "unfenced (wrapper can write)",
     "kilo": "unfenced (wrapper can write)",
     "dsh": "profile-defined",

@@ -19,7 +19,6 @@ Seam rules honoured here:
 Usage:
     python tools/subagent_cli.py --list
     python tools/subagent_cli.py --self-test
-    python tools/subagent_cli.py "review this diff" --worker codex --json
 """
 
 from __future__ import annotations
@@ -65,7 +64,6 @@ WORKERS: tuple[Worker, ...] = (
     Worker("opencode", "tools/opencode_delegate.py", 0),
     Worker("kilo", "tools/kilo_cli_delegate.py", 1),
     Worker("dsh", "tools/dsh_delegate.py", 2),
-    Worker("codex", "tools/codex_delegate.py", 3),
     Worker("gemini", "tools/antigravity_delegate.py", 4),
 )
 
@@ -108,13 +106,7 @@ def build_argv(worker: str, request: SubagentRequest) -> list[str]:
         return argv
     if worker == "dsh":
         return [py, "tools/dsh_delegate.py", request.prompt]
-    if worker == "codex":
-        argv = [py, "tools/codex_delegate.py", request.prompt]
-        if request.model:
-            argv += ["--model", request.model]
-        if opts.get("allow_write"):
-            argv.append("--allow-write")
-        return argv
+
     raise ValueError(f"unknown worker: {worker!r}")
 
 
@@ -231,12 +223,7 @@ def _self_test() -> None:
         raise AssertionError("write must not be silently supported")
 
     # argv mapping
-    assert (
-        build_argv("codex", SubagentRequest(prompt="p", options={"allow_write": True}))[
-            -1
-        ]
-        == "--allow-write"
-    )
+
     assert (
         build_argv(
             "gemini",
@@ -247,10 +234,6 @@ def _self_test() -> None:
 
     # cheapest-capable selection + explicit override
     assert select_provider(SubagentRequest(prompt="p")).id == "opencode"
-    assert (
-        select_provider(SubagentRequest(prompt="p", options={"worker": "codex"})).id
-        == "codex"
-    )
 
     # run() splits evidence from summary
     fake = lambda _argv, _t: (0, "prose", "")  # noqa: E731 — tiny test double

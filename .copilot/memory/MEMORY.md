@@ -21,26 +21,17 @@ High-signal context loaded at session start. Detailed history belongs in
 - [tech] Python 3.10+ stdlib runtime for `tools/` and `.github/scripts/`;
   pytest/ruff are dev tools. Kilo hooks use Node.js 18+.
 - [tech] Ruff config: `.ruff.toml`; secrets: `.gitleaks.toml`.
-- [tech] Codex CLI 0.160.0 (npm global) is a harness consumer: it reads
-  `AGENTS.md` natively, so no `.codex/` engine mirror is generated. Launcher
-  `codex-env.ps1`, metering `tools/codex_usage.py`.
 - [tech] SQLite shared state: `.solocode/shared-state.db`. Only `session_log`
   actually has rows; `features` and `shared_memory_*` exist but are unused —
   git log plus this file cover task tracking and conventions. `codex` is a
   valid engine name in `tools/shared_state.py`.
 
 ## Verification
-- [verify] Full Codex gate: `python tools/codex_verify.py`.
 - [verify] Individual gates: security scan, schema validation, garden,
   no-skips, pytest.
-- [verify] Codex has no repository hook API, so use `tools/codex_guard.py` for
   destructive-command, secret, and file-lock preflight checks, or run
-  verified writes with `tools/codex_guard.py --write`.
 
 ## Gotchas
-- [gotcha] Codex CLI internal exec policy blocks `rm -f` / `-Force` patterns;
-  under `approval_policy = "never"` this aborts process creation. Avoid `-Force`
-  in PowerShell, or use `python tools/codex_guard.py --write`.
 - [gotcha] TOML bare keys must precede the first table header.
 - [gotcha] Keep loaded memory under 8,000 chars. MOVE pruned material into
   `decisions-archive.md` verbatim — never silently delete it.

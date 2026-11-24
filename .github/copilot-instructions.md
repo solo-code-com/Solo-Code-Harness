@@ -239,7 +239,7 @@ nothing verifies only teaches agents to trust something that isn't real.
 ### Session start / end
 Those rows are written by Claude Code's lifecycle hooks (`session_end.py`,
 `pre_compact.py`), or by an explicit `SharedState.add_session_entry` call -
-`tools/codex_session.py` line 46 is a working example. A Copilot session
+`.claude/hooks/pre_compact.py` line 88 is a working example. A Copilot session
 leaves no row by itself.
 
 ### When locks DO matter

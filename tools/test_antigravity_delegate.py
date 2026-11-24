@@ -792,7 +792,9 @@ def test_start_row_exists_before_the_worker_is_spawned(monkeypatch, tmp_path):
         stderr = ""
 
     def fake_popen(command, **kwargs):
-        seen_at_spawn["rows"] = _usage_rows()
+        # The wrapper also shells out to `git status` for the control-path gate,
+        # so only the FIRST Popen is the worker.
+        seen_at_spawn.setdefault("rows", _usage_rows())
         return _as_popen(Completed)()
 
     monkeypatch.setattr(antigravity_delegate.subprocess, "Popen", fake_popen)

@@ -1716,3 +1716,28 @@ def test_check_hook_references_rejects_an_entry_without_a_command(tmp_path):
 
 def test_live_repo_hook_references_resolve():
     assert garden.check_hook_references(root=garden.ROOT) == []
+
+
+def test_historical_docs_entries_all_exist():
+    """An exemption for a file that is gone would be an invisible hole."""
+    listed = garden.historical_docs(garden.ROOT)
+    assert listed, "the list must not be empty while entries are expected"
+    missing = sorted(entry for entry in listed if not (garden.ROOT / entry).is_file())
+    assert missing == [], missing
+
+
+def test_historical_doc_is_skipped_by_the_citation_check(tmp_path):
+    """A listed record may cite a removed path; an unlisted one may not."""
+    record = tmp_path / "docs" / "record.md"
+    record.parent.mkdir(parents=True)
+    record.write_text("The guard lived at `tools/codex_guard.py`.\n", encoding="utf-8")
+    (tmp_path / "tools" / "config").mkdir(parents=True)
+    (tmp_path / "tools" / "config" / "historical-docs.txt").write_text(
+        "docs/record.md   # historical\n", encoding="utf-8"
+    )
+    assert garden.check_doc_paths(root=tmp_path) == []
+
+    fresh = tmp_path / "docs" / "fresh.md"
+    fresh.write_text("Run `tools/codex_guard.py` now.\n", encoding="utf-8")
+    issues = garden.check_doc_paths(root=tmp_path)
+    assert any("fresh.md" in issue for issue in issues), issues

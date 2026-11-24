@@ -221,7 +221,6 @@ def should_skip(file_path: Path, extra_skip_dirs: frozenset[str] = frozenset()) 
         "secret-scan.test.js",
         "security_scan.py",
         "test_claude_guard.py",
-        "test_codex_guard.py",
         "test_secret_patterns.py",
     }:
         return True

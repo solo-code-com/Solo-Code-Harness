@@ -1,0 +1,14 @@
+# Historical records exempt from the doc citation checks.
+#
+# A record quotes the paths that existed when it was written. When a tool is
+# removed, the record is still accurate history -- it is not a live instruction.
+# Keep this list short and dated; an entry for a file that no longer exists is a
+# silent hole, and tests/test_garden.py asserts every path here resolves.
+#
+# format: <repo-relative path>   # why it is exempt
+
+.gemini/antigravity/handoff/inbox/codex-write-path-plan.md    # delegation plan written before the Codex engine was removed (2026-11-23)
+.gemini/antigravity/handoff/outbox/codex-write-path-report.md # the worker report for that plan
+docs/deepseek-harness-upgrade-acceptance.md                   # dated acceptance record of the 2026-09 upgrade
+docs/INTEGRATION_DESIGN_SPEC.md                               # dated design spec; describes the engine set at that time
+docs/lifecycle-matrix-verification.md                         # dated lifecycle verification record

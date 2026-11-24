@@ -443,6 +443,28 @@ def log_usage(
         pass  # usage logging must never break a run
 
 
+def _git_porcelain(root: Path) -> str:
+    """`git status --porcelain` for the enclosing repository, or "".
+
+    Empty is the silent answer on purpose: a workspace without git metadata
+    cannot be judged this way, and a false failure would teach callers to pass
+    --allow-control-paths as a matter of habit.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603 -- fixed argv, no shell
+            ["git", "-C", str(root), "status", "--porcelain"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError, TypeError):
+        return ""
+    if proc.returncode != 0:
+        return ""
+    return proc.stdout
+
+
 def _blocked_prompt(prompt: str) -> str | None:
     """Return the first destructive rule the prompt names, if any.
 
@@ -562,6 +584,7 @@ def main(argv: list[str] | None = None) -> int:
     before = (
         snapshot_workspace(target_dir) if args.auto_approve or args.allow_tools else {}
     )
+
     _blocked = _blocked_prompt(prompt)
     if _blocked:
         _stderr(
@@ -587,6 +610,12 @@ def main(argv: list[str] | None = None) -> int:
 
         run_id = uuid.uuid4().hex
         log_start(args.model, len(prompt), run_id)
+        before_porcelain = _git_porcelain(Path(target_dir))
+        if args.allow_control_paths:
+            _stderr(
+                "[control-path] --allow-control-paths given: control-path gate disabled for this run"
+            )
+
         result, exit_code = run_agy_cli(
             prompt=prompt,
             model=args.model,
@@ -627,8 +656,11 @@ def main(argv: list[str] | None = None) -> int:
                 import control_paths
             except ImportError:  # pragma: no cover - script-dir import path
                 from tools import control_paths  # type: ignore[no-redef]
-            control = control_paths.violations_in(
-                changed_workspace_paths(before, snapshot_workspace(target_dir))
+            # git status covers the enclosing repository, so a write to a control
+            # path outside --target-dir is still seen; the snapshot diff only
+            # looks inside the target.
+            control = control_paths.new_violations(
+                before_porcelain, _git_porcelain(Path(target_dir))
             )
             if control:
                 _stderr("control-path violation; changed: " + ", ".join(control))

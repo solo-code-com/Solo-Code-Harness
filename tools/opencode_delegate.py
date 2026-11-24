@@ -1092,6 +1092,19 @@ def main(argv: list[str] | None = None) -> int:
     if _tier_reason:
         print("[tier-gate] refused: " + _tier_reason, file=sys.stderr)
         return 2
+    # Refuse a destructive prompt before any subprocess runs: the WSL probe and
+    # the model fallback list both spawn processes, so the check cannot sit next
+    # to the worker call.
+    _blocked = _blocked_prompt(args.prompt)
+    if _blocked:
+        _stderr(
+            "[control-path] refused: prompt names a blocked command (" + _blocked + ")"
+        )
+        return 2
+    if args.allow_control_paths:
+        _stderr(
+            "[control-path] --allow-control-paths given: control-path gate disabled for this run"
+        )
     if args.enforce_scope:
         try:
             rel_dir = Path(args.directory).resolve().relative_to(ROOT).as_posix()
@@ -1177,7 +1190,7 @@ def main(argv: list[str] | None = None) -> int:
         detail = f" ({type(before_exc).__name__})" if before_exc else ""
         _stderr(f"scope: snapshot unavailable{detail}")
         return SCOPE_ERROR_EXIT_CODE
-    _blocked = _blocked_prompt(prompt)
+    _blocked = _blocked_prompt(args.prompt)
     if _blocked:
         _stderr(
             "[control-path] refused: prompt names a blocked command (" + _blocked + ")"

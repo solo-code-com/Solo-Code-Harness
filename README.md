@@ -2,7 +2,7 @@
 
 AI coding agent harness — rules, skills, hooks, and verification gates for disciplined Solo-Code engineering.
 
-Engine support: **Kilo Code** (`.kilo/`, source of truth — all other engine artifacts are generated from or kept in parity with it), **Claude Code** (`.claude/` + `CLAUDE.md`, orchestrator, generated from `.kilo/`), **OpenCode** (`.opencode/` + `opencode.json`, generated from `.kilo/`, reintroduced in v4.2.0 as a primary engine and worker CLI), **GitHub Copilot** (`.copilot/`, manually kept in parity with `.kilo/`), **Gemini/Antigravity** (`.gemini/`), **Codex CLI** (`.codex/` + `codex-env.ps1` / `codex-env.sh`), and POSIX environment launchers (`antigravity-env.sh`, `opencode-env.sh`, `codex-env.sh`).
+Engine support: **Kilo Code** (`.kilo/`, source of truth — all other engine artifacts are generated from or kept in parity with it), **Claude Code** (`.claude/` + `CLAUDE.md`, orchestrator, generated from `.kilo/`), **OpenCode** (`.opencode/` + `opencode.json`, generated from `.kilo/`, reintroduced in v4.2.0 as a primary engine and worker CLI), **GitHub Copilot** (`.copilot/`, manually kept in parity with `.kilo/`), **Gemini/Antigravity** (`.gemini/`), and POSIX environment launchers (`antigravity-env.sh`, `opencode-env.sh`).
 
 > **v4.2.0:** OpenCode engine reintroduced as a first-class primary agent engine (removed in v4.0.0 as a 100%-parity mirror with no unique capability, then brought back once OpenCode v1.18+'s stable native format made near-identity regeneration from `.kilo/` cheap). Full history in `.kilo/memory/MEMORY.md` → "Decisions".
 
@@ -19,7 +19,6 @@ Engine support: **Kilo Code** (`.kilo/`, source of truth — all other engine ar
 # POSIX environment launchers (Linux/WSL)
 ./antigravity-env.sh   # Antigravity CLI environment
 ./opencode-env.sh      # OpenCode CLI worker environment
-./codex-env.sh         # Codex CLI worker environment
 
 # Regenerate the Claude engine from .kilo/ source
 python tools/generate_harness.py --harness claude
@@ -102,12 +101,11 @@ python tools/deploy.py
 | `.copilot/` | GitHub Copilot: agents (16), skills (54), commands (15), instruction (10), memory (4). Manually kept in parity with `.kilo/`; checked (not generated) by `tools/garden.py`. |
 | `.kilo/` | **Generation root** — every generated engine is produced from this directory. Kilo Code: agents (16), skills (54), commands (15, incl. `ship`), hooks, memory, instruction. Edit here first. The Kilo runtime hooks still live here, but the repository targets OpenCode v2 and Claude Code, not the Kilo application. |
 | `.gemini/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
-| `.codex/` | Codex CLI integration: README, session tracking, verified write guard (`tools/codex_guard.py`), and launchers `codex-env.ps1` / `codex-env.sh`. |
 | `.github/` | Shared scripts: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py`, `security-allowlist.txt` + `copilot-instructions.md`, `prompts/` |
 | `tools/` | Generator (`generate_harness.py`, `claude_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` (runtime dep of Claude session hooks) |
 | `.vscode/` | VS Code settings + MCP config for Copilot |
 
-## Model Providers & the 4-Role Pipeline
+## Model Providers & the 3-Role Pipeline
 
 Four providers are generated into `.opencode/opencode.json` — `deepseek`, `openrouter`,
 `commandcode` and `silkcompute` — with **18 model ids** (deepseek 2, openrouter 5, commandcode 5,
@@ -122,12 +120,11 @@ Codex on CommandCode's `/responses` route.
 resolves each `opencode-go/...` role id against `_PROVIDER_MODELS`. Ids are never taken
 from memory.
 
-Work is routed through four roles, declared in `.kilo/agents/jev.md`:
+Work is routed through three roles, declared in `.kilo/agents/jev.md`:
 
 | Role | Engine | Notes |
 |---|---|---|
 | **Jev** — routes only | agent on `openrouter/jev-router` | `edit: deny`; the wrapper launches it without `--auto` so the deny binds; it also resolves the project `default_agent` before granting `--auto`, and `tools/router.py` records the routing decision |
-| **Codex** — briefs and verification | `gpt-6.2-sol`, effort `medium` | `--model` / `--effort` override; launched by `codex-env.ps1`. It is optional and absent on this host: when it is missing, Jev writes the brief itself and DeepSeek re-checks the result, and verification still ends with the gates |
 | **DeepSeek V4.1 Flash** — implementation | OpenCode CLI (`tools/opencode_delegate.py`) or the direct API arm (`tools/model_api.py`) | one-shot: 2.3 s trivial, 22 s one file; 503 above ~38 K-token prompts; `--sandbox wsl` runs the same brief inside the namespace fence (8.5 s warm); `--enforce-scope` strictly fails with exit 4 on out-of-scope edits |
 | **Gemini 3.8 Flash** — fast and broad work | Antigravity CLI, tiers `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | independent review, repo-wide survey |
 
@@ -214,7 +211,7 @@ harness change required.
 Hai file SQLite local-only, đều nằm trong `.solocode/` (đã bị `.gitignore` chặn):
 
 - **`.solocode/shared-state.db`** — nhật ký sự kiện đa engine + khoá file:
-  - **`session_log`** — mỗi session được ghi lại: engine, model, files changed, verification (giữ tối đa 1000 dòng gần nhất); ghi tự động bởi `pre_compact.py` (Claude) và `codex_session.py` (Codex).
+  - **`session_log`** — mỗi session được ghi lại: engine, model, files changed, verification (giữ tối đa 1000 dòng gần nhất); ghi tự động bởi `pre_compact.py` (Claude).
   - **`active_locks`** — ngăn 2 engine sửa cùng 1 file cùng lúc (tự hết hạn sau 2 giờ); do worker lấy/trả qua `acquire_lock`/`release_lock`.
   - **`features`**, **`shared_memory_*`** — schema còn để tương thích ngược nhưng **không dùng** (không hook/engine nào gọi `set_feature_status()`). Task tracking dùng `git log` + `.kilo/memory/MEMORY.md`.
 - **`.solocode/sessions.db`** — vòng đời phiên (start/end/duration/files/status) cho analytics; ghi bởi `.claude/hooks/session_start.py` / `session_end.py` qua `tools/session_persistence.py`.
@@ -239,7 +236,6 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | Document truth | `make garden` | Counts, cited paths, documented CLI flags, enforcement claims and skill references must match reality — see [SPEC.md §7.2.1](SPEC.md) |
 | Harness Tests | `make test` | Generator + shared-state (`tools/test_*.py`) |
 | Integration | `python tools/test_integration.py` | Copilot structure + shared state schema |
-| Codex verify | `python tools/codex_verify.py` | The five core gates a Codex session runs before it reports back |
 | Security | `make security-scan` | Hardcoded secrets |
 | Gitleaks | `make gitleaks` | Secret scan over the whole tree with `.gitleaks.toml` (the harness's own scanner runs separately) |
 | Boundary | `python .github/scripts/boundary_audit.py .` | No project files leaked into harness dirs |
@@ -420,7 +416,7 @@ Full guide: `.kilo/skill/gemini-delegation/SKILL.md`.
 
 Bộ harness (dây cương) cho AI coding agent — rules, skills, hooks và verification gates dành cho kỹ thuật Solo-Code có kỷ luật.
 
-Hỗ trợ engine: **Kilo Code** (`.kilo/`, nguồn gốc — mọi engine khác được sinh ra từ đây hoặc giữ song song), **Claude Code** (`.claude/` + `CLAUDE.md`, điều phối, sinh từ `.kilo/`), **OpenCode** (`.opencode/` + `opencode.json`, sinh từ `.kilo/`, tái bổ sung ở v4.2.0 làm engine chính và worker CLI), **GitHub Copilot** (`.copilot/`, giữ song song thủ công với `.kilo/`), **Gemini/Antigravity** (`.gemini/`), **Codex CLI** (`.codex/` + `codex-env.ps1` / `codex-env.sh`), và bộ launcher POSIX (`antigravity-env.sh`, `opencode-env.sh`, `codex-env.sh`).
+Hỗ trợ engine: **Kilo Code** (`.kilo/`, nguồn gốc — mọi engine khác được sinh ra từ đây hoặc giữ song song), **Claude Code** (`.claude/` + `CLAUDE.md`, điều phối, sinh từ `.kilo/`), **OpenCode** (`.opencode/` + `opencode.json`, sinh từ `.kilo/`, tái bổ sung ở v4.2.0 làm engine chính và worker CLI), **GitHub Copilot** (`.copilot/`, giữ song song thủ công với `.kilo/`), **Gemini/Antigravity** (`.gemini/`), và bộ launcher POSIX (`antigravity-env.sh`, `opencode-env.sh`).
 
 > **v4.2.0:** tái bổ sung engine OpenCode làm engine chính (đã gỡ ở v4.0.0 vì là bản mirror 100% không có giá trị riêng, sau đó đưa lại khi định dạng native ổn định của OpenCode v1.18+ giúp sinh lại từ `.kilo/` gần như đồng nhất, chi phí thấp). Lịch sử đầy đủ trong `.kilo/memory/MEMORY.md` → "Decisions".
 
@@ -433,7 +429,6 @@ Hỗ trợ engine: **Kilo Code** (`.kilo/`, nguồn gốc — mọi engine khác
 # Bộ launcher môi trường POSIX (Linux/WSL)
 ./antigravity-env.sh   # Môi trường Antigravity CLI
 ./opencode-env.sh      # Môi trường OpenCode CLI worker
-./codex-env.sh         # Môi trường Codex CLI worker
 
 # Sinh lại engine Claude từ nguồn .kilo/
 python tools/generate_harness.py --harness claude
@@ -523,7 +518,7 @@ python tools/deploy.py
 > `4.3.1` đóng dấu ở `.harness.lock`, `agent.yaml`, `pyproject.toml`; SPEC giữ version tài liệu
 > riêng (`SPEC.md`, hiện `4.4.0`) — hai trục, không phải drift.
 
-## Provider model & pipeline 4 vai trò
+## Provider model & pipeline 3 vai trò
 
 Bốn provider được sinh vào `.opencode/opencode.json` — `deepseek`, `openrouter`, `commandcode` và
 `silkcompute` — với **18 model id** (deepseek 2, openrouter 5, commandcode 5, silkcompute 6) khai trong
@@ -536,12 +531,11 @@ chạy trên route `/responses` của CommandCode.
 `tools/check_model_catalog.py` đối chiếu id đã khai với `GET /models` (kèm `--probe`),
 và resolve mọi role id `opencode-go/...` với `_PROVIDER_MODELS`. Id không bao giờ lấy từ trí nhớ.
 
-Việc được định tuyến qua 4 vai trò, khai ở `.kilo/agents/jev.md`:
+Việc được định tuyến qua 3 vai trò, khai ở `.kilo/agents/jev.md`:
 
 | Vai trò | Engine | Ghi chú |
 |---|---|---|
 | **Jev** — chỉ định tuyến | agent trên `openrouter/jev-router` | `edit: deny`; wrapper chạy không `--auto` để deny có hiệu lực |
-| **Codex** — ra đề bài + thẩm định | `gpt-6.2-sol`, effort `medium` | đổi bằng `--model` / `--effort`; chạy qua `codex-env.ps1` / `codex-env.sh` |
 | **DeepSeek V4.1 Flash** — code | OpenCode CLI (`tools/opencode_delegate.py`) hoặc arm API trực tiếp (`tools/model_api.py`) | one-shot: 2,3 s việc nhỏ, 22 s một file; 503 khi prompt trên ~38K token; `--sandbox wsl` chạy cùng brief trong fence namespace (8.5 s khi WSL ấm) |
 | **Gemini 3.8 Flash** — việc nhanh, rộng | Antigravity CLI, tier `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | review độc lập, khảo sát toàn repo |
 

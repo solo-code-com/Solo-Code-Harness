@@ -1425,3 +1425,8 @@ both earlier in this file; they moved only to reach the 7,900-character target.
   `"event" in obj` sai voi opencode/kilo (dung key `type`) va bo sot terminal
   `{"event":"result"}` cua antigravity -> run thanh cong bi bao loi. Khong co field cho
   partial output; trung `SubagentResult` (`subagent_seam.py:59`).
+## Pruned 2026-11-24 (Codex CLI removed from the harness)
+
+Moved verbatim out of `MEMORY.md`; the tooling these bullets name no longer exists.
+
+- [tech] Codex CLI 0.160.0 (npm global) is a harness consumer: it reads   `AGENTS.md` natively, so no `.codex/` engine mirror is generated. Launcher   `codex-env.ps1`, metering `tools/codex_usage.py`. - [verify] Full Codex gate: `python tools/codex_verify.py`. ## Gotchas - [gotcha] Codex CLI internal exec policy blocks `rm -f` / `-Force` patterns;   under `approval_policy = "never"` this aborts process creation. Avoid `-Force`

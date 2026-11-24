@@ -26,7 +26,7 @@ Antigravity acts as the central coordinator: planning, formulating self-containe
   ```
 - **Codex (GPT-6.2 Sol)** for independent logic review, security auditing, and design critique:
   ```bash
-  python tools/codex_delegate.py "<review brief>" --model gpt-6.2-sol --effort medium
+  python tools/the Codex delegate (removed 2026-11-23) "<review brief>" --model gpt-6.2-sol --effort medium
   ```
 
 ## Phase 3: Verification & Quality Gates
