@@ -54,7 +54,7 @@ def no_real_kilo_arm(monkeypatch):
     """
     calls: list[str] = []
 
-    def spy(prompt, _args):
+    def spy(prompt, _args, *extra, **kw):
         calls.append(prompt)
         return None
 
@@ -558,7 +558,7 @@ def _reach_the_wrapper(monkeypatch, tmp_path):
     monkeypatch.setattr(
         opencode_delegate,
         "resolve_model",
-        lambda **kw: "opencode-go/deepseek-v4.1-flash",
+        lambda **kw: kw.get("model") or opencode_delegate.DEFAULT_MODEL,
     )
 
 
@@ -1386,28 +1386,36 @@ def test_fallback_chain_rotates_on_quota_error(monkeypatch):
     assert attempted_models[1] == "opencode/deepseek-v4.1-flash"
 
 
-def test_fallback_chain_does_not_rotate_on_runtime_error(monkeypatch):
-    """When a model encounters a non-quota error, it fails immediately without rotating."""
-    attempted_models: list[str] = []
+def test_fallback_chain_rotates_on_a_retryable_error(monkeypatch):
+    """A retryable failure moves to the next model, not straight to Kilo.
 
-    def fake_run_opencode_cli(*args, **kwargs):
-        m = kwargs.get("model")
-        attempted_models.append(m)
+    The chain only rotated on quota markers before the arm cascade existed; the
+    operator asked for the two providers that serve this model to be tried in
+    turn, so any retryable failure rotates now.
+    """
+    attempted: list[str] = []
+
+    def fake_run(**kwargs):
+        attempted.append(kwargs.get("model"))
         return {"text": "", "error": "TypeError: null pointer in task execution"}
 
-    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run_opencode_cli)
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
     monkeypatch.setattr(
         opencode_delegate, "find_opencode_binary", lambda: "/bin/opencode"
     )
 
     code = opencode_delegate.main(
-        ["--model", "opencode/deepseek-v4.1-flash-free", "test prompt"]
+        [
+            "--model",
+            "opencode/deepseek-v4.1-flash-free",
+            "--cascade",
+            "off",
+            "test prompt",
+        ]
     )
     assert code == 2
-    assert len(attempted_models) == 1
-
-
-# ── find_opencode_binary ─────────────────────────────────────────────────────
+    assert len(attempted) > 1
+    assert attempted[0] == "opencode/deepseek-v4.1-flash-free"
 
 
 def test_find_opencode_binary_prefers_the_bundled_workspace_exe(monkeypatch, tmp_path):
@@ -1679,13 +1687,18 @@ def test_destructive_prompt_is_refused_before_spawning(monkeypatch, tmp_path, ca
 # ── cascade fallback tests ───────────────────────────────────────────────────
 
 
-def test_cascade_skips_policy_refusal(monkeypatch, tmp_path, capsys):
+def test_cascade_consults_the_retryable_check(monkeypatch, tmp_path, capsys):
+    """The cascade asks the classifier before it retries.
+
+    The classification itself is covered by test_retryable_failure_classification;
+    this test proves the wiring, so stubbing the classifier here is the point.
+    """
     ws = tmp_path / "ws"
     (ws / "src").mkdir(parents=True)
     monkeypatch.setattr(opencode_delegate, "ROOT", ws)
     _reach_the_wrapper(monkeypatch, tmp_path)
     monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
-    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_retryable_failure", lambda _res: False)
 
     kilo_called = []
     monkeypatch.setattr(
@@ -1702,7 +1715,7 @@ def test_cascade_skips_policy_refusal(monkeypatch, tmp_path, capsys):
             "session_id": None,
             "tokens": None,
             "cost": None,
-            "error": "scope violation",
+            "error": "policy refusal",
         },
     )
 
@@ -1712,21 +1725,29 @@ def test_cascade_skips_policy_refusal(monkeypatch, tmp_path, capsys):
     assert code != 0
     assert not kilo_called
     err = capsys.readouterr().err
-    assert "[cascade] skipped: policy refusal" in err
+    assert "[cascade] skipped: policy refusal, not an arm failure" in err
 
 
 def test_cascade_skips_when_tree_changed(monkeypatch, tmp_path, capsys):
+    """A failed arm that already wrote must not be followed by a second writer.
+
+    The comparison is by content hash, because porcelain cannot see a file that
+    was already dirty before the run and is then modified again.
+    """
     ws = tmp_path / "ws"
     (ws / "src").mkdir(parents=True)
     monkeypatch.setattr(opencode_delegate, "ROOT", ws)
     _reach_the_wrapper(monkeypatch, tmp_path)
 
-    porcelains = ["", " M file.txt"]
-    monkeypatch.setattr(
-        opencode_delegate,
-        "_git_porcelain",
-        lambda _root: porcelains.pop(0) if porcelains else " M file.txt",
-    )
+    calls: list[int] = []
+
+    def changing_snapshot(_root):
+        calls.append(1)
+        # The first two calls are the baselines, the rest are the after-look.
+        return {"src/keep.py": "hash"} if len(calls) <= 2 else {"src/keep.py": "new"}
+
+    monkeypatch.setattr(opencode_delegate, "_snapshot", changing_snapshot)
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
 
     kilo_called = []
     monkeypatch.setattr(
@@ -1753,7 +1774,7 @@ def test_cascade_skips_when_tree_changed(monkeypatch, tmp_path, capsys):
     assert code != 0
     assert not kilo_called
     err = capsys.readouterr().err
-    assert "[cascade] skipped: the failed arm already changed the tree" in err
+    assert "already changed the tree" in err
 
 
 def test_cascade_uses_kilo_when_tree_clean(monkeypatch, tmp_path, capsys):
@@ -1765,6 +1786,7 @@ def test_cascade_uses_kilo_when_tree_clean(monkeypatch, tmp_path, capsys):
         opencode_delegate, "_snapshot", lambda _root: {"file.txt": "hash1"}
     )
     monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
 
     try:
         import post_run_checks
@@ -1817,6 +1839,7 @@ def test_cascade_off_never_calls_kilo(monkeypatch, tmp_path, capsys):
     _reach_the_wrapper(monkeypatch, tmp_path)
     monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
     monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
 
     kilo_called = []
     monkeypatch.setattr(
@@ -1850,7 +1873,8 @@ def test_cascade_off_never_calls_kilo(monkeypatch, tmp_path, capsys):
     assert code != 0
     assert not kilo_called
     err = capsys.readouterr().err
-    assert "[cascade]" not in err
+    assert "already changed the tree" not in err
+    assert "kilo arm" not in err
 
 
 def test_retryable_failure_classification():
@@ -2012,3 +2036,167 @@ def test_worktree_allow_dirty_proceeds(monkeypatch, tmp_path, capsys):
     assert run_called
     err = capsys.readouterr().err
     assert "[worktree] warning: 1 uncommitted path(s) are not in the worktree" in err
+
+
+def test_nonzero_exit_with_events_is_an_error(monkeypatch, tmp_path):
+    stream = '{"type":"step_start","sessionID":"ses_abc"}'
+    monkeypatch.setattr(
+        opencode_delegate.subprocess,
+        "Popen",
+        lambda cmd, **k: _FakeProc(stdout=stream, returncode=3),
+    )
+    result = opencode_delegate.run_opencode_cli(
+        prompt="x",
+        model="m",
+        directory=str(tmp_path),
+        opencode_binary="opencode",
+    )
+    assert result.get("error") is not None
+    assert "exit code 3" in result["error"]
+
+
+def test_cascade_skips_when_a_snapshot_is_unavailable(monkeypatch, tmp_path, capsys):
+    """Could not read is not the same as unchanged: skip the cascade."""
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: None)
+
+    kilo_called = []
+    monkeypatch.setattr(
+        opencode_delegate,
+        "_run_kilo_fallback",
+        lambda *args, **kwargs: kilo_called.append(True),
+    )
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **_kw: {
+            "text": "",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": "arm failure",
+        },
+    )
+
+    code = opencode_delegate.main(
+        ["do task", "--no-guardrail", "--directory", str(ws / "src")]
+    )
+    assert code != 0
+    assert not kilo_called
+    assert "tree state could not be read" in capsys.readouterr().err
+
+
+def test_cascade_budget_stops_the_chain(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    step = [0]
+
+    def fake_time():
+        step[0] += 1
+        if step[0] == 1:
+            return 100.0
+        if step[0] == 2:
+            return 50.0
+        return 200.0
+
+    run_called = []
+
+    def fake_run(**_kw):
+        run_called.append(True)
+        return {
+            "text": "",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": "rate limit quota exceeded",
+        }
+
+    monkeypatch.setattr(opencode_delegate.time, "monotonic", fake_time)
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--model",
+            "opencode/deepseek-v4.1-flash",
+            "--cascade-budget",
+            "1",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code != 0
+    assert run_called
+    err = capsys.readouterr().err
+    assert "[cascade] budget exhausted before the next attempt" in err
+
+
+def test_rotation_stops_when_the_tree_changed(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    calls: list[int] = []
+
+    def changing_snapshot(_root):
+        calls.append(1)
+        return {"src/keep.py": "hash"} if len(calls) <= 2 else {"src/keep.py": "new"}
+
+    monkeypatch.setattr(opencode_delegate, "_snapshot", changing_snapshot)
+
+    attempted_models: list[str] = []
+
+    def fake_run(**kwargs):
+        attempted_models.append(kwargs.get("model"))
+        return {
+            "text": "",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": "rate limit: 429",
+        }
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--model",
+            "opencode-go/deepseek-v4.1-flash",
+            "--cascade",
+            "off",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code != 0
+    assert len(attempted_models) == 1
+    err = capsys.readouterr().err
+    assert "[model] the tree changed; not rotating to another model" in err
+
+
+def test_kilo_arm_refuses_the_orchestrator_agent(monkeypatch, capsys):
+    monkeypatch.setattr(
+        opencode_delegate, "_run_kilo_fallback", _REAL_RUN_KILO_FALLBACK
+    )
+    args = SimpleNamespace(agent="jev", directory=".", timeout=900)
+    result = opencode_delegate._run_kilo_fallback("prompt", args)
+    assert result is None
+    err = capsys.readouterr().err
+    assert "orchestrator" in err
+
+
+def test_permission_denial_is_not_retryable():
+    assert opencode_delegate._retryable_failure({"error": "permission denied"}) is False

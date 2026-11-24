@@ -26,6 +26,10 @@ Usage:
     python tools/opencode_delegate.py "<prompt>" --model opencode/deepseek-v4-flash-free
     python tools/opencode_delegate.py "<prompt>" --no-guardrail
 
+A prompt longer than about 32 KB cannot be passed as a command-line argument on
+Windows, and that limit applies to this wrapper invocation itself, not only to
+the arm cascade.
+
 Requires OpenCode CLI installed: https://opencode.ai/install
 Auth: opencode providers login <url>
 """
@@ -81,13 +85,17 @@ WSL_KEY_VARS = (
 # `auto` resolves to wsl only when the fence is usable (see `_wsl_ready`).
 SANDBOX_CHOICES = ("auto", "win", "wsl")
 
-#: Fallback sequence for DeepSeek V4.1 Flash: prefer opencode free tier first,
-#: fall back to opencode native, then Command Code, then direct DeepSeek API.
+#: Fallback sequence for DeepSeek V4.1 Flash: the first two are the two providers
+#: that serve this model, tried before the older entries, and the last two are
+#: kept for older credentials. The chain only applies when the caller names a
+#: deepseek-v4.1-flash model; any other model is a single attempt and then the
+#: Kilo arm, because rotating a caller's explicit model would run someone else's.
 DEEPSEEK_V41_FLASH_CHAIN = [
+    "opencode-go/deepseek-v4.1-flash",
+    "commandcode/deepseek/deepseek-v4.1-flash",
     "opencode/deepseek-v4.1-flash-free",
     "opencode/deepseek-v4.1-flash",
     "commandcode/deepseek/deepseek-v4.1-flash-fast",
-    "commandcode/deepseek/deepseek-v4.1-flash",
     "deepseek/deepseek-flash",
 ]
 
@@ -277,6 +285,27 @@ def _git_porcelain(root: Path) -> str:
         return ""
     if proc.returncode != 0:
         return ""
+    return proc.stdout
+
+
+def _porcelain_or_none(root: Path) -> str | None:
+    """Porcelain output, or None when git could not answer.
+
+    _git_porcelain returns an empty string both for a clean tree and for a failed
+    git call, and a cascade must not read could-not-check as nothing-changed.
+    """
+    try:
+        proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "-C", str(root), "status", "--porcelain"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError, TypeError):
+        return None
+    if proc.returncode != 0:
+        return None
     return proc.stdout
 
 
@@ -916,11 +945,19 @@ def run_opencode_cli(
             _stderr(f"stderr: {stderr[:500]}")
         return _error_result(f"opencode CLI exit code {exit_code}")
 
-    # Parse JSON events from stdout
+    # Parse JSON events from stdout. A non-zero exit is a failure even when the
+    # CLI managed to emit events: without this a run that printed a step_start
+    # and then died returns no error, skips the cascade, and exits 0.
     try:
-        return parse_json_events(stdout)
+        parsed = parse_json_events(stdout)
     except (AttributeError, TypeError) as exc:
         return _error_result(f"invalid JSON event payload: {exc}")
+    if exit_code != 0 and not parsed.get("error"):
+        _stderr(f"opencode CLI failed with exit code {exit_code} after emitting events")
+        if stderr:
+            _stderr(f"stderr: {stderr[:500]}")
+        parsed["error"] = f"opencode CLI exit code {exit_code}"
+    return parsed
 
 
 def log_start(
@@ -1038,17 +1075,33 @@ def _retryable_failure(result: dict[str, Any]) -> bool:
     A policy refusal is never retried. Scope, control-path and tier verdicts are
     this harness saying no, and a second arm would either repeat them or write
     where the first arm was forbidden to.
+
+    Most policy refusals exit before this point (blocked prompt, tier) or after
+    it (scope, control paths), so this check only sees a refusal that arrived
+    inside the result.
     """
     if not result.get("error"):
         return False
     lowered = str(result.get("error", "")).lower()
     return not any(
         marker in lowered
-        for marker in ("scope", "control-path", "control path", "tier")
+        for marker in (
+            "scope",
+            "control-path",
+            "control path",
+            "tier",
+            "permission",
+            "denied",
+            "not allowed",
+            "forbidden",
+            "unauthorized",
+        )
     )
 
 
-def _run_kilo_fallback(prompt: str, args: argparse.Namespace) -> dict[str, Any] | None:
+def _run_kilo_fallback(
+    prompt: str, args: argparse.Namespace, timeout_s: int | None = None
+) -> dict[str, Any] | None:
     """Run the same brief on the Kilo arm; None when that arm cannot be used.
 
     --ensure-server is passed because a dead server is the one failure this arm
@@ -1058,6 +1111,13 @@ def _run_kilo_fallback(prompt: str, args: argparse.Namespace) -> dict[str, Any] 
     if not delegate.is_file():
         _stderr("[cascade] kilo arm unavailable: tools/kilo_cli_delegate.py is missing")
         return None
+    if getattr(args, "agent", None) == ORCHESTRATOR_AGENT:
+        _stderr(
+            "[cascade] skipped: the orchestrator agent cannot write, and the "
+            "kilo arm has no equivalent deny"
+        )
+        return None
+    effective = timeout_s or args.timeout
     argv = [
         sys.executable,
         str(delegate),
@@ -1067,7 +1127,7 @@ def _run_kilo_fallback(prompt: str, args: argparse.Namespace) -> dict[str, Any] 
         "--directory",
         args.directory,
         "--timeout",
-        str(args.timeout),
+        str(effective),
         "--ensure-server",
     ]
     # The prompt already carries this wrapper's guardrail whenever the caller
@@ -1084,7 +1144,11 @@ def _run_kilo_fallback(prompt: str, args: argparse.Namespace) -> dict[str, Any] 
             errors="replace",
             capture_output=True,
             check=False,
+            timeout=effective + 10,
         )
+    except subprocess.TimeoutExpired:
+        _stderr("[cascade] kilo arm timed out")
+        return None
     except Exception as exc:  # noqa: BLE001 - the arm is optional
         _stderr(f"[cascade] kilo arm failed to start: {type(exc).__name__}")
         return None
@@ -1185,6 +1249,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--cascade-budget",
+        type=int,
+        default=1800,
+        help=(
+            "seconds for the whole arm chain including fallbacks; "
+            "0 means no limit (default: 1800)"
+        ),
+    )
+    parser.add_argument(
         "--worktree",
         action="store_true",
         help=(
@@ -1199,6 +1272,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
+    args.directory = str(Path(args.directory).resolve())
     _tier_reason = _tier_refusal(
         getattr(args, "directory", None) or getattr(args, "workspace", None) or "."
     )
@@ -1320,12 +1394,19 @@ def main(argv: list[str] | None = None) -> int:
     # ── Run opencode CLI → parse events → log ──
     run_id = uuid.uuid4().hex
     start = time.monotonic()
+    deadline = start + args.cascade_budget if args.cascade_budget > 0 else None
     before_exc: Exception | None = None
     try:
         before = _snapshot(ROOT)
     except Exception as exc:  # noqa: BLE001 - report only by default
         before = None
         before_exc = exc
+    before_target = None
+    if len(models_to_try) > 1 or getattr(args, "cascade", "auto") != "off":
+        # Only the cascade needs this second baseline; a single-arm run should
+        # not pay for a snapshot it will never read.
+        with contextlib.suppress(Exception):
+            before_target = _snapshot(Path(args.directory))
     if args.enforce_scope and before is None:
         detail = f" ({type(before_exc).__name__})" if before_exc else ""
         _stderr(f"scope: snapshot unavailable{detail}")
@@ -1337,19 +1418,27 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     log_start(model or f"agent:{args.agent}", len(prompt), run_id, agent=args.agent)
-    before_porcelain = _git_porcelain(Path(args.directory))
+    before_porcelain = _porcelain_or_none(Path(args.directory))
 
     result: dict[str, Any] = {}
     used_model = model
     for idx, candidate_model in enumerate(models_to_try):
         used_model = candidate_model
         _stderr(f"model={used_model}")
+        if deadline is None:
+            attempt_timeout = args.timeout
+        else:
+            remaining = deadline - time.monotonic()
+            if remaining <= 30:
+                _stderr("[cascade] budget exhausted before the next attempt")
+                break
+            attempt_timeout = int(min(args.timeout, remaining))
         result = run_opencode_cli(
             prompt=prompt,
             model=used_model or "",
             directory=args.directory,
             opencode_binary=opencode_binary,
-            timeout_s=args.timeout,
+            timeout_s=attempt_timeout,
             agent=args.agent,
             session=args.session,
             sandbox=sandbox,
@@ -1357,27 +1446,58 @@ def main(argv: list[str] | None = None) -> int:
         if not result.get("error"):
             break
         error_msg = str(result.get("error"))
-        if not _looks_like_model_exhausted(error_msg) or idx + 1 >= len(models_to_try):
+        if not _retryable_failure(result) or idx + 1 >= len(models_to_try):
             break
-        next_model = models_to_try[idx + 1]
+        # A failed model may have written before it died. Rotating onto the same
+        # tree would hand the next provider a partial change, exactly the way the
+        # Kilo arm is fenced below.
+        if before is None or before_target is None:
+            _stderr("[model] no baseline to compare; not rotating")
+            break
+        if True:
+            now_root = _snapshot(ROOT)
+            now_target = _snapshot(Path(args.directory))
+            if (
+                now_root is None
+                or now_target is None
+                or changed_workspace_paths(before, now_root)
+                or changed_workspace_paths(before_target, now_target)
+            ):
+                _stderr("[model] the tree changed; not rotating to another model")
+                break
         _stderr(
-            f"[opencode_delegate] Model {used_model} exhausted/failed ({error_msg[:80]}), "
-            f"falling back to {next_model}..."
+            f"[model] {used_model} failed ({error_msg[:80]}), trying {models_to_try[idx + 1]}..."
         )
 
     if result.get("error") and getattr(args, "cascade", "auto") != "off":
         if not _retryable_failure(result):
             _stderr("[cascade] skipped: policy refusal, not an arm failure")
         else:
-            if _git_porcelain(Path(args.directory)) != before_porcelain:
+            after_root = _snapshot(ROOT)
+            after_target = _snapshot(Path(args.directory))
+            if None in (before, before_target, after_root, after_target):
+                _stderr("[cascade] skipped: the tree state could not be read")
+            elif changed_workspace_paths(before, after_root) or changed_workspace_paths(
+                before_target, after_target
+            ):
                 _stderr("[cascade] skipped: the failed arm already changed the tree")
             else:
-                error_text = str(result.get("error"))[:80]
-                _stderr(f"[cascade] opencode arm failed ({error_text})")
-                kilo_result = _run_kilo_fallback(prompt, args)
-                if kilo_result is not None:
-                    result = kilo_result
-                    used_model = KILO_FALLBACK_MODEL
+                if deadline is not None and (deadline - time.monotonic()) < 30:
+                    _stderr("[cascade] skipped: budget exhausted")
+                else:
+                    kilo_timeout = (
+                        max(1, min(args.timeout, int(deadline - time.monotonic()) - 15))
+                        if deadline is not None
+                        else None
+                    )
+                    error_text = str(result.get("error"))[:80]
+                    _stderr(f"[cascade] opencode arm failed ({error_text})")
+                    kilo_result = _run_kilo_fallback(
+                        prompt, args, timeout_s=kilo_timeout
+                    )
+                    if kilo_result is not None:
+                        result = kilo_result
+                        used_model = KILO_FALLBACK_MODEL
 
     elapsed = time.monotonic() - start
 
@@ -1398,7 +1518,7 @@ def main(argv: list[str] | None = None) -> int:
         before_exc=before_exc,
     )
     if not args.allow_control_paths:
-        _control = _new_control_violations(args.directory, before_porcelain)
+        _control = _new_control_violations(args.directory, before_porcelain or "")
         if _control:
             _stderr(
                 "[control-path] worker changed harness control paths: "
