@@ -27,6 +27,15 @@ reference's:
 Scope, stated honestly (the reference's documented boundaries apply):
 
   * **Writes are restricted; reads, network, and process visibility are not.**
+    Egress is deliberately NOT restricted (decision 2026-11-24). The workers
+    now use named providers, and every way to add network control on Windows
+    costs more than it buys: a userland CONNECT proxy only binds tools that
+    honour HTTP(S)_PROXY (a raw socket, PowerShell 5.1 Invoke-RestMethod and
+    most native binaries ignore it), DLP cannot read the TLS tunnel it proxies,
+    and a per-program firewall rule would have to block powershell.exe,
+    node.exe and python.exe -- the workers themselves. Revisit only if a client
+    requires network isolation in writing, or if WSL becomes the primary
+    sandbox, where unshare -n is a kernel boundary rather than advice.
     ``WRITE_RESTRICTED`` intersects write accesses only.
   * **Everyone stays ambient.** It is required in the restricting list or early
     DLL initialization dies (``0xC0000142``) and CNG crashes PowerShell; an

@@ -107,3 +107,4 @@ High-signal context loaded at session start. Detailed history belongs in
   dung, commandcode con cau hinh. Coverage ratchet do -> xanh bang 32 test, khong ha budget.
 - 2026-11-23: bo FreeModel; Claude Code->DeepSeek /anthropic, Codex->CommandCode /responses (deepseek-v4.1-flash); tier gate tools/tier_gate.py (thieu marker => client); Codex sandbox=workspace-write (da do chay duoc tren Windows).
 - 2026-11-24: go Codex roi Claude Code engine. guard -> tools/guard_hook.py + guard_rules.py (2 wrapper dung); skills -> .agents/skills (tools/skills_engine.py); 5 workflow giu o .agents/workflows (tro, chua co engine chay); 6 hook trong phien thay bang tools/post_run_checks.py (2 wrapper goi) + .opencode/plugins/harness (session_start + pre_compact). agy KHONG co hook/plugin API (kiem 2026-11-24, agy 1.5.15). Lock phai sinh SAU git add.
+- 2026-11-24: P5 (sandbox khong chan mang) chap nhan bo qua - ly do ghi trong tools/win_sandbox.py. Khong xay egress proxy.
