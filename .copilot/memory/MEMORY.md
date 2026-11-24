@@ -58,12 +58,11 @@ High-signal context loaded at session start. Detailed history belongs in
 - [gotcha] `antigravity_delegate.py --allow-tools` (read-only) chay song song voi worker dang ghi cay se bao
   "read-only violation" cho chinh cac file nguoi khac sua - snapshot khong quy duoc chu. Chi chay review agy
   khi cay da dung yen.
-- [gotcha] Goi Claude CLI trong repo nay: `claude -p` tran se dinh 401 "Insufficient
-  balance" vi no lay ANTHROPIC_API_KEY/ANTHROPIC_BASE_URL cua gateway trong shell. Goi qua
-  launcher: `powershell -NoProfile -ExecutionPolicy Bypass -File .\claude-env.ps1 --profile
-  native -p "<prompt>"`. Launcher cat `--profile` chu khong chuyen tiep, va `--allowedTools`
-  bi guard chan ("Portable shell scanner cannot analyze command") - mo ta viec can lam
-  trong prompt thay vi liet ke tool.
+- [gotcha] Claude Code CLI da bi go 2026-11-24 (launcher, engine, hooks). Bai hoc con gia tri
+  neu no duoc cai lai: `claude -p` tran se dinh 401 "Insufficient balance" vi no lay
+  ANTHROPIC_API_KEY/ANTHROPIC_BASE_URL tu shell, va `--allowedTools` bi guard chan
+  ("Portable shell scanner cannot analyze command") - mo ta viec can lam trong prompt thay vi
+  liet ke tool.
 
 ## Decisions
 - [decision] Router co ledger (2026-11-12): `tools/router.py` phan loai task bang bang rule (6 loai,

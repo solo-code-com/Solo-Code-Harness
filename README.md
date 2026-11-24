@@ -305,35 +305,14 @@ not just filenames, so a silently out-of-sync mirror is always caught.
 python -m pytest tools/test_claude_guard.py tools/test_claude_hooks.py -q
 ```
 
-### Launch Claude Code via a named provider
+### Claude Code was removed
 
-`claude-env.ps1` loads `.env`, normalizes the gateway URL, and launches Claude Code
-with profile-based behavior:
+The Claude Code engine (launcher, .claude/, hooks, guard hook) was decommissioned on 2026-11-24.
+Its rule tables and guard logic live on in tools/guard_rules.py and tools/guard_hook.py, the
+wrappers enforce them for every engine, and the skill library publishes to .agents/skills/.
 
-- `gateway` (default): a named provider — DeepSeek's `/anthropic` endpoint — via `ANTHROPIC_API_KEY` + `ANTHROPIC_BASE_URL`
-- `native`: prefer `ANTHROPIC_API_KEY` / `apiKeyHelper` if present
-- `kilo`: distinct profile name for IDE-integrated Kilo workflows
-
-Every profile runs in full mode by default — hooks, skills, auto-memory and
-still skips hooks and auto-memory).
-
-```powershell
-# 1. Copy the template and fill your key
-Copy-Item .env.template .env
-#    then edit .env → set ANTHROPIC_API_KEY=<your-key>
-
-# 2. Launch Claude Code with the default gateway profile
-
-# 3. Optional profiles
-./claude-env.ps1 --profile native
-./claude-env.ps1 --profile kilo
-
-# Pass-through args still work:
-./claude-env.ps1 --help
-```
-
-`.env.template` ships `DEEPSEEK_BASE_URL` / `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `COMMANDCODE_BASE_URL` / `COMMANDCODE_API_KEY`
-and `SILK_API_KEY`, plus a commented block showing Claude Code on DeepSeek (`ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`, with `ANTHROPIC_API_KEY` set to the same value as `DEEPSEEK_API_KEY`). Your real `.env` is gitignored and never deployed. Full mode is the default for every profile, so hooks and auto-memory stay active; pass `--bare` explicitly if a future provider swap needs the reduced mode.
+If the CLI is reinstalled, .env.template still carries the commented block that points
+ANTHROPIC_BASE_URL at the DeepSeek /anthropic endpoint, and the 401 trap is recorded in memory.
 
 ## Gemini/Antigravity workers (headless CLI + GUI fallback)
 
