@@ -9,7 +9,7 @@ description: "Auto-loaded when the agent needs to call external LLM APIs or swit
 
 ## Overview
 
-This project supports two external LLM API providers beyond the primary Copilot model:
+This project supports two external LLM API providers beyond the primary model:
 
 | Provider | API Type | Base URL Env | Key Env |
 |----------|----------|-------------|---------|
@@ -37,7 +37,7 @@ Set these environment variables before use. Never hardcode keys in source files.
 [Environment]::SetEnvironmentVariable("OPENROUTER_API_KEY", "sk-or-your-key", "User")
 ```
 
-After setting, restart VS Code for Copilot to pick up the new variables.
+After setting, restart the client that reads them.
 
 ## Model Selection
 
@@ -113,14 +113,6 @@ async def call_deepseek(prompt: str, system: str = "", model: str = "deepseek-ch
         data = resp.json()
         return data["choices"][0]["message"]["content"]
 ```
-
-## Copilot Chat Model Switching
-
-When using Copilot Chat in VS Code, switch the active model via:
-- **Command Palette** (`Ctrl+Shift+P`) -> `GitHub Copilot: Switch Model`
-- Or click the model name in the Copilot Chat header
-
-Configured models are defined in `.vscode/settings.json` under `github.copilot.chat.models`.
 
 ## When to Use Which Provider
 

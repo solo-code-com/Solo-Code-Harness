@@ -2,7 +2,7 @@
 # init.sh — Solo-Code Harness cross-platform bootstrap.
 #
 # Detects which harness engines are present (Kilo, OpenCode, Claude Code,
-# Copilot, Gemini), reports their rulebooks, and prints the shared-state
+# OpenCode, Gemini), reports their rulebooks, and prints the shared-state
 # summary. Works from any harness platform directory — no engine is hardcoded.
 #
 # Usage:
@@ -46,14 +46,13 @@ check_rulebook() {
 }
 check_rulebook "CLAUDE.md"                          "Claude Code"
 check_rulebook "AGENTS.md"                          "Kilo / OpenCode (AGENTS.md)"
-check_rulebook ".github/copilot-instructions.md"    "GitHub Copilot"
 check_rulebook ".gemini"                            "Gemini / Antigravity"
 [ "$engines_found" -eq 0 ] && say "  (no rulebooks detected — is this a harness project?)"
 say ""
 
 # ── Engine directories ──────────────────────────────────────────────────
 say "[ENGINE DIRS]"
-for pair in ".kilo:Kilo" ".opencode:OpenCode" ".claude:Claude Code" ".copilot:Copilot" ".gemini:Gemini"; do
+for pair in ".kilo:Kilo" ".opencode:OpenCode" ".gemini:Gemini"; do
   dir="${pair%%:*}"; label="${pair#*:}"
   [ -d "$dir" ] && say "  [x] $label ($dir/)"
 done

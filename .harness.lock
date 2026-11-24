@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-24T09:11:33Z"
+generated_at = "2026-11-24T09:15:15Z"
 mode = "root"
-content_fingerprint = "sha256:e67e4e0ebbb86922704e588ef135732000bc490d004d27980a9962e8a44ecf4f"
+content_fingerprint = "sha256:234225223774a225156cf30f0e4a184aea3442efbb079105dc5f30f389625a14"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -77,7 +77,6 @@ paths = [
     ".github/workflows/ci.yml",
     ".github/workflows/release.yml",
     ".vscode/mcp.json",
-    ".vscode/settings.json",
     "tools/__init__.py",
     "tools/agent_scope.py",
     "tools/antigravity_delegate.py",
