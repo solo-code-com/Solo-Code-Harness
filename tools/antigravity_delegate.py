@@ -665,6 +665,13 @@ def main(argv: list[str] | None = None) -> int:
             if control:
                 _stderr("control-path violation; changed: " + ", ".join(control))
                 return 3
+        try:
+            import post_run_checks
+        except ImportError:  # pragma: no cover - script-dir import path
+            from tools import post_run_checks  # type: ignore[no-redef]
+        if post_run_checks.main(["--directory", str(target_dir), "--strict"]) == 3:
+            _stderr("[post-run] blocking finding; see the lines above")
+            return 3
         if result.get("denied_actions"):
             names = ", ".join(
                 str(entry.get("action") or entry.get("display_name") or "unknown")

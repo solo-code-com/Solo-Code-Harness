@@ -1254,6 +1254,16 @@ def main(argv: list[str] | None = None) -> int:
                 _stderr("--- worker output (control-path violation) ---")
                 _stderr(result["text"][-4000:])
             return 3
+    # The six Claude Code session hooks are gone with that engine; the checks
+    # they performed still apply, and the wrapper is the one place that can run
+    # them for every engine.
+    try:
+        import post_run_checks
+    except ImportError:  # pragma: no cover - script-dir import path
+        from tools import post_run_checks  # type: ignore[no-redef]
+    if post_run_checks.main(["--directory", args.directory, "--strict"]) == 3:
+        _stderr("[post-run] blocking finding; see the lines above")
+        return 3
 
     if getattr(args, "record_receipt", False):
         try:
