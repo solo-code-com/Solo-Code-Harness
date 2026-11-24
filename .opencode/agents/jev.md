@@ -124,9 +124,7 @@ instead of at the honour system. Gemini takes the quick/light work because its
 tokens are free.
 
 The OpenCode wrapper also reaches the DeepSeek **strong** tier with
-`--model opencode-go/deepseek-v4-pro`. Pick the Antigravity tier by complexity:
-`gemini-3.8-flash-low` (mechanical), `medium` (default multi-file), `high` (hard
-reasoning).
+`--model opencode-go/deepseek-v4-pro`. Pick the Antigravity tier by complexity, with medium as the floor: medium for the default case including mechanical and multi-file work, high for review and for any verdict that gates a merge. Low is legacy and is not a default.
 
 A live `dsh` run still needs its environment set up: `CI=true`, a one-time
 `pnpm build` in the checkout, and no exported `DEEPSEEK_BASE_URL` (dsh uses its
@@ -150,11 +148,10 @@ change; what differs is the relay and what goes wrong:
 | Shape | Route | Why |
 |---|---|---|
 | One precise edit, result wanted immediately | `model_api.py` | 22s measured, and the diff lands in this session to apply and verify |
-| A batch of mechanical edits in one directory | `agy`, `--model gemini-3.8-flash-low` | 61.2s for five files measured; free tokens; the wrapper enforces the fence |
+| A batch of mechanical edits in one directory | `agy`, `--model gemini-3.8-flash-medium` | 61.2s for five files at low on 2026-11-24; medium is the floor, so budget 600s |
 | One tiny edit, or the OpenCode lane is unhealthy | `kilo_cli_delegate.py` | No relay cost, and it is the measured fallback when OpenCode fails |
 
-Never send a one-line edit to `gemini-3.8-flash-medium`: the relay costs more
-than the edit.
+Never route a one-line edit through agy at any tier: the relay costs more than the edit.
 
 ## Channel budget
 

@@ -323,9 +323,11 @@ explicit fence. Four facts the routing table does not carry:
 - A write into a control path (`tools/`, `.kilo/hooks/`, `.github/scripts/`, `AGENTS.md`)
   is refused with exit 3 unless `--allow-control-paths` is passed. Pass it only when the
   task is maintaining this harness.
-- Tier matters more than model family: `gemini-3.8-flash-low` finished a 100-line module
-  in 99s and passed, while `gemini-3.8-flash-medium` timed out at 200s and 280s on the
-  same task, so medium is not a safe default for implementation work.
+- Tier: medium is the floor and high is for accuracy, by operator directive of 2026-11-24.
+  The old rule recommended low because it finished a 100-line module in 99s, while medium hit
+  the 200s and 280s ceilings of that harness. That compared wall clock, not answer quality.
+  A timeout is a budget failure, so the fix is a larger budget: 600s generation-only, 900s
+  with commands.
 
 GUI handoff, for rendered UI only: write the plan to
 `.gemini/antigravity/handoff/inbox/<slug>-plan.md`. Full guide:

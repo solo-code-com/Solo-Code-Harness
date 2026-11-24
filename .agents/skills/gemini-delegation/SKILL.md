@@ -75,7 +75,7 @@ Poor fit:
 - A single small mechanical edit - use Kilo CLI instead; it is headless and does
   not cost the user a relay step. A batch of edits is handled in the next rule.
 
-Rule of thumb: a **single** tiny edit goes to Kilo CLI, which has no relay cost. A **batch** of mechanical edits inside one directory goes to `gemini-3.8-flash-low` with an exact brief (measured: five files in 61.2s, fence enforced). On anything broader, Gemini earns its relay cost.
+Rule of thumb: a **single** tiny edit goes to Kilo CLI, which has no relay cost. A **batch** of mechanical edits inside one directory goes to `gemini-3.8-flash-medium` with an exact brief (five files at low took 61.2s on 2026-11-24; medium is the floor, so budget 600s). On anything broader, Gemini earns its relay cost.
 
 ## Maximizing Antigravity CLI use
 
@@ -126,7 +126,7 @@ python tools/antigravity_delegate.py "<task>" --allow-tools --model gemini-3.8-f
 
 # Write task: narrow directory scope and explicit auto approval
 # Note: --allow-tools cannot be combined with --auto-approve; "." is rejected as not narrower
-python tools/antigravity_delegate.py "<task>" --target-dir <dir> --allow-dir <subdir> --auto-approve --model gemini-3.8-flash-low
+python tools/antigravity_delegate.py "<task>" --target-dir <dir> --allow-dir <subdir> --auto-approve --model gemini-3.8-flash-medium
 ```
 
 ### Tool permissions and silent failures
@@ -151,20 +151,24 @@ the run expensive, so in this repository the orchestrator applies a root-file ed
 
 ### Choose the model by task complexity
 
-Gemini 3.8 Flash exposes three reasoning levels as distinct model ids. All three
-draw the same account quota, so spend the cheapest level that fits:
+Gemini 3.8 Flash exposes three reasoning levels as distinct model ids, all drawn from the
+same account quota. An operator directive of 2026-11-24 sets the floor at medium: low traded
+accuracy for wall clock, and this harness spends accuracy first. Pick high when the answer is
+used to approve a change.
 
-| Complexity | Model id | Use for |
+| Tier | Model id | Use for |
 |---|---|---|
-| Low | `gemini-3.8-flash-low` | Mechanical, single-file, little reasoning |
-| Medium (default) | `gemini-3.8-flash-medium` | Multi-file summarize/compare, scoped refactor |
-| High | `gemini-3.8-flash-high` | Independent design review, subtle bug hunt |
+| Medium (floor) | `gemini-3.8-flash-medium` | every default task: mechanical edits, multi-file summarize/compare, scoped refactor |
+| High (accuracy) | `gemini-3.8-flash-high` | independent review, subtle bug hunt, any verdict that gates a merge |
+| Low (legacy) | `gemini-3.8-flash-low` | not a default; kept because the id is still valid |
 
-Measured evidence: in a ~100-line implementation benchmark, `gemini-3.8-flash-low`
-finished in 99.1s and passed 16/16 tests, whereas `gemini-3.8-flash-medium` timed out
-twice (200s and 280s) without producing code, and took 231.8s on a simpler task. Low is
-the right default for single-file implementation work, while medium fits multi-file
-reading/comparison. If a medium run times out, retry at low rather than high.
+The earlier rule recommended low, and its reason is worth keeping. In a ~100-line
+implementation benchmark, low finished in 99.1s and passed 16/16. Medium hit the 200s and
+280s ceilings of that harness, and took 231.8s on a simpler task. That measured wall clock,
+not answer quality. A timeout is a budget failure rather than a wrong answer. The fix is a
+larger budget, not a lower tier: 600s for generation-only runs, 900s for runs that execute
+commands. If a medium run still times out, raise the timeout before falling back to low, and
+record the fallback in the brief. One more measurement points the same way: in this repo on 2026-11-24, three low-tier runs reported `thinking_tokens` 0, while a medium-tier run reported 6039.
 
 ### Authentication, quota, and account rotation
 
