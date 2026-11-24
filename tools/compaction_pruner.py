@@ -4,9 +4,8 @@ compaction_pruner.py — Prune oversized tool results to a byte budget.
 
 Consumer role, ported from DeepSeek Harness packages/compaction/
 (compaction-tool-result-pruner). A standalone tool, not a hook: it is
-engine-agnostic and runs on demand. Wiring it into a PostToolUse hook would
-require touching harness files (`.claude/hooks/`), which is out of scope for
-this seam and reserved for the orchestrator.
+engine-agnostic and runs on demand. The remaining hook layer is
+`.kilo/hooks/post-tool-use/`, and the pruner is not wired there today.
 
 The pruner applies a byte budget to a piece of text. When the text exceeds
 the budget, it keeps a head and a tail with a truncation marker in between,

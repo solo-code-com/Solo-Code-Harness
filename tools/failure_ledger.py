@@ -22,7 +22,7 @@ Example:
     python tools/failure_ledger.py
     # Sessions: 1000 total (session_log), 1 row in sessions.db
     # Failures: 348 total
-    #   by worker: kilo 326, opencode 13, codex-delegate 5, model-api 3
+    #   by worker: kilo 326, opencode 13, antigravity 5, model-api 3
     # Cost: $0.005220 across 94 metered row(s)
 """
 

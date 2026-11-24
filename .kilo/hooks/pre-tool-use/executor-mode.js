@@ -2,7 +2,7 @@
 /**
  * executor-mode.js — PreToolUse hook for Solo-Code-Harness
  *
- * Kilo-engine equivalent of .claude/hooks/guard.py's executor-mode gate.
+ * Kilo-engine equivalent of tools/guard_hook.py's executor-mode gate.
  * Default-ON: the orchestrator does not write files directly, it delegates
  * to a worker (Kilo CLI) and verifies the result. Scope is level (a) --
  * Write/Edit/MultiEdit only. Bash stays open: it is how the orchestrator

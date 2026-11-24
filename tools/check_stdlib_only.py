@@ -18,10 +18,10 @@ ones -- ``ast.walk`` visits every node regardless of depth.
 Allowed top-level module names:
   * anything in ``sys.stdlib_module_names``;
   * the local package name ``tools``;
-  * any module whose ``.py`` stem lives in a scanned directory, or in the
-    harness's own hook directory ``.claude/hooks/`` (so ``import garden``,
-    ``import opencode_engine`` and ``import guard`` are all local harness
-    modules, not external dependencies);
+  * any module whose ``.py`` stem lives in a scanned directory (so
+    ``import garden``, ``import opencode_engine``, ``import guard_hook``
+    and ``import guard_rules`` are all local harness modules, not external
+    dependencies);
   * ``pytest``, but only for files whose name starts with ``test_``.
 
 Everything else is a finding, printed as ``path:line: module``, and the exit
@@ -51,12 +51,10 @@ def _scanned_dirs(root: Path) -> list[Path]:
 def _local_stem_dirs(root: Path) -> list[Path]:
     """Directories whose *.py stems count as local harness modules.
 
-    The harness's Python hooks live under ``.claude/hooks/`` and are
-    legitimately imported by ``tools/test_guard.py`` (``import guard``): a
-    local harness module, not an external dependency. Including them here
-    keeps the gate from reporting a false positive on that import.
+    The harness's Python hooks live in ``tools/`` as ``guard_hook.py`` and
+    ``guard_rules.py``, which are already included via ``_scanned_dirs(root)``.
     """
-    return [*_scanned_dirs(root), root / ".claude" / "hooks"]
+    return list(_scanned_dirs(root))
 
 
 def _local_stems(root: Path) -> set[str]:

@@ -15,7 +15,7 @@
 # What actually gates risky calls today:
 #   - tools/check_lint_budget.py pins the S/BLE finding count for the repo
 #   - `security_scan.py --strict` scans UNSAFE_PATTERNS in code (docs exempt)
-#   - .claude/hooks/guard.py and .kilo/hooks/pre-tool-use/gate-guard.js block
+#   - tools/guard_hook.py and .kilo/hooks/pre-tool-use/gate-guard.js block
 #     destructive commands at tool-call time
 
 # ── Subprocess execution ──────────────────────────────────────

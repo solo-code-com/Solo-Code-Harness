@@ -1,8 +1,6 @@
 {
   "platforms": {
     "linux": {
-      ".claude/hooks/guard.py": 74.32,
-      ".claude/hooks/session_start.py": 15.98,
       ".github/scripts/__init__.py": 100.0,
       ".github/scripts/boundary_audit.py": 65.14,
       ".github/scripts/check_skips.py": 52.94,
@@ -115,8 +113,6 @@
       "tools/workspace_snapshot.py": 90.91
     },
     "win32": {
-      ".claude/hooks/guard.py": 81.58,
-      ".claude/hooks/session_start.py": 15.98,
       ".github/scripts/__init__.py": 100.0,
       ".github/scripts/boundary_audit.py": 65.14,
       ".github/scripts/check_skips.py": 52.94,

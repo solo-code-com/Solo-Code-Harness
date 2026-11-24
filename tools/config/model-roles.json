@@ -1,5 +1,5 @@
 {
-  "_comment": "Reference only. NOT edited by generators. .claude/ agents keep the session default: its generator deliberately omits a model.",
+  "_comment": "The roles map is reference only and is not edited by generators.",
   "roles": {
     "deep-reasoning": "opencode-go/claude-haiku-5-5",
     "independent-review": "opencode-go/gpt-5.6-luna",

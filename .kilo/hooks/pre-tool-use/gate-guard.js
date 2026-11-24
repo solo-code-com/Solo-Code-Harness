@@ -20,7 +20,7 @@
 const MAX_STDIN = 1024 * 1024;
 
 // ─── BLOCK PATTERNS (exit 2) ───────────────────────────────────────────────
-// Kept 1:1 with .claude/hooks/guard.py. Kilo previously enforced a strictly
+// Kept 1:1 with tools/guard_hook.py. Kilo previously enforced a strictly
 // weaker set than Claude: rm_system_dir, rm_temp_linux, chmod_chown_system and
 // thirteen others were missing here, so `rm -rf /etc` blocked under Claude and
 // passed under Kilo.
@@ -158,7 +158,7 @@ const BLOCK_PATTERNS = [
 
 // ─── SECRET PATTERNS (exit 2) ─────────────────────────────────────────────
 // Shapes that mean a literal credential was typed into the command text. Kept
-// 1:1 with .claude/hooks/guard.py's SECRET_PATTERNS (ids and regexes), which is
+// 1:1 with tools/guard_hook.py's SECRET_PATTERNS (ids and regexes), which is
 // the reference: it blocked these commands while Kilo allowed them -- the last
 // measured divergence of the guard review (2026-10-16). The JS form of each
 // regex mirrors the dsh bridge's SECRET_PATTERNS
