@@ -1159,3 +1159,21 @@ def test_retired_engine_dir_is_only_reported_in_a_dry_run(tmp_path, capsys):
     assert removed == 1
     assert stale.exists(), "dry run must not delete"
     assert "Would remove" in capsys.readouterr().out
+
+
+def test_retired_gitignore_rule_is_removed_at_a_target(tmp_path):
+    """A project that received the old rule must stop ignoring the skills it got."""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / ".gitignore").write_text(".env\n", encoding="utf-8")
+    base = tmp_path / "target"
+    base.mkdir()
+    (base / ".gitignore").write_text(
+        "*.log\n/.agents/skills/\n.env\n", encoding="utf-8"
+    )
+
+    deploy._merge_list_file(src / ".gitignore", base / ".gitignore", False, base)
+
+    text = (base / ".gitignore").read_text(encoding="utf-8")
+    assert "/.agents/skills/" not in text
+    assert "*.log" in text, "project rules must survive"

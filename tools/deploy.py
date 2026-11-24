@@ -98,6 +98,11 @@ DEV_ONLY_ROOT_FILES = {
 # These are the only names eligible for stale-cleanup at the target root
 # beyond the current ROOT_FILES, because a previous deploy is what put them
 # there. Append here whenever a file is dropped from ROOT_FILES.
+#: `.gitignore` rules the harness once added and no longer wants. They live in a
+#: merged, project-owned file, so nothing else would ever remove them; leaving
+#: them keeps a deployed project ignoring the skill library it just received.
+RETIRED_GITIGNORE_LINES = frozenset({"/.agents/skills/", "/.agents/skills"})
+
 RETIRED_ROOT_FILES = {
     "opencode.ps1",  # removed v4.0.0 (launcher superseded by opencode.json)
     "jcode.ps1",  # removed v4.1.0 (jcode engine retired)
@@ -1046,6 +1051,18 @@ def _merge_list_file(src: Path, dst: Path, dry_run: bool, base: Path) -> str:
     # and the appended block would then change every line ending in the file (caught by a test).
     with dst.open("r", encoding="utf-8", errors="replace", newline="") as fh:
         text = fh.read()
+    # Drop rules the harness itself once added and has retired. A project-owned
+    # file is merged, never replaced, so this is the only place they can go.
+    if any(ln.strip() in RETIRED_GITIGNORE_LINES for ln in text.splitlines()):
+        eol_keep = "\r\n" if "\r\n" in text else "\n"
+        kept = [
+            ln for ln in text.splitlines() if ln.strip() not in RETIRED_GITIGNORE_LINES
+        ]
+        text = eol_keep.join(kept) + eol_keep
+        # Write now: the merge below may decide nothing is missing and return
+        # early, which would otherwise discard the removal.
+        if not dry_run:
+            dst.write_text(text, encoding="utf-8", newline="")
     existing = {ln.strip() for ln in text.splitlines()}
     with src.open("r", encoding="utf-8", errors="replace", newline="") as fh:
         wanted = fh.read().splitlines()
