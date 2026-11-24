@@ -72,11 +72,10 @@ Poor fit:
 - Anything needing this conversation's history — the handoff file is the
   **only** context Gemini receives.
 - Architecture and product decisions. Those stay with the orchestrator.
-- Small mechanical edits — use Kilo CLI instead; it is headless and does not
-  cost the user a relay step.
+- A single small mechanical edit - use Kilo CLI instead; it is headless and does
+  not cost the user a relay step. A batch of edits is handled in the next rule.
 
-Rule of thumb: if the task is small enough that Kilo CLI can do it, **use Kilo CLI**.
-Gemini earns its relay cost only on breadth.
+Rule of thumb: a **single** tiny edit goes to Kilo CLI, which has no relay cost. A **batch** of mechanical edits inside one directory goes to `gemini-3.8-flash-low` with an exact brief (measured: five files in 61.2s, fence enforced). On anything broader, Gemini earns its relay cost.
 
 ## Maximizing Antigravity CLI use
 
@@ -102,7 +101,7 @@ levers are all soft:
 | Lever | Kind | Where |
 |---|---|---|
 | Routing rules ("use Antigravity CLI for X") | advisory | `AGENTS.md`, this skill |
-| Session-start availability announcement | reminder | `.claude/hooks/session_start.py` |
+| Session-start availability announcement | reminder | `.kilo/hooks/session/session-start.js` |
 | `opencode.json` permission `ask` on the wrapper | prompt, not a block | `opencode.json` |
 | Wrapper `--allow-dir` / lock / scope audit | enforced *if a run happens* | `tools/antigravity_delegate.py` |
 
@@ -142,6 +141,13 @@ directory lock, no scope audit); it is mutually exclusive with `--auto-approve`,
 `--allow-dir`, and `--no-guardrail`. For a least-privilege alternative, add a
 `permissions.allow` rule in `~/.gemini/antigravity-cli/settings.json` (e.g.
 `"allow": ["command(python tools/garden.py)"]`) — see the auth section below.
+
+A write into a control path (`tools/`, `.kilo/hooks/`, `.github/scripts/`, `AGENTS.md`) is refused
+with exit 3 even when it sits inside `--allow-dir`. Add `--allow-control-paths` only when the task
+is maintaining this harness. A repo-root file cannot be fenced by `--allow-dir` at all, because the
+value must be a proper subdirectory. Setting `--target-dir` to the parent works only when that
+parent is small, because the wrapper snapshots the whole target. A sibling tree of 100k files makes
+the run expensive, so in this repository the orchestrator applies a root-file edit itself.
 
 ### Choose the model by task complexity
 
@@ -302,7 +308,7 @@ channel. The report file in `outbox/` is.
 
 | Don't | Do Instead |
 |-------|------------|
-| Delegate a small mechanical edit to Gemini | Use Kilo CLI — headless, no relay cost to the user |
+| Delegate a single one-line edit to Gemini | Use Kilo CLI - no relay cost for one line; a batch of mechanical edits at `-low` is fine |
 | Trust its "Confident: Yes" / "unsure about: nothing" | Re-run its evidence commands yourself |
 | Write a brief without an explicit writable-file list | Fence the scope; name every path it may touch |
 | Put the expected answer in the brief | Give the measurement command, not the number |

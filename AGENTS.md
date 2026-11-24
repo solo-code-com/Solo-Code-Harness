@@ -303,15 +303,26 @@ run the real gates, and mutation-test any new check they write.
 
 Full decision guide: `.kilo/skill/gemini-delegation/SKILL.md`.
 
-### Antigravity as Orchestrator & CLI Worker Delegation
+### Antigravity as a CLI worker
 
-Antigravity holds the global context, splits the task and verifies the diff; the
-workers it can reach are in the routing table above. Three facts that table does not
-carry:
+**Jev, running in OpenCode, is the orchestrator.** It holds the global context, splits
+the task, dispatches, and verifies the diff. Gemini through `agy` is one of the workers
+it reaches, alongside the OpenCode and Kilo CLI lanes. An earlier version of this
+section called Antigravity the orchestrator; that described the retired Claude Code
+engine and is wrong now.
+
+Gemini earns its relay on breadth: it reads many files cheaply, so it takes repo-wide
+surveys, independent review, and UI verification. It also writes, but only inside an
+explicit fence. Four facts the routing table does not carry:
 
 - `--auto-approve` and `--allow-tools` are mutually exclusive; combining them exits 2.
 - `--allow-dir` is resolved relative to `--target-dir`, not the repo root, and must be a
-  proper subdirectory of it; `.` is rejected.
+  proper subdirectory of it; `.` is rejected. A repo-root file therefore has no fence:
+  setting `--target-dir` to the parent only works when that parent is small, because the
+  wrapper snapshots the whole target.
+- A write into a control path (`tools/`, `.kilo/hooks/`, `.github/scripts/`, `AGENTS.md`)
+  is refused with exit 3 unless `--allow-control-paths` is passed. Pass it only when the
+  task is maintaining this harness.
 - Tier matters more than model family: `gemini-3.8-flash-low` finished a 100-line module
   in 99s and passed, while `gemini-3.8-flash-medium` timed out at 200s and 280s on the
   same task, so medium is not a safe default for implementation work.

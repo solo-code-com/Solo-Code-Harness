@@ -96,13 +96,23 @@ under `permission.task` (they are `mode: subagent`). `solo-code-engineer` is a
 **primary** agent — a peer session, not a subagent — so it is reached through the
 **OpenCode CLI** wrapper above, never through `subagent`.
 
+**Picking between the three small-edit routes.** All three can land a one-file
+change; what differs is the relay and what goes wrong:
+
+| Shape | Route | Why |
+|---|---|---|
+| One precise edit, result wanted immediately | `model_api.py` | 22s measured, and the diff lands in this session to apply and verify |
+| A batch of mechanical edits in one directory | `agy`, `--model gemini-3.8-flash-low` | 61.2s for five files measured; free tokens; the wrapper enforces the fence |
+| One tiny edit, or the OpenCode lane is unhealthy | `kilo_cli_delegate.py` | No relay cost, and it is the measured fallback when OpenCode fails |
+
+Never send a one-line edit to `gemini-3.8-flash-medium`: the relay costs more
+than the edit.
+
 ## Channel budget
 
 OpenCode is the primary surface: `default_agent` is `jev`, and a routing decision is recorded by
 `tools/router.py --dry-run` when it is invoked. DeepSeek via the OpenCode CLI writes code; Gemini via agy reads, surveys and
-reviews, because its tokens are free. Claude Code is a reviewer on request, not an orchestrator: one or two
-turns per batch, only when a diff touches auth or secrets, or when its verdict disagrees with a measured
-number. Its plan quota is finite and it dies mid-batch when exhausted.
+reviews, because its tokens are free. Gemini runs on a finite plan quota and dies mid-batch when it is exhausted, so never start an unattended batch that will cross a quota boundary.
 
 ## Delegation Protocol
 

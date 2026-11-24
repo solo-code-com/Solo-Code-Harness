@@ -170,16 +170,18 @@ Persistent memory at `.gemini/antigravity/knowledge/`. The AI reads Knowledge It
 
 ---
 
-## Antigravity as Orchestrator (Delegating to OpenCode & Codex)
+## Delegating from Antigravity
 
-When acting as the orchestrator, Antigravity plans, decomposes tasks, and delegates execution units to headless workers:
+Jev, running in OpenCode, is the orchestrator of this harness. Antigravity is one of
+its workers, not a peer orchestrator. When a task handed to Antigravity is itself too
+broad for one pass, split it and hand the parts to the headless lanes below:
 
-- **OpenCode CLI / DeepSeek V4.1 Flash** (Primary Narrow Executor):
-  - Free tier: `python3 tools/opencode_delegate.py "<task brief>" --model opencode/deepseek-v4.1-flash-free`
-  - Command Code API: `python3 tools/opencode_delegate.py "<task brief>" --model commandcode/deepseek/deepseek-v4.1-flash-fast`
-  - Direct API / one-shot: `python3 tools/model_api.py "<task brief>" --model commandcode/deepseek/deepseek-v4.1-flash`
-- **Codex CLI** (Independent Verification & Logic Review):
-  - `python3 tools/the Codex delegate (removed 2026-11-23) "<task brief>" --model gpt-6.2-sol --effort medium`
+- **OpenCode CLI / DeepSeek V4.1 Flash** (primary implementer):
+  - Free tier: `python tools/opencode_delegate.py '<task brief>' --model opencode/deepseek-v4.1-flash-free`
+  - Command Code API: `python tools/opencode_delegate.py '<task brief>' --model commandcode/deepseek/deepseek-v4.1-flash-fast`
+  - Direct API / one-shot: `python tools/model_api.py '<task brief>' --model commandcode/deepseek/deepseek-v4.1-flash`
+- **Kilo CLI** (implementer when the OpenCode lane hangs or errors):
+  - `python tools/kilo_cli_delegate.py '<task brief>' --model opencode-go/deepseek/deepseek-v4.1-flash`, after `python tools/kilo_server_manager.py ensure`
 - **Verification Rule**: Never trust a worker's self-assessment. Inspect `git diff`, re-run checks, and run quality gates (`garden.py`, `check_stdlib_only.py`, `security_scan.py`).
 
 ---
