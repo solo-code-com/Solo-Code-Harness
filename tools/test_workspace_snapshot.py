@@ -145,3 +145,81 @@ def test_snapshot_records_junction_as_link_marker_without_descending(tmp_path):
     assert "ext" in snap
     assert snap["ext"].startswith("link:")
     assert not any(key.startswith("ext/") for key in snap)
+
+
+def test_is_snapshot_ignored_rejects_an_empty_relative_path():
+    """A path with no parts is the root itself, which is never generated noise."""
+    assert workspace_snapshot.is_snapshot_ignored(Path()) is False
+
+
+def test_is_reparse_point_detects_a_symlink(tmp_path, monkeypatch):
+    entry = tmp_path / "entry.txt"
+    entry.write_text("x", encoding="utf-8")
+
+    monkeypatch.setattr(Path, "is_symlink", lambda self: self == entry)
+
+    assert workspace_snapshot.is_reparse_point(entry) is True
+
+
+def test_read_reparse_target_falls_back_when_unreadable(tmp_path, monkeypatch):
+    entry = tmp_path / "entry.txt"
+    entry.write_text("x", encoding="utf-8")
+
+    def _raise_oserror(*args, **kwargs):
+        raise OSError("unreadable link")
+
+    monkeypatch.setattr(workspace_snapshot.os, "readlink", _raise_oserror)
+
+    assert workspace_snapshot.read_reparse_target(entry) == "<reparse>"
+
+
+def test_snapshot_skips_an_ignored_file(tmp_path):
+    ws = tmp_path / "ws"
+    (ws / "sub").mkdir(parents=True)
+    (ws / "sub" / "node_modules").write_text("not a dir", encoding="utf-8")
+    (ws / "sub" / "a.txt").write_text("a", encoding="utf-8")
+
+    snap = workspace_snapshot.snapshot_workspace(ws)
+
+    assert not any("node_modules" in key for key in snap)
+    assert "sub/a.txt" in snap
+
+
+def test_snapshot_marks_a_file_reparse_point(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    (ws / "sub").mkdir(parents=True)
+    (ws / "sub" / "link.txt").write_text("x", encoding="utf-8")
+
+    real_is_reparse_point = workspace_snapshot.is_reparse_point
+
+    def _is_reparse_point(path):
+        if path.name == "link.txt":
+            return True
+        return real_is_reparse_point(path)
+
+    monkeypatch.setattr(workspace_snapshot, "is_reparse_point", _is_reparse_point)
+
+    snap = workspace_snapshot.snapshot_workspace(ws)
+
+    assert snap["sub/link.txt"].startswith("link:")
+
+
+def test_snapshot_skips_a_file_that_cannot_be_read(tmp_path, monkeypatch):
+    ws = tmp_path / "ws"
+    (ws / "sub").mkdir(parents=True)
+    (ws / "sub" / "a.txt").write_text("a", encoding="utf-8")
+    (ws / "sub" / "b.txt").write_text("b", encoding="utf-8")
+
+    real_read_bytes = Path.read_bytes
+
+    def _read_bytes(self):
+        if self.name == "a.txt":
+            raise OSError("unreadable")
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", _read_bytes)
+
+    snap = workspace_snapshot.snapshot_workspace(ws)
+
+    assert "sub/a.txt" not in snap
+    assert "sub/b.txt" in snap
