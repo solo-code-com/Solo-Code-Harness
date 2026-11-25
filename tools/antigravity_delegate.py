@@ -47,6 +47,11 @@ DEFAULT_MODEL = "gemini-4-hydrogen-medium"
 DEFAULT_TIMEOUT_SECONDS = 600
 DIRECTORY_LOCK_ENGINE = "gemini"
 WORKTREE_ERROR_EXIT_CODE = 7
+#: The command line is the transport, and Windows caps it at 32767 characters.
+MAX_PROMPT_CHARS = 30_000
+REPORT_DIR = Path(".solocode") / "reports"
+SPILL_CHARS = 20_000
+PREVIEW_CHARS = 2_000
 USAGE_LOG = ROOT / ".solocode" / "antigravity-usage.jsonl"
 
 EVIDENCE_BOUNDARY = """
@@ -71,6 +76,19 @@ GUARDRAIL = """STRICT OPERATING CONSTRAINTS (must follow, no exceptions):
 
 def _stderr(message: str) -> None:
     print(f"[antigravity_delegate] {message}", file=sys.stderr)
+
+
+def _emit_result(text: str, run_id: str, root: Path) -> None:
+    """Print a short answer whole, and a long one as a preview plus a file path."""
+    if len(text) <= SPILL_CHARS:
+        print(text)
+        return
+    directory = root / REPORT_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{run_id}.md"
+    path.write_text(text, encoding="utf-8")
+    print(text[:PREVIEW_CHARS])
+    print(f"[report] {len(text)} characters; full output at {path}")
 
 
 def _load_sibling(module_name: str):
@@ -613,6 +631,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if len(args.prompt) > MAX_PROMPT_CHARS:
+        _stderr(
+            f"[guard] brief is {len(args.prompt)} characters; the limit is "
+            f"{MAX_PROMPT_CHARS} because the command line accepts 32767. "
+            "Write the brief to a file and ask the worker to read it."
+        )
+        return 2
+
     if args.allow_dir and not args.auto_approve:
         parser.error("--allow-dir requires --auto-approve")
     if args.auto_approve and not args.allow_dir:
@@ -776,7 +802,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"conversation={result['conversation_id']} (resume with --conversation)"
             )
         if result.get("text"):
-            print(result["text"], end="" if result["text"].endswith("\n") else "\n")
+            _emit_result(result["text"], run_id, ROOT)
         if args.auto_approve:
             changed = changed_workspace_paths(before, snapshot_workspace(target_dir))
             outside = paths_outside_directory(changed, allowed_relative)

@@ -1283,3 +1283,51 @@ def test_allow_home_writes_lets_run_finish(monkeypatch, tmp_path):
 
     code = antigravity_delegate.main(_wrapper_argv(ws) + ["--allow-home-writes"])
     assert code == 0
+
+
+def test_overlong_brief_exits_two_without_spawning(monkeypatch, capsys):
+    called = []
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "run_agy_cli",
+        lambda **kwargs: called.append(kwargs) or ({"text": "ok", "error": None}, 0),
+    )
+
+    code = antigravity_delegate.main(
+        ["x" * (antigravity_delegate.MAX_PROMPT_CHARS + 1)]
+    )
+
+    assert code == 2
+    assert not called
+    assert "[guard] brief is" in capsys.readouterr().err
+
+
+def test_long_answer_spills_to_report_file(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    monkeypatch.setattr(antigravity_delegate, "ROOT", tmp_path)
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    long_text = "A" * (antigravity_delegate.SPILL_CHARS + 500)
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "run_agy_cli",
+        lambda **kwargs: ({"text": long_text, "error": None}, 0),
+    )
+
+    code = antigravity_delegate.main(
+        ["task", "--target-dir", str(ws), "--no-snapshot-writes"]
+    )
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert len(out) < 3000
+    assert "[report]" in out
+    reports = list((tmp_path / ".solocode" / "reports").glob("*.md"))
+    assert len(reports) == 1
+    assert reports[0].read_text(encoding="utf-8") == long_text

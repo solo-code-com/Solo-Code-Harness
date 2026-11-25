@@ -77,6 +77,11 @@ DEFAULT_MODEL = "opencode-go/beam-free"
 #: file and referenced by a short pointer (see `run_kilo_cli`). The bound comes from the
 #: measurements: 1650 characters inline was fine, 3642 hung or killed the CLI.
 INLINE_PROMPT_LIMIT = 2000
+#: The command line is the transport, and Windows caps it at 32767 characters.
+MAX_PROMPT_CHARS = 30_000
+REPORT_DIR = Path(".solocode") / "reports"
+SPILL_CHARS = 20_000
+PREVIEW_CHARS = 2_000
 
 USAGE_LOG = Path(".solocode/kilo-usage.jsonl")
 USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -118,6 +123,19 @@ Your permission scope was frozen when this task was created and cannot be expand
 def _stderr(msg: str) -> None:
     """Print to stderr with [kilo_cli_delegate] prefix."""
     print(f"[kilo_cli_delegate] {msg}", file=sys.stderr)
+
+
+def _emit_result(text: str, run_id: str, root: Path) -> None:
+    """Print a short answer whole, and a long one as a preview plus a file path."""
+    if len(text) <= SPILL_CHARS:
+        print(text)
+        return
+    directory = root / REPORT_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{run_id}.md"
+    path.write_text(text, encoding="utf-8")
+    print(text[:PREVIEW_CHARS])
+    print(f"[report] {len(text)} characters; full output at {path}")
 
 
 def _load_sibling(module_name: str):
@@ -653,6 +671,15 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
+    if len(args.prompt) > MAX_PROMPT_CHARS:
+        print(
+            f"[guard] brief is {len(args.prompt)} characters; the limit is "
+            f"{MAX_PROMPT_CHARS} because the command line accepts 32767. "
+            "Write the brief to a file and ask the worker to read it.",
+            file=sys.stderr,
+        )
+        return 2
+
     worktree_created = None
     if args.worktree:
         start = Path(args.directory).resolve()
@@ -848,7 +875,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # Print the concatenated text response
-    print(result["text"])
+    _emit_result(result["text"], run_id, ROOT)
 
     _stderr(f"session={result.get('session_id')}  elapsed={elapsed:.1f}s")
     if result.get("tokens"):

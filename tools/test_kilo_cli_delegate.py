@@ -1332,3 +1332,48 @@ def test_allow_home_writes_lets_run_finish(monkeypatch, tmp_path):
         ]
     )
     assert code == 0
+
+
+def test_overlong_brief_exits_two_without_spawning(monkeypatch, capsys):
+    called = []
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **kwargs: called.append(kwargs) or _ok_result(),
+    )
+
+    code = kilo_cli_delegate.main(["x" * (kilo_cli_delegate.MAX_PROMPT_CHARS + 1)])
+
+    assert code == 2
+    assert not called
+    assert "[guard] brief is" in capsys.readouterr().err
+
+
+def test_long_answer_spills_to_report_file(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(kilo_cli_delegate, "ROOT", tmp_path)
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+
+    long_text = "A" * (kilo_cli_delegate.SPILL_CHARS + 500)
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **_kw: {**_ok_result(), "text": long_text},
+    )
+
+    code = kilo_cli_delegate.main(
+        ["do task", "--no-guardrail", "--directory", str(ws / "src")]
+    )
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert len(out) < 3000
+    assert "[report]" in out
+    reports = list((tmp_path / ".solocode" / "reports").glob("*.md"))
+    assert len(reports) == 1
+    assert reports[0].read_text(encoding="utf-8") == long_text
