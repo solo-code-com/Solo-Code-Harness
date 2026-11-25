@@ -2,7 +2,7 @@
 """Diagnose the Antigravity (``agy.exe``) headless worker integration.
 
 Read-only by default: reports whether the binary is discoverable and which
-models it offers, and flags whether the expected ``gemini-3.8-flash-*`` ids are
+models it offers, and flags whether the expected model ids are
 present. Pass ``--live`` to also run one tiny read-only delegation, which costs
 account quota.
 
@@ -34,6 +34,13 @@ EXPECTED_MODELS = (
     "gemini-3.8-flash-low",
     "gemini-3.8-flash-medium",
     "gemini-3.8-flash-high",
+    # Measured 2026-11-25: agy also serves a second family with four tiers,
+    # including xhigh. Kept here so a catalogue change is reported by this probe
+    # instead of surfacing as a failing run.
+    "gemini-4-hydrogen-low",
+    "gemini-4-hydrogen-medium",
+    "gemini-4-hydrogen-high",
+    "gemini-4-hydrogen-xhigh",
 )
 
 
@@ -112,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"[antigravity_probe] MISSING expected models: {', '.join(report['missing_models'])}"
             )
         else:
-            print("[antigravity_probe] all expected gemini-3.8-flash ids present")
+            print("[antigravity_probe] all expected model ids present")
 
     # Surface the read-only prompt policy so the caller knows what a run implies.
     prompt = build_prompt("noop", allow_dir=None, auto_approve=False, guardrail=True)

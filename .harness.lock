@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-24T17:07:23Z"
+generated_at = "2026-11-25T02:02:14Z"
 mode = "root"
-content_fingerprint = "sha256:99c138d569af4f69819686a9d39a963823671cab8842a0b57d9a7c713e08af23"
+content_fingerprint = "sha256:11db8086acc9c20b01351461455ca71ae384aadbacb0208d7502db5e63c8e0ff"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -25,11 +25,10 @@ content_fingerprint = "sha256:99c138d569af4f69819686a9d39a963823671cab8842a0b57d
 #                split across root `opencode.json` (v1-safe: model + legacy
 #                `permission`) and `.opencode/opencode.json` (v2-only
 #                `providers`) so the host IDE's bundled OpenCode v1 stays clean.
-# .copilot/   -> NOT auto-generated. Manually kept in parity with .kilo/
-#                (source of truth); verified by tools/garden.py drift checks.
-# codex       -> direct CLI integration via codex-env.ps1 and tools/codex_*.py.
-#                Codex has no project lifecycle hooks, so lifecycle and gates
-#                run through the launcher/explicit verification entrypoints.
+# .copilot/   -> RETIRED 2026-11-24. No longer generated; a stale copy in a
+#                target is removed by the retired-directory cleanup.
+# codex       -> RETIRED 2026-11-24. Launcher and tools/codex_*.py are gone; a
+#                stale target is cleaned by the retired-file lists.
 # jcode       -> RETIRED in v4.1.0. Launcher jcode.ps1 removed; no dedicated
 #                harness dir. Older deploys are cleaned via the
 #                RETIRED_ROOT_FILES entry in tools/deploy.py.

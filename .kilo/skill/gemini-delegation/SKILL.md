@@ -170,6 +170,14 @@ larger budget, not a lower tier: 600s for generation-only runs, 900s for runs th
 commands. If a medium run still times out, raise the timeout before falling back to low, and
 record the fallback in the brief. One more measurement points the same way: in this repo on 2026-11-24, three low-tier runs reported `thinking_tokens` 0, while a medium-tier run reported 6039.
 
+**Catalogue, measured 2026-11-25** with `agy models` (10 ids at the time):
+`gemini-4-hydrogen-{low,medium,high,xhigh}`, `gemini-3.8-flash-{low,medium,high}`,
+`claude-sonnet-4-6`, `claude-opus-4-6-thinking`, `gpt-oss-120b-medium`. The fleet
+now serves a second Gemini family and non-Gemini models, so a tier name alone no
+longer identifies a model. Hydrogen has not been measured here: the floor-and-high
+policy above still names `gemini-3.8-flash-*` until a run shows Hydrogen wins on a
+task this harness actually delegates.
+
 ### Authentication, quota, and account rotation
 
 Per the [Antigravity CLI auth docs](https://antigravity.google/docs/cli/install/),

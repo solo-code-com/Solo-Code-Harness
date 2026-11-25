@@ -416,11 +416,10 @@ HARNESS_ENGINE_STATUS = """\
 #                split across root `opencode.json` (v1-safe: model + legacy
 #                `permission`) and `.opencode/opencode.json` (v2-only
 #                `providers`) so the host IDE's bundled OpenCode v1 stays clean.
-# .copilot/   -> NOT auto-generated. Manually kept in parity with .kilo/
-#                (source of truth); verified by tools/garden.py drift checks.
-# codex       -> direct CLI integration via codex-env.ps1 and tools/codex_*.py.
-#                Codex has no project lifecycle hooks, so lifecycle and gates
-#                run through the launcher/explicit verification entrypoints.
+# .copilot/   -> RETIRED 2026-11-24. No longer generated; a stale copy in a
+#                target is removed by the retired-directory cleanup.
+# codex       -> RETIRED 2026-11-24. Launcher and tools/codex_*.py are gone; a
+#                stale target is cleaned by the retired-file lists.
 # jcode       -> RETIRED in v4.1.0. Launcher jcode.ps1 removed; no dedicated
 #                harness dir. Older deploys are cleaned via the
 #                RETIRED_ROOT_FILES entry in tools/deploy.py.
