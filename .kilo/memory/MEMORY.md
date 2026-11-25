@@ -34,6 +34,10 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 - Import tools as `tools.<name>`; a bare import elsewhere creates a second module object.
 
 ## Decisions
+- 2026-11-25: Working split: Gemini analyses the problem and writes the code by default;
+  DeepSeek takes the hard code and the adversarial review. A review covers features
+  (reachable, wired, tested, documented) as well as code. SQLite stays: it is the only
+  engine that supports concurrent writers for the lock table, and the index is 370 rows.
 - 2026-11-25: Hydrogen only (`medium` floor, `high` for accuracy); 3.8-flash retired, no downgrade. Kilo arm model is `opencode-go/deepseek-v4.1-flash`.
 - 2026-11-25: Cascade opencode-go -> commandcode -> kilo, 1800s budget, never on a changed tree or a policy refusal.
 - 2026-11-25: `--worktree` on all wrappers (exit 7 if dirty); byte-exact restore; protected-state fingerprint; credential-path brief filter; retention archives `.solocode` and never touches receipts.
