@@ -18,7 +18,6 @@
       "tools/check_model_catalog.py": 22.52,
       "tools/check_stdlib_only.py": 93.44,
       "tools/check_text_hygiene.py": 81.97,
-      "tools/claude_guard_compat.py": 90.0,
       "tools/compaction.py": 79.55,
       "tools/coverage_gate.py": 64.86,
       "tools/deploy.py": 61.38,

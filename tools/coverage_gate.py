@@ -523,6 +523,30 @@ def check_test_counts(
     return len(violations) == 0, violations
 
 
+def check_budget_paths(
+    platforms: dict[str, dict[str, float]],
+    root: Path = ROOT,
+) -> tuple[bool, list[str]]:
+    """Verify every budgeted path in every platform section exists on disk.
+
+    A deleted file leaves a stale key that coverage comparison silently skips
+    when no measurement arrives for it. Checking every platform section before
+    running coverage catches residue from any platform immediately.
+
+    Returns:
+        (passed, violations) where violations lists missing budgeted paths.
+    """
+    violations: list[str] = []
+    for platform in sorted(platforms):
+        for path in sorted(platforms[platform]):
+            if not (root / path).exists():
+                violations.append(
+                    f"  {platform}: {path} does not exist on disk - "
+                    "remove the key or restore the file"
+                )
+    return len(violations) == 0, violations
+
+
 BASELINE_CHUNK_SIZE = 3000
 """Characters per emitted baseline chunk.
 
@@ -750,6 +774,15 @@ def main() -> int:
         print(
             f"[FAIL] the baseline for {sys.platform} is empty - "
             "run --update on this platform"
+        )
+        return 1
+
+    paths_ok, stale_violations = check_budget_paths(platforms, ROOT)
+    if not paths_ok:
+        for violation in stale_violations:
+            print(violation)
+        print(
+            f"[FAIL] {len(stale_violations)} stale budget key(s) reference missing files."
         )
         return 1
 

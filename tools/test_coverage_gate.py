@@ -944,3 +944,131 @@ def test_test_file_floor_does_not_touch_exempt_files():
 
     assert passed is True
     assert violations == []
+
+
+def test_check_budget_paths_reports_single_missing_path(tmp_path):
+    """A budget naming one nonexistent path reports exactly that path."""
+    existing = tmp_path / "tools" / "present.py"
+    existing.parent.mkdir(parents=True)
+    existing.write_text("x = 1\n", encoding="utf-8")
+
+    budget = {
+        sys.platform: {
+            "tools/present.py": 90.0,
+            "tools/missing.py": 85.0,
+        }
+    }
+
+    passed, violations = coverage_gate.check_budget_paths(budget, tmp_path)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "tools/missing.py" in violations[0]
+    assert "tools/present.py" not in violations[0]
+    assert "remove the key or restore the file" in violations[0]
+
+
+def test_check_budget_paths_passes_when_all_paths_exist(tmp_path):
+    """A budget whose paths all exist on disk reports no violations."""
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "alpha.py").write_text("a = 1\n", encoding="utf-8")
+    (tmp_path / "tools" / "beta.py").write_text("b = 2\n", encoding="utf-8")
+
+    budget = {
+        "linux": {"tools/alpha.py": 80.0},
+        "win32": {"tools/alpha.py": 85.0, "tools/beta.py": 90.0},
+    }
+
+    passed, violations = coverage_gate.check_budget_paths(budget, tmp_path)
+
+    assert passed is True
+    assert violations == []
+
+
+def test_check_budget_paths_reports_linux_stale_key_on_win32(tmp_path, monkeypatch):
+    """A stale key in linux is reported on win32: existence is repo-wide."""
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "real.py").write_text("x = 1\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "platform", "win32")
+
+    budget = {
+        "win32": {"tools/real.py": 90.0},
+        "linux": {"tools/real.py": 88.0, "tools/claude_guard_compat.py": 90.0},
+    }
+
+    passed, violations = coverage_gate.check_budget_paths(budget, tmp_path)
+
+    assert passed is False
+    assert len(violations) == 1
+    assert "linux" in violations[0]
+    assert "tools/claude_guard_compat.py" in violations[0]
+
+
+def test_main_fails_before_coverage_when_budget_has_stale_key(
+    tmp_path, monkeypatch, capsys
+):
+    """Enforce mode prints stale keys + summary and exits 1 without running coverage."""
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "test_gate.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "tools" / "real.py").write_text("y = 2\n", encoding="utf-8")
+    bfile = tmp_path / "budget.json"
+    bfile.write_text(
+        json.dumps(
+            {
+                "platforms": {
+                    "win32": {"tools/real.py": 90.0},
+                    "linux": {"tools/gone.py": 75.0},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    real_load = coverage_gate.load_budget
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(coverage_gate, "ROOT", tmp_path)
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(
+        coverage_gate,
+        "run_coverage",
+        lambda: pytest.fail("stale budget keys must fail before running coverage"),
+    )
+    monkeypatch.setattr(sys, "argv", ["coverage_gate.py"])
+
+    assert coverage_gate.main() == 1
+
+    out = capsys.readouterr().out
+    assert "tools/gone.py" in out
+    assert "remove the key or restore the file" in out
+    assert "[FAIL] 1 stale budget key(s)" in out
+
+
+def test_capture_and_force_capture_ignore_stale_keys_in_other_sections(
+    tmp_path, monkeypatch, capsys
+):
+    """--capture and --force-capture do not fail on stale keys when emitting baselines."""
+    bfile = tmp_path / "budget.json"
+    other = "linux" if sys.platform != "linux" else "win32"
+    bfile.write_text(
+        json.dumps(
+            {
+                "platforms": {other: {"tools/nonexistent_other.py": 90.0}},
+                "test_counts": {sys.platform: {"tools/test_a.py": 1}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    real_load = coverage_gate.load_budget
+    real_counts = coverage_gate.load_test_counts
+
+    monkeypatch.setattr(coverage_gate, "ROOT", tmp_path)
+    monkeypatch.setattr(coverage_gate, "load_budget", lambda *a, **k: real_load(bfile))
+    monkeypatch.setattr(
+        coverage_gate, "load_test_counts", lambda *a, **k: real_counts(bfile)
+    )
+    monkeypatch.setattr(coverage_gate, "run_coverage", lambda: {"tools/a.py": 70.0})
+
+    for flag in ("--capture", "--force-capture"):
+        monkeypatch.setattr(sys, "argv", ["coverage_gate.py", flag])
+        assert coverage_gate.main() == 0
+        assert f"COVERAGE_BASELINE {sys.platform}" in capsys.readouterr().out
