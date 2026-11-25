@@ -29,6 +29,7 @@ TOOLS = Path(__file__).resolve().parent
 for _entry in (str(ROOT), str(TOOLS)):
     sys.path.insert(0, _entry)
 
+import post_run_checks  # noqa: E402
 import session_registry  # noqa: E402
 import worktree  # noqa: E402
 
@@ -300,6 +301,7 @@ def _reach_the_runner(monkeypatch):
     monkeypatch.setattr(kilo_cli_delegate, "find_kilo_binary", lambda: "kilo")
     monkeypatch.setattr(kilo_cli_delegate, "log_usage", lambda *_a, **_k: None)
     monkeypatch.setattr(kilo_cli_delegate, "log_start", lambda *_a, **_k: None)
+    monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
 
 
 def test_main_reports_a_dead_server_instead_of_an_exit_code(monkeypatch, capsys):
@@ -318,6 +320,7 @@ def test_main_reports_a_dead_server_instead_of_an_exit_code(monkeypatch, capsys)
 
 def test_main_ensure_server_starts_it_then_reaches_the_runner(monkeypatch, capsys):
     _reach_the_runner(monkeypatch)
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
     probes = iter([False, True])
     monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: next(probes))
 
@@ -406,6 +409,7 @@ def test_server_port_is_none_when_the_url_names_no_valid_port():
 
 def test_ensure_server_passes_a_custom_port_to_the_manager(monkeypatch, capsys):
     _reach_the_runner(monkeypatch)
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
     probes = iter([False, True])
     monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: next(probes))
 
@@ -458,6 +462,8 @@ def test_one_invocation_writes_a_start_then_finish_row(monkeypatch, tmp_path):
     monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
     monkeypatch.setattr(kilo_cli_delegate, "_load_project_env", lambda: None)
     monkeypatch.setattr(kilo_cli_delegate, "find_kilo_binary", lambda: "kilo")
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+    monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
     monkeypatch.setattr(
         kilo_cli_delegate,
         "run_kilo_cli",
@@ -489,6 +495,8 @@ def test_start_row_exists_before_the_worker_is_spawned(monkeypatch, tmp_path):
     monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
     monkeypatch.setattr(kilo_cli_delegate, "_load_project_env", lambda: None)
     monkeypatch.setattr(kilo_cli_delegate, "find_kilo_binary", lambda: "kilo")
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+    monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
 
     seen_at_spawn = {}
 
@@ -516,6 +524,8 @@ def test_unwritable_usage_log_does_not_break_the_run(monkeypatch, tmp_path):
     monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
     monkeypatch.setattr(kilo_cli_delegate, "_load_project_env", lambda: None)
     monkeypatch.setattr(kilo_cli_delegate, "find_kilo_binary", lambda: "kilo")
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+    monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
     monkeypatch.setattr(
         kilo_cli_delegate,
         "run_kilo_cli",
@@ -1044,3 +1054,153 @@ def test_worktree_swaps_the_directory(monkeypatch, tmp_path):
     handed = Path(seen_dir[0]).resolve()
     assert handed == wt_path.resolve()
     assert handed.is_relative_to(wt_path.resolve())
+
+
+# ── pre-flight and post-run gates ────────────────────────────────────────────
+
+
+def test_blocked_prompt_refused_before_spawn(monkeypatch, tmp_path, capsys):
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    popen_called: list[object] = []
+    monkeypatch.setattr(
+        kilo_cli_delegate.subprocess,
+        "Popen",
+        lambda *a, **k: popen_called.append(a),
+    )
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **kw: run_called.append(kw) or _ok_result(),
+    )
+
+    prompt = "please run " + "rm" + " -rf /"
+    code = kilo_cli_delegate.main(
+        [prompt, "--no-guardrail", "--directory", str(tmp_path)]
+    )
+
+    assert code == 2
+    assert len(popen_called) == 0
+    assert len(run_called) == 0
+    assert "[control-path] refused:" in capsys.readouterr().err
+
+
+def test_tier_gate_refusal_blocks_before_spawn(monkeypatch, tmp_path, capsys):
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate,
+        "refusal_for_project",
+        lambda _dir: "tier=client refuses banned provider",
+    )
+    popen_called: list[object] = []
+    monkeypatch.setattr(
+        kilo_cli_delegate.subprocess,
+        "Popen",
+        lambda *a, **k: popen_called.append(a),
+    )
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **kw: run_called.append(kw) or _ok_result(),
+    )
+
+    code = kilo_cli_delegate.main(
+        ["hello", "--no-guardrail", "--directory", str(tmp_path)]
+    )
+
+    assert code == 2
+    assert len(popen_called) == 0
+    assert len(run_called) == 0
+    assert "[tier] refused:" in capsys.readouterr().err
+
+
+def test_control_path_violation_returns_three(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(kilo_cli_delegate, "ROOT", ws)
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+    monkeypatch.setattr(kilo_cli_delegate, "run_kilo_cli", lambda **_kw: _ok_result())
+    monkeypatch.setattr(
+        kilo_cli_delegate.control_paths,
+        "new_violations",
+        lambda *_a, **_k: ["tools/guard_rules.py"],
+    )
+
+    code = kilo_cli_delegate.main(
+        ["hello", "--no-guardrail", "--directory", str(ws / "src")]
+    )
+
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "[control-path] worker changed harness control paths:" in err
+    assert "tools/guard_rules.py" in err
+
+
+def test_protected_state_violation_returns_three(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(kilo_cli_delegate, "ROOT", ws)
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+    monkeypatch.setattr(kilo_cli_delegate, "run_kilo_cli", lambda **_kw: _ok_result())
+
+    calls = [0]
+
+    def changing_fingerprint(_root):
+        calls[0] += 1
+        if calls[0] == 1:
+            return {".solocode/reviews": "<empty>"}
+        return {
+            ".solocode/reviews": "<empty>",
+            ".solocode/reviews/forged.json": "hash",
+        }
+
+    monkeypatch.setattr(
+        kilo_cli_delegate.protected_state, "fingerprint", changing_fingerprint
+    )
+
+    code = kilo_cli_delegate.main(
+        ["hello", "--no-guardrail", "--directory", str(ws / "src")]
+    )
+
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "[control-path] worker changed protected state:" in err
+    assert ".solocode/reviews/forged.json" in err
+
+
+def test_ignored_write_blocks_the_run(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(kilo_cli_delegate, "ROOT", ws)
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+    monkeypatch.setattr(kilo_cli_delegate, "run_kilo_cli", lambda **_kw: _ok_result())
+    monkeypatch.setattr(
+        kilo_cli_delegate.protected_state,
+        "recent_ignored_writes",
+        lambda _root, _since: ["node_modules/pkg/index.js"],
+    )
+
+    code = kilo_cli_delegate.main(
+        ["hello", "--no-guardrail", "--directory", str(ws / "src")]
+    )
+
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "[ignored-writes] the run wrote into a generated tree:" in err
+    assert "node_modules/pkg/index.js" in err

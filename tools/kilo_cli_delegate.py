@@ -56,9 +56,19 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 try:
+    import control_paths
+    import guard_rules
+    import protected_state
+    import tier_gate
     import worktree
 except ImportError:  # pragma: no cover - script-dir import path
-    from tools import worktree  # noqa: E402
+    from tools import (  # noqa: E402
+        control_paths,
+        guard_rules,
+        protected_state,
+        tier_gate,
+        worktree,
+    )
 
 DEFAULT_SERVER = "http://127.0.0.1:14096"
 DEFAULT_MODEL = "opencode-go/beam-free"
@@ -200,6 +210,21 @@ def _snapshot(root: Path) -> dict[str, str] | None:
         return _load_sibling("workspace_snapshot").snapshot_workspace(root)
     except OSError:
         return None
+
+
+def _git_porcelain(directory: str) -> str | None:
+    """git status for a directory, or None when git could not answer."""
+    try:
+        proc = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "-C", directory, "status", "--porcelain"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError, TypeError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
 
 
 def _report_scope(
@@ -605,6 +630,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="proceed even though uncommitted changes will not be in the worktree",
     )
+    parser.add_argument(
+        "--allow-control-paths",
+        action="store_true",
+        help="allow the worker to edit harness control paths (maintenance only)",
+    )
+    parser.add_argument(
+        "--allow-ignored-writes",
+        action="store_true",
+        help="permit writes into node_modules, build, dist, .venv, venv or target",
+    )
 
     args = parser.parse_args(argv)
 
@@ -642,6 +677,26 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"[worktree] path={worktree_created.path}", file=sys.stderr)
         print(f"[worktree] branch={worktree_created.branch}", file=sys.stderr)
+
+    tier_reason = tier_gate.refusal_for_project(args.directory)
+    if tier_reason:
+        print(f"[tier] refused: {tier_reason}", file=sys.stderr)
+        return 2
+    blocked = guard_rules.match_prompt(args.prompt)
+    if blocked:
+        print(
+            f"[control-path] refused: prompt names a blocked command ({blocked})",
+            file=sys.stderr,
+        )
+        return 2
+    before_porcelain = _git_porcelain(args.directory)
+    before_state = None
+    if not args.allow_control_paths:
+        try:
+            before_state = protected_state.fingerprint(ROOT)
+        except Exception:  # noqa: BLE001 - absence is reported after the run
+            before_state = None
+    run_started = time.time()
 
     # ── Server precondition ──
     # Checked before anything is spawned: a dead server is cheaper to report than
@@ -708,6 +763,47 @@ def main(argv: list[str] | None = None) -> int:
 
     log_usage(args.model, len(prompt), elapsed, result, run_id)
     _report_scope(before, args.directory, result)
+
+    if not args.allow_control_paths:
+        violations = control_paths.new_violations(
+            before_porcelain or "", _git_porcelain(args.directory) or ""
+        )
+        if violations:
+            _stderr(
+                "[control-path] worker changed harness control paths: "
+                + ", ".join(violations)
+            )
+            return 3
+        if before_state is None:
+            _stderr(
+                "[control-path] could not fingerprint protected state before the run"
+            )
+            return 3
+        state_violations = protected_state.new_violations(
+            before_state, protected_state.fingerprint(ROOT)
+        )
+        if state_violations:
+            _stderr(
+                "[control-path] worker changed protected state: "
+                + ", ".join(state_violations)
+            )
+            return 3
+    ignored_writes = protected_state.recent_ignored_writes(ROOT, run_started - 2)
+    if ignored_writes:
+        if not args.allow_ignored_writes:
+            _stderr(
+                "[ignored-writes] the run wrote into a generated tree: "
+                + ", ".join(ignored_writes[:10])
+            )
+            return 3
+        _stderr("[ignored-writes] allowed: " + ", ".join(ignored_writes[:10]))
+    try:
+        import post_run_checks
+    except ImportError:  # pragma: no cover - script-dir import path
+        from tools import post_run_checks  # type: ignore[no-redef]
+    if post_run_checks.main(["--directory", args.directory, "--strict"]) == 3:
+        _stderr("[post-run] blocking finding; see the lines above")
+        return 3
 
     # ── Output ──
     if result.get("error"):
