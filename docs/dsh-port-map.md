@@ -27,8 +27,8 @@ Bốn trạng thái:
 
 | Group | Bản port trong Solo-Code | Độ trung thực |
 |---|---|---|
-| `core` | `tools/agent_scope.py` (scope), `tools/session_persistence.py` (session), guard hooks | **Rút gọn** — scope thiếu parent-chain, event routing, runtime invariant |
-| `session` | `tools/session_persistence.py`, `tools/session_analytics.py` | Rút gọn — SQLite cơ bản, không projection/title/telemetry |
+| `core` | `tools/agent_scope.py` (scope), `tools/session_registry.py` (session), guard hooks | **Rút gọn** — scope thiếu parent-chain, event routing, runtime invariant |
+| `session` | `tools/session_registry.py` | Rút gọn — SQLite cơ bản, không projection/title/telemetry |
 | `guard` | `.claude/hooks/guard.py`, `.kilo/hooks/pre-tool-use/*` | Đầy đủ cho nhu cầu hiện tại |
 | `hooks` | `.claude/hooks/`, `.kilo/hooks/` | Đầy đủ (Claude Code/Kilo bridges) |
 
@@ -36,8 +36,8 @@ Bốn trạng thái:
 
 | Group | Lộ trình | Lý do |
 |---|---|---|
-| `subagent` | A2 — `tools/subagent_seam.py` (interface, chưa refactor) | Gap lớn nhất: Solo-Code delegate qua CLI ngoài, chưa có registry in-process |
-| `compaction` | A3 — `tools/compaction.py` + `tools/compaction_pruner.py` | Solo-Code chỉ có checkpoint hook thụ động, chưa có prune |
+| `subagent` | A2 — runtime subagent (interface, chưa refactor) | Gap lớn nhất: Solo-Code delegate qua CLI ngoài, chưa có registry in-process |
+| `compaction` | A3 — `tools/compaction.py` | Solo-Code chỉ có checkpoint hook thụ động, chưa có prune |
 | `skill` | Chưa xếp lịch | Solo-Code có `.kilo/skill/` nhưng cơ chế khác (file tĩnh vs registry+provider) |
 | `shell` | Chưa xếp lịch | Solo-Code gọi `subprocess.run` trực tiếp, chưa có capability seam cho bash |
 | `subprocess` | Chưa xếp lịch | Tương tự `shell` — subprocess capability + process-tree provider |
@@ -126,4 +126,4 @@ Rationale giá trị cao, không port code:
 
 - 49/49 package có trạng thái (4 đã port, 5 đáng port, 8 đọc để học, 32 bỏ qua).
 - 8 bài học có link nguồn cụ thể (4 postmortem + 4 architecture notes).
-- Lộ trình tiếp: **A2** (`tools/subagent_seam.py` — interface, tách `evidence`/`summary`) → **A3** (`tools/compaction.py` + `tools/compaction_pruner.py`).
+- Lộ trình tiếp: **A2** (runtime subagent — interface, tách `evidence`/`summary`) → **A3** (`tools/compaction.py`).

@@ -264,7 +264,7 @@ These patterns are particularly relevant to:
    - Async state is not synchronous state
    - Event-driven completion tracking
 
-4. **Cleanup Paths** (`tools/snapshot_testing.py`, test fixtures)
+4. **Cleanup Paths** (test fixtures)
    - Symlink-aware deletion
    - Private temp directories
 

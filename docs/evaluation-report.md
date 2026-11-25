@@ -20,7 +20,6 @@ Nền tảng 4 tuần **được giao thực sự và phần lớn hoạt độn
 | Test suite `tools/` | `python -m pytest tools/ -q` | **384 passed, 3 skipped** |
 | Guard tests | `pytest test_guard.py test_claude_guard.py test_claude_hooks.py` | **116 passed** |
 | Security scan | `python .github/scripts/security_scan.py .` | 569 file, **0 issue** |
-| Snapshot self-test | `python tools/snapshot_testing.py --self-test` | pass |
 | E2E self-test | `python tools/test_e2e.py --self-test` | pass |
 | `agent_scope.py` self-test | `python tools/agent_scope.py --self-test` | pass |
 | 5 hooks tồn tại | `guard.py`, `security_post.py`, `pre_push.py`, `prose_quality.py`, `quality_gate.py` | đủ |
@@ -39,7 +38,6 @@ Nền tảng 4 tuần **được giao thực sự và phần lớn hoạt độn
 
 **Bằng chứng:**
 - DB thật hiện chứa **5 dòng**, trong đó có `sess-test-1` và `sess-test-2` (rác từ self-test).
-- Chạy `python tools/session_persistence.py --self-test` → `EXIT=1`, lỗi `UNIQUE constraint failed: sessions.id` vì chèn trùng id vào DB thật thay vì DB tạm.
 
 **Vị trí:**
 - `tools/session_persistence.py` dòng 59: `def init_db(path: Path = DB_PATH) -> ...`
@@ -126,7 +124,6 @@ Sai cả hai chiều — dấu hiệu số liệu ước lượng chứ không �
 
 ```powershell
 python -m pytest tools/ -q
-python tools/session_persistence.py --self-test; Write-Output "EXIT=$LASTEXITCODE"
 python -c "import sqlite3; c=sqlite3.connect('.solocode/sessions.db'); [print(r) for r in c.execute('SELECT id, branch, status FROM sessions').fetchall()]"
 python tools/coverage_gate.py .
 python tools/agent_scope.py --self-test

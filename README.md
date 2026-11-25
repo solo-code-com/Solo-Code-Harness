@@ -133,8 +133,6 @@ not, so the orchestrator re-runs the commands and the real gates before trusting
   `--dry-run` appends the decision to `.solocode/route-decisions.jsonl`; nothing is spawned.
 - The brain fallback chain lives in `tools/config/model-roles.json` as `routing_brains`; it never falls back to the
   executor model.
-- `tools/decision_probe.py` records and replays the Google decision endpoint. It is marked UNVERIFIED: the endpoint
-  answers 402 until the project has credits, so only the request field types are known.
 - `tools/router.py "<task>" --shadow` also asks the decision model and records its answer next to the
   rule's, without changing the route. `tools/router_eval.py` reads that ledger and refuses to claim a
   winner while the sample is too small or the labels cannot be linked to run outcomes.
@@ -187,9 +185,7 @@ Cordis or the TypeScript runtime.
 | Module | Role | Ports from |
 |---|---|---|
 | `tools/agent_scope.py` | Scoped tool registry (global + per-agent shadow + dispose) | `core/scope` |
-| `tools/subagent_seam.py` | Subagent Service Definition (`SubagentRequest`/`Result`/`Runtime` Protocol), splits evidence from self-assessment, fail-loud capability gating (`capabilities`/`supported_capabilities()`/`check_capabilities()`), closed-union `stop_reason` | `subagent` |
 | `tools/compaction.py` | Byte/char budget policy | `compaction` |
-| `tools/compaction_pruner.py` | Prunes oversized tool results to a byte budget (standalone tool, not a hook) | `compaction-tool-result-pruner` |
 
 Decision record: [`docs/dsh-port-plan.md`](docs/dsh-port-plan.md) (scope),
 [`docs/dsh-port-map.md`](docs/dsh-port-map.md) (49-package map + postmortem
@@ -210,7 +206,7 @@ Hai file SQLite local-only, đều nằm trong `.solocode/` (đã bị `.gitigno
 ```bash
 python tools/shared_state.py show
 python tools/shared_state.py locks
-python tools/session_persistence.py --list
+python tools/shared_state.py validate
 ```
 
 Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-state.md`](.kilo/instruction/shared-state.md); biên bản nghiệm thu: [`docs/deepseek-harness-upgrade-acceptance.md`](docs/deepseek-harness-upgrade-acceptance.md).
@@ -236,8 +232,6 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | Bypass claims | `make bypass-claims` | A documented `*_BYPASS` / `*_OVERRIDE` name must be read by code, not only by prose |
 | Prose budget | `make prose` | Long sentences, semicolons and em dashes may not grow past their recorded baseline |
 | Ruff pin | `make lint-pin` | Runs the ruff version the commit hook pins, so make check and a commit cannot disagree |
-| Gate probe | `python tools/gate_probe.py` | REPORT, never blocks: which gate catches which known defect, with caught, missed and no-gate outcomes |
-| Worker stats | `python tools/worker_stats.py` | REPORT, never blocks: per worker/model success rate, median latency, cost and tokens from `.solocode/*-usage.jsonl` |
 | Review receipt | `python tools/review_receipt.py verify` | A staged change over 5 files and 120 lines needs a receipt recorded after /review; the gate blocks, the advisory hook above only measures |
 | Task receipt | `python tools/task_receipt.py list` | Lightweight proof records (.json + .md) for delegated worker runs: brief, scope, diffstat, tests, and status |
 | Circuit breaker | `python tools/circuit_breaker.py status --task <id>` | Loop budget protection: trips on 3 consecutive identical errors, emitting TASK_FAILURE_REPORT.md without destructive rollback |
@@ -515,9 +509,7 @@ theo Cordis hay TypeScript runtime.
 | Module | Vai trò | Port từ |
 |---|---|---|
 | `tools/agent_scope.py` | Scoped tool registry (global + shadow theo agent + dispose) | `core/scope` |
-| `tools/subagent_seam.py` | Service Definition cho subagent (`SubagentRequest`/`Result`/`Runtime` Protocol), tách evidence khỏi self-assessment, fail-loud capability gating (`capabilities`/`supported_capabilities()`/`check_capabilities()`), `stop_reason` closed-union | `subagent` |
 | `tools/compaction.py` | Budget policy theo byte/ký tự | `compaction` |
-| `tools/compaction_pruner.py` | Cắt kết quả tool quá dài theo byte budget (tool độc lập, không phải hook) | `compaction-tool-result-pruner` |
 
 Ghi chép quyết định: [`docs/dsh-port-plan.md`](docs/dsh-port-plan.md) (phạm vi),
 [`docs/dsh-port-map.md`](docs/dsh-port-map.md) (bản đồ 49 package + bài học
@@ -544,8 +536,6 @@ cần đổi harness.
 | Bypass claims | `make bypass-claims` | Tên `*_BYPASS` / `*_OVERRIDE` được ghi trong tài liệu phải được code đọc, không chỉ trong văn xuôi |
 | Prose budget | `make prose` | Câu dài, dấu chấm phẩy và em dash không được tăng quá baseline đã ghi |
 | Ruff pin | `make lint-pin` | Chạy đúng bản ruff mà commit hook pin, để make check và commit không nói khác nhau |
-| Gate probe | `python tools/gate_probe.py` | BÁO CÁO, không chặn: gate nào bắt được defect nào, với kết quả caught, missed, no-gate |
-| Worker stats | `python tools/worker_stats.py` | BÁO CÁO, không chặn: tỉ lệ thành công, median độ trễ, chi phí và token theo worker/model từ `.solocode/*-usage.jsonl` |
 | Review receipt | `python tools/review_receipt.py verify` | Thay đổi đã stage vượt 5 file và 120 dòng cần receipt ghi sau /review; cổng này chặn, còn hook advisory bên trên chỉ đo |
 | Benchmark routing | `python tools/run_routing_eval.py` | BÁO CÁO, không chặn: 26 ca đã rà soát chấm route(); exit 0 khi có lệch, --strict thì exit 1. Nhãn là hành vi mong muốn, không chép từ output hiện tại. |
 

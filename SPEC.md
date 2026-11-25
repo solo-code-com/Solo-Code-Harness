@@ -251,7 +251,7 @@ lớn kể từ v3.3.0:
 - **2026-11-12**: `tools/router.py` ghi sổ quyết định định tuyến (`--dry-run` append vào
   `.solocode/route-decisions.jsonl`), và chuỗi fallback của brain khai là `routing_brains` trong
   `tools/config/model-roles.json`. Wrapper delegate nay resolve `default_agent` trước khi cấp `--auto`.
-  `gemini-decision-1` được ghi nhận là decision endpoint với output token limit 1, kèm `tools/decision_probe.py`
+  `gemini-decision-1` được ghi nhận là decision endpoint với output token limit 1, kèm the retired decision probe
   sau marker UNVERIFIED, còn tools/jev_decide.py được phục hồi trong ngày sau khi bind sang provider
   `commandcode` (đo trực tiếp: HTTP 200, 0.79–0.93s). Cờ `--shadow` ghi câu trả lời của decision model cạnh
   quyết định của rule mà không đổi route, còn `tools/router_eval.py` báo độ đồng thuận theo từng loại task kèm
@@ -264,7 +264,7 @@ lớn kể từ v3.3.0:
   bỏ id đã chết `stealth/cat-jam:free`. Jev decision model (`typesafe/jev`) chỉ phục vụ trên
   `POST /provider/v1/systemone` và không nằm trong `/models`; route này thuộc gateway Command Code, và
   tools/jev_decide.py đã được phục hồi ngày 2026-11-12 sau khi bind sang provider `commandcode`, còn
-  `tools/decision_probe.py` lo phần discovery cho Google decision endpoint.
+  the retired decision probe lo phần discovery cho Google decision endpoint.
 
 - **v4.4.0 / v4.3.1** (2026-10-16): SPEC khai **pipeline 4 vai trò** (§0.2) + quy tắc
   fallback; sửa danh sách engine (OpenCode là engine chính, thêm Codex); chuyển

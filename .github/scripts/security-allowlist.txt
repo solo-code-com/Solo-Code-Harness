@@ -26,7 +26,6 @@ tools/garden.py:subprocess.run:runs `--help` on this repo's own tools/ and .gith
 
 # ── Environment variable access ───────────────────────────────
 tools/harness_config.py:os.environ:config loader reads SOLOCODE_* env vars for config override layer
-tools/solocode_config.py:os.environ:reads DEEPSEEK_API_KEY and model env vars for AI model launcher
 
 # ── File system operations on command-line paths ──────────────
 tools/deploy.py:shutil.copy2:core function of deploy.py — copying harness files to target project

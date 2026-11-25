@@ -30,7 +30,7 @@ Tầng B/C (adopt dsh SDK / runtime) **không thực thi** — bị chặn bởi
 | Q4 — pnpm | `10.33.0` | `11.7.0` | ❌ Hết |
 
 **Hệ quả:** tầng B (chạy `dsh` như worker thứ ba qua subprocess) nay **khả thi**.
-Điều kiện §A2 cho `tools/subagent_seam.py` ("chỉ refactor khi có ≥2 provider") cũng
+Điều kiện §A2 cho the runtime subagent ("chỉ refactor khi có ≥2 provider") cũng
 đã đủ. Đề xuất: thêm `tools/dsh_delegate.py` (đối xứng `antigravity_delegate.py`).
 
 **Vẫn giữ nguyên:** KHÔNG merge code DSH/Cordis vào harness — chỉ gọi subprocess
@@ -74,14 +74,14 @@ Deliverable: `docs/dsh-port-map.md`
 
 Claude Code đúng: `opencode_delegate.py` không có bug đã biết, và `SubagentRuntime` Protocol chỉ có giá trị khi có ≥2 provider. Hiện chỉ có 1 provider (CLI) → **chỉ viết interface, không thêm abstraction layer vô dụng**.
 
-Deliverable: `tools/subagent_seam.py`
+Deliverable: the runtime subagent
 
 - Service Definition: `SubagentRequest`, `SubagentResult`, `SubagentRuntime` (Protocol).
 - Trường bắt buộc từ bài học dsh: tách `evidence` khỏi `summary` (worker evidence đáng tin, self-assessment thì không).
 - `--self-test` chạy được.
 - **Không** refactor `opencode_delegate.py` — chỉ làm khi chốt provider thứ hai (dsh SDK từ tầng B, hiện bị chặn).
 
-**Nghiệm thu:** `python tools/subagent_seam.py --self-test` pass; `opencode_delegate.py` không đổi; `pytest tools/ -q` xanh.
+**Nghiệm thu:** `python -m pytest tools/test_opencode_delegate.py -q` pass; `opencode_delegate.py` không đổi; `pytest tools/ -q` xanh.
 
 ### A3 — Compaction pruner (2–3 ngày, SAU khi chốt injection point)
 
@@ -94,7 +94,7 @@ Lý do (nguyên tắc harness boundary):
 - Pruner dùng chung cho nhiều engine (Kilo/Claude/OpenCode), không phải đặc thù một engine → tool trong `tools/` đúng chỗ.
 - Wire vào luồng thật (hook) chỉ khi nào có yêu cầu rõ ràng từ orchestrator, qua đúng file harness, không làm trong phạm vi này.
 
-Deliverable: `tools/compaction.py` (budget policy) + `tools/compaction_pruner.py` (prune tool result theo ngưỡng).
+Deliverable: `tools/compaction.py` (budget policy) theo ngưỡng).
 
 **Không port** phần LLM-summarize của `compaction-basic` (đòi hỏi gọi model trong-process).
 
