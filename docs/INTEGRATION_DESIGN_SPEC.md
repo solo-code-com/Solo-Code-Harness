@@ -37,7 +37,7 @@ The target end state has three properties:
 |---|---|---|---|
 | Tool access | DSH tools are native TS packages only | DSH reaches 54 Solo-Code modules through a typed bridge | 1 |
 | Write gate | Enforced in Claude Code and Kilo only | Enforced in DSH through a plugin on the approval seam | 2 |
-| Engines | Six engine directories, no DSH entry | DSH becomes a first-class engine with a launcher and generated config | 3 |
+| Engines | Four engine directories, no DSH entry | DSH becomes a first-class engine with a launcher and generated config | 3 |
 | Orchestration | Python CLI wrappers, no shared router | TypeScript package with router, providers, evidence, gates | 4 |
 | Documentation | DSH work described as Tier A port only | Integration model, phases, and runbook documented | 5 |
 | Validation | Python gates only | Python gates plus TS unit, parity, and end-to-end tests | 6 |
@@ -101,11 +101,11 @@ The target end state has three properties:
 | Capability | Measured baseline | Evidence |
 |---|---|---|
 | Tool inventory | 128 files under `tools/`, 54 production modules, 64 test modules, 6 config or GUI artifacts, 4 support files | `find tools -type f` on 2026-11-03 |
-| Worker arms | 7 arms: opencode, kilo, codex, antigravity, model_api, dsh, WSL sandbox | `tools/worker_preflight.py` module docstring |
-| Write gate | Default-on, fail-closed, implemented twice | `.claude/hooks/guard.py`, `.kilo/hooks/pre-tool-use/executor-mode.js` |
-| Guard patterns | Named destructive and secret patterns, mirrored in the DSH policy plugin | `.claude/hooks/guard.py`, `rules.js` |
+| Worker arms | 6 arms: opencode, kilo, antigravity, model_api, dsh, WSL sandbox | `tools/worker_preflight.py` module docstring |
+| Write gate | Default-on, fail-closed | `.kilo/hooks/pre-tool-use/executor-mode.js` |
+| Guard patterns | Named destructive and secret patterns, mirrored in the DSH policy plugin | `tools/guard_rules.py`, `rules.js` |
 | Verification gates | Lint, stdlib-only, text hygiene, bypass claims, prose, schema, garden, pytest, security scan | `Makefile` target `check` |
-| Engine coverage | Six engine directories plus `.agents/` | `.kilo/`, `.claude/`, `.opencode/`, `.copilot/`, `.gemini/`, `.codex/` |
+| Engine coverage | Four engine directories plus `.agents/` | `.kilo/`, `.opencode/`, `.gemini/`, `.agents/` |
 | Routing data | OpenCode success rate 0.8, Kilo 0.2 in the local config | `.solocode/executor-config.json` |
 | Executor benchmark | DeepSeek V4 Pro: 100% success, 24.5 s, $0.000312 per task | `docs/executor-benchmark-2026-09-04.md` |
 | Generator and drift checks | One generator for Claude and OpenCode, garden checks for all engines | `tools/generate_harness.py`, `tools/garden.py` |
@@ -118,7 +118,7 @@ The target end state has three properties:
 | No durable plan runtime | Plans live in prose and hooks | Plan and goal packages |
 | Guard is a regex list | Cannot reason about intent | Approval seam plus policy plugin |
 | Compaction is manual | Long sessions rely on checkpoints | Native compaction |
-| No unified evidence type | Each wrapper reports a different shape | `tools/subagent_seam.py` defines one |
+| No unified evidence type | Each wrapper reports a different shape | the runtime subagent defines one |
 | Windows-first sandbox helpers | POSIX hosts need the WSL fence | `sandbox` package |
 | Manual mirrors for Copilot and Gemini | Drift risk | Not applicable |
 
@@ -132,10 +132,10 @@ The target end state has three properties:
 | Session state | Native session store | SQLite under `.solocode/` | DSH owns live state. Mirror an event row on start and end |
 | Subagents | `ctx.subagents` | CLI wrappers | Provider calls Python wrappers |
 | Skills | Registry plus provider | `.kilo/skill/` | Generate DSH skills from the Kilo source |
-| Compaction | Native policy | `tools/compaction_pruner.py` | DSH owns in-session pruning. Keep the tool for CLI arms |
+| Compaction | `tools/compaction.py` budget policy | none | DSH owns in-session pruning |
 | Gates | None | `Makefile` and scripts | Orchestration package invokes the Python gates |
 | Routing | None | `.solocode/executor-config.json` | Router reads the same role table |
-| Evidence | Not standardized | `tools/subagent_seam.py` | Reuse the field names exactly |
+| Evidence | Not standardized | the runtime subagent | Reuse the field names exactly |
 
 ### 2.6 Design constraints
 
@@ -359,8 +359,8 @@ The rule: count callable surfaces, not files. A module with three subcommands co
 | Probes and preflight | 6 | antigravity_probe, approve_api_key, benchmark_executors, check_model_catalog, gate_probe, worker_preflight | Read bridge |
 | Runtime and servers | 3 | gui_server, kilo_server_manager, win_sandbox | No port |
 | Guards | 2 | claude_guard_compat, codex_guard | Read bridge |
-| Session and state | 6 | codex_session, session_analytics, session_control, session_persistence, session_registry, shared_state | Mixed |
-| Context and seams | 4 | agent_scope, compaction, compaction_pruner, subagent_seam | Read bridge |
+| Session and state | 4 | session_control, session_registry, shared_state, portfolio | Mixed |
+| Context and seams | 2 | agent_scope, compaction | Read bridge |
 | Gates and checks | 7 | check_bypass_claims, check_lint_budget, check_stdlib_only, check_text_hygiene, coverage_gate, prose_lint, validate_schemas | Read bridge |
 | Harness config and generation | 8 | claude_engine, deploy, garden, generate_harness, harness_config, harness_fingerprint, opencode_engine, solocode_config | Mixed |
 | Reporting and quality | 7 | codex_usage, failure_ledger, kilo_usage_report, review_receipt, snapshot_testing, worker_stats, workspace_snapshot | Read bridge |
@@ -385,7 +385,7 @@ No module moves to Native TS in Phase 1. The policy classifier already exists in
 |---|---|---|---|
 | 1.1 | Build the surface inventory | 54 modules, CLI help, subcommands | `tool-manifest.json` with one entry per callable surface |
 | 1.2 | Classify every surface | Manifest plus risk review | Tier, risk, timeout, allowlist, parity fixture |
-| 1.3 | Define the bridge contract | `tools/subagent_seam.py`, `tools/compaction_pruner.py` | One TypeScript interface and one error taxonomy |
+| 1.3 | Define the bridge contract | the runtime subagent, `tools/compaction.py` | One TypeScript interface and one error taxonomy |
 | 1.4 | Implement the bridge | Contract | `bridge.ts` with fixed argv, no shell, env allowlist, timeout, output cap |
 | 1.5 | Register DSH tools | Manifest and bridge | One `ctx.tools.register` descriptor per surface, namespaced `solo_` |
 | 1.6 | Add parity tests | One fixture per surface | Direct call output equals bridge output after path normalization |
@@ -729,7 +729,7 @@ packages/orchestration/
 |---|---|---|---|
 | 4.1 | Scaffold the package | DSH workspace conventions | Package that builds and typechecks |
 | 4.2 | Implement the router | `.solocode/executor-config.json`, `tools/config/model-roles.json` | Pure mapping from task shape and capabilities to an executor |
-| 4.3 | Implement the evidence type | `tools/subagent_seam.py` | TS types with identical field names and stop reasons |
+| 4.3 | Implement the evidence type | the runtime subagent | TS types with identical field names and stop reasons |
 | 4.4 | Implement providers | Existing Python wrappers | One provider per executor, same contract |
 | 4.5 | Implement the capability check | `check_capabilities` behavior | Missing capability throws before dispatch |
 | 4.6 | Implement gate runs | `Makefile` target `check` | Structured results for each gate |
@@ -791,7 +791,7 @@ Validation rules:
 
 #### Provider contract
 
-Field names mirror `tools/subagent_seam.py`, including snake_case, so one JSON document is valid on both sides.
+Field names mirror the runtime subagent evidence, including snake_case, so one JSON document is valid on both sides.
 
 Every provider implements the same four methods:
 

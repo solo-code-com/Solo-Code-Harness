@@ -6,7 +6,7 @@
 # Resolve Python: try python3, then python, then py (Windows launcher)
 PY := $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null || echo py)
 
-.PHONY: help generate generate-claude validate garden lint-budget stdlib-only text-hygiene bypass-claims prose lint-pin test test-integration eval check security-scan gitleaks
+.PHONY: help generate generate-claude validate garden lint-budget stdlib-only text-hygiene bypass-claims prose lint-pin test test-integration portfolio retention eval check security-scan gitleaks
 
 help:
 	@echo "Solo-Code Harness — Quality Gates"
@@ -25,6 +25,8 @@ help:
 	@echo "  make lint-pin           Run the pinned ruff (the version the commit hook uses)"
 	@echo "  make test               Run full test suite (auto-discovers tools/test_*.py)"
 	@echo "  make test-integration   shared-state schema checks"
+	@echo "  make portfolio          Sync and print the seven-project index"
+	@echo "  make retention          Dry run: what .solocode retention would do"
 	@echo "  make check              Full CI gate: lint + validate + garden + test + security"
 	@echo ""
 	@echo "Security:"
@@ -68,6 +70,14 @@ test:
 
 test-integration:
 	$(PY) tools/test_integration.py
+
+
+portfolio:
+	$(PY) tools/portfolio.py sync
+	$(PY) tools/portfolio.py status
+
+retention:
+	$(PY) tools/retention.py
 
 check:
 	@echo "=== Lint (ruff) ==="

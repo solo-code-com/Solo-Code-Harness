@@ -51,7 +51,7 @@ This project is powered by **Solo-Code Harness** — an AI agent discipline laye
 ## Self-Verification Handshake
 
 When asked "Is Solo-Code Harness active?" or "What rules apply here?", answer:
-`Solo-Code Harness active: behavior rules, anti-hallucination rules, security rules, prose quality rules, 54 skills, 16 agents, hooks enabled (Kilo) / guard + lifecycle hooks enabled (Claude Code). Use /verify to validate.`
+`Solo-Code Harness active: behavior rules, anti-hallucination rules, security rules, prose quality rules, 54 skills, 16 agents, hooks enabled (Kilo) and the OpenCode plugin. Use /verify to validate.`
 
 ## Escape Hatch (Meta-Principle)
 
@@ -347,22 +347,6 @@ See `.kilo/skill/git-workflow-master/SKILL.md` for full commit format, types, an
 ## Memory System
 
 Persistent memory at `.kilo/memory/`. The AI reads `MEMORY.md` at session start. Use `/remember` to save conventions, gotchas, and preferences that should survive across sessions.
-
-## Native auto memory
-
-Claude Code writes its own auto memory per repository alongside this harness's
-custom memory system (`memory/` dir + `MEMORY.md` index). Both load every
-session and serve different purposes — they coexist, not compete.
-
-| System | Who writes it | What it holds |
-|---|---|---|
-| Native auto memory | Claude, automatically | Preferences and corrections picked up interactively |
-| Custom memory (`memory/`) | You or Claude deliberately | Structured project facts: goals, constraints, external pointers not derivable from code |
-
-**Rule:** Let native auto memory hold preferences and corrections. Write to
-`memory/` only for project facts with stable structure. `python tools/garden.py`
-keeps the `memory/` mirrors in sync across engines; no gate inspects Claude's
-native auto memory, so audit that one by hand.
 
 ---
 
