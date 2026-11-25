@@ -306,3 +306,82 @@ def test_sync_prunes_projects_that_are_no_longer_scanned(tmp_path: Path) -> None
     assert keep_counts["pruned"] == 0
     keep_both = portfolio.status_rows(db_keep, reference=beta / portfolio.LOCK_NAME)
     assert [r["name"] for r in keep_both] == ["alpha", "beta"]
+
+
+def test_idless_lines_are_skipped(tmp_path: Path) -> None:
+    scan_root = tmp_path / "portfolio"
+    alpha = scan_root / "alpha"
+    _write_lock(alpha)
+    _write_jsonl(
+        alpha / ".solocode" / "opencode-usage.jsonl",
+        [
+            {
+                "ts": "2026-11-25T05:00:00+00:00",
+                "model": "gpt-5",
+                "prompt_chars": 100,
+                "elapsed_s": 0,
+                "phase": "start",
+            },
+            {
+                "ts": "2026-11-25T05:01:00+00:00",
+                "model": "gpt-5",
+                "prompt_chars": 100,
+                "elapsed_s": 5.0,
+                "error": "boom",
+                "phase": "finish",
+            },
+        ],
+    )
+    db_path = tmp_path / "portfolio.db"
+
+    counts = portfolio.sync([scan_root], db_path)
+    assert counts["runs"] == 0
+    assert counts["skipped"] == 2
+    assert portfolio.failure_rows(db_path) == []
+
+
+def test_a_run_keeps_its_key_when_an_earlier_line_is_dropped(tmp_path: Path) -> None:
+    scan_root = tmp_path / "portfolio"
+    alpha = scan_root / "alpha"
+    _write_lock(alpha)
+    usage_path = alpha / ".solocode" / "opencode-usage.jsonl"
+    idless_row: dict[str, object] = {
+        "ts": "2026-11-25T06:00:00+00:00",
+        "model": "gpt-5",
+        "prompt_chars": 50,
+        "elapsed_s": 1.0,
+        "phase": "finish",
+    }
+    start_row: dict[str, object] = {
+        "ts": "2026-11-25T06:01:00+00:00",
+        "model": "gpt-5",
+        "prompt_chars": 120,
+        "elapsed_s": 0,
+        "phase": "start",
+        "run_id": "run-keep",
+    }
+    finish_row: dict[str, object] = {
+        "ts": "2026-11-25T06:01:10+00:00",
+        "model": "gpt-5",
+        "prompt_chars": 120,
+        "elapsed_s": 10.0,
+        "usage": {"input": 30, "output": 15},
+        "error": None,
+        "phase": "finish",
+        "run_id": "run-keep",
+    }
+    _write_jsonl(usage_path, [idless_row, start_row, finish_row])
+    db_path = tmp_path / "portfolio.db"
+
+    first = portfolio.sync([scan_root], db_path)
+    assert first["runs"] == 1
+    assert first["unfinished"] == 0
+    assert first["skipped"] == 1
+
+    _write_jsonl(usage_path, [start_row, finish_row])
+    second = portfolio.sync([scan_root], db_path)
+    assert second["runs"] == first["runs"]
+    assert second["unfinished"] == first["unfinished"]
+    assert second["failures"] == first["failures"]
+    assert second["projects"] == first["projects"]
+    assert second["skipped"] == 0

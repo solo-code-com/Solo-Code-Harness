@@ -220,6 +220,7 @@ def sync(
     """Scan direct child projects under roots and upsert projects and runs."""
     projects = iter_projects(roots, skip=skip)
     pruned = 0
+    skipped = 0
     with closing(_open_db(db_path, create=True)) as conn:
         with conn:
             if rebuild:
@@ -243,10 +244,13 @@ def sync(
                     usage_path = proj_dir / ".solocode" / filename
                     if not usage_path.is_file():
                         continue
-                    for idx, entry in enumerate(parse_usage(usage_path)):
+                    for entry in parse_usage(usage_path):
                         raw_run_id = entry.get("run_id")
                         if raw_run_id is None or raw_run_id == "":
-                            raw_run_id = entry.get("session_id") or f"{filename}:{idx}"
+                            raw_run_id = entry.get("session_id")
+                        if raw_run_id is None or raw_run_id == "":
+                            skipped += 1
+                            continue
                         run_id = str(raw_run_id)
                         ts = str(entry.get("ts") or "")
                         usage = entry.get("usage")
@@ -313,6 +317,7 @@ def sync(
         "unfinished": unfinished_count,
         "failures": failures_count,
         "pruned": pruned,
+        "skipped": skipped,
     }
 
 
@@ -521,6 +526,8 @@ def _cmd_sync(args: argparse.Namespace) -> int:
         f"index holds {counts['projects']} project(s), {counts['runs']} run(s) "
         f"(unfinished={counts['unfinished']}, failures={counts['failures']}) -> {args.db}"
     )
+    if counts["skipped"] > 0:
+        print(f"skipped {counts['skipped']} usage line(s) with no run id")
     return 0
 
 
