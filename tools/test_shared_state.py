@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import os
+import sqlite3
 import tempfile
 import threading
 from pathlib import Path
@@ -335,3 +337,84 @@ def test_concurrent_lock_acquire():
         assert sorted(results) == [False, True], (
             f"Exactly one thread should win the lock, got: {results}"
         )
+
+
+def test_pid_alive_reports_self_and_a_bogus_pid():
+    assert shared_state.pid_alive(os.getpid()) is True
+    assert shared_state.pid_alive(999999) is False
+
+
+def test_dead_holder_is_reclaimed():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "shared-state.db"
+        with SharedState(path) as state:
+            with state._transaction():
+                state._conn.execute(
+                    "INSERT INTO active_locks (path, engine, model, session_id, locked_at, expires_at, reason, pid)"
+                    " VALUES ('src/dead.py', 'claude', 'm', 's1', '2026-01-01T00:00:00+00:00', '2099-01-01T00:00:00+00:00', 'dead', 999999)"
+                )
+            assert (
+                state.acquire_lock("src/dead.py", engine="gemini", model="flash")
+                is True
+            )
+
+
+def test_live_holder_still_blocks():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "shared-state.db"
+        with SharedState(path) as state:
+            with state._transaction():
+                state._conn.execute(
+                    "INSERT INTO active_locks (path, engine, model, session_id, locked_at, expires_at, reason, pid)"
+                    " VALUES ('src/live.py', 'claude', 'm', 's1', '2026-01-01T00:00:00+00:00', '2099-01-01T00:00:00+00:00', 'live', ?)",
+                    (os.getpid(),),
+                )
+            assert (
+                state.acquire_lock("src/live.py", engine="gemini", model="flash")
+                is False
+            )
+
+
+def test_row_without_pid_falls_back_to_the_ttl():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "shared-state.db"
+        with SharedState(path) as state:
+            with state._transaction():
+                state._conn.execute(
+                    "INSERT INTO active_locks (path, engine, model, session_id, locked_at, expires_at, reason, pid)"
+                    " VALUES ('src/nopid.py', 'claude', 'm', 's1', '2026-01-01T00:00:00+00:00', '2099-01-01T00:00:00+00:00', 'nopid', NULL)"
+                )
+            assert (
+                state.acquire_lock("src/nopid.py", engine="gemini", model="flash")
+                is False
+            )
+            with state._transaction():
+                state._conn.execute(
+                    "UPDATE active_locks SET expires_at = '1970-01-01T00:00:00+00:00'"
+                )
+            assert (
+                state.acquire_lock("src/nopid.py", engine="gemini", model="flash")
+                is True
+            )
+
+
+def test_old_table_gains_the_pid_column():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "shared-state.db"
+        conn = sqlite3.connect(path)
+        conn.execute(
+            "CREATE TABLE active_locks ("
+            "path TEXT PRIMARY KEY, engine TEXT NOT NULL, model TEXT NOT NULL, "
+            "session_id TEXT, locked_at TEXT NOT NULL, expires_at TEXT NOT NULL, reason TEXT)"
+        )
+        conn.commit()
+        conn.close()
+
+        with SharedState(path) as state:
+            cols = {
+                row[1]
+                for row in state._conn.execute(
+                    "PRAGMA table_info(active_locks)"
+                ).fetchall()
+            }
+            assert "pid" in cols

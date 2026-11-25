@@ -28,6 +28,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
@@ -97,6 +98,42 @@ def _lock_paths_conflict(left: str, right: str) -> bool:
     return file_path == directory or file_path.startswith(directory + "/")
 
 
+def pid_alive(pid: int) -> bool:
+    """Whether a process id is still running, conservatively.
+
+    Windows has no POSIX pid probe: os.kill(pid, 0) would call TerminateProcess
+    there, so liveness is asked through the Win32 API instead. Any answer that
+    cannot be obtained counts as alive, because reclaiming a live lock is worse
+    than waiting for the TTL.
+    """
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        process_query_limited_information = 0x1000
+        still_active = 259
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if not handle:
+            # 5 is access denied, which can still mean a live process.
+            return ctypes.get_last_error() == 5
+        try:
+            code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return True
+            return code.value == still_active
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
@@ -131,7 +168,8 @@ CREATE TABLE IF NOT EXISTS active_locks (
     session_id TEXT,
     locked_at  TEXT NOT NULL,
     expires_at TEXT NOT NULL,
-    reason     TEXT
+    reason     TEXT,
+    pid        INTEGER
 );
 CREATE TABLE IF NOT EXISTS shared_memory_conventions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -197,6 +235,16 @@ class SharedState:
                 self._conn.execute("PRAGMA journal_mode=WAL")
                 self._conn.execute("PRAGMA foreign_keys=ON")
                 self._conn.executescript(SCHEMA_SQL)
+                cols = {
+                    row[1]
+                    for row in self._conn.execute(
+                        "PRAGMA table_info(active_locks)"
+                    ).fetchall()
+                }
+                if "pid" not in cols:
+                    self._conn.execute(
+                        "ALTER TABLE active_locks ADD COLUMN pid INTEGER"
+                    )
                 return
             except sqlite3.OperationalError as e:
                 if "locked" not in str(e).lower() and "busy" not in str(e).lower():
@@ -220,6 +268,16 @@ class SharedState:
 
     def _expire_locks(self) -> None:
         self._conn.execute("DELETE FROM active_locks WHERE expires_at <= ?", (_now(),))
+
+    def _reclaim_dead_holders(self) -> int:
+        """Delete lock rows whose recorded pid is no longer running."""
+        rows = self._conn.execute(
+            "SELECT path, pid FROM active_locks WHERE pid IS NOT NULL"
+        ).fetchall()
+        dead = [path for path, pid in rows if not pid_alive(int(pid))]
+        for path in dead:
+            self._conn.execute("DELETE FROM active_locks WHERE path = ?", (path,))
+        return len(dead)
 
     def _prune_session_log(self) -> None:
         # Sắp xếp phụ theo `id DESC` để có thứ tự xác định (deterministic) khi
@@ -366,6 +424,7 @@ class SharedState:
         expires = now + timedelta(hours=LOCK_TIMEOUT_HOURS)
         with self._transaction():
             self._expire_locks()
+            self._reclaim_dead_holders()
             rows = self._conn.execute(
                 "SELECT path, engine, session_id FROM active_locks"
             ).fetchall()
@@ -377,12 +436,13 @@ class SharedState:
                 return False  # Held by a different engine — conflict
             self._conn.execute(
                 """
-                INSERT INTO active_locks (path, engine, model, session_id, locked_at, expires_at, reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO active_locks (path, engine, model, session_id, locked_at, expires_at, reason, pid)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(path) DO UPDATE SET
                     engine = excluded.engine, model = excluded.model,
                     session_id = excluded.session_id, locked_at = excluded.locked_at,
-                    expires_at = excluded.expires_at, reason = excluded.reason
+                    expires_at = excluded.expires_at, reason = excluded.reason,
+                    pid = excluded.pid
                 """,
                 (
                     path,
@@ -392,6 +452,7 @@ class SharedState:
                     now.isoformat(),
                     expires.isoformat(),
                     reason,
+                    os.getpid(),
                 ),
             )
             return True
