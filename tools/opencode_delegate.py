@@ -1435,6 +1435,14 @@ def main(argv: list[str] | None = None) -> int:
     prompt = args.prompt
     if not args.no_guardrail:
         prompt = GUARDRAIL + prompt
+    if len(prompt) > MAX_PROMPT_CHARS:
+        _stderr(
+            f"[guard] final prompt is {len(prompt)} characters; the limit is "
+            f"{MAX_PROMPT_CHARS} because the command line accepts 32767. "
+            f"The brief is {len(args.prompt)} and the guardrail adds "
+            f"{len(prompt) - len(args.prompt)}."
+        )
+        return 2
 
     models_to_try = [model] if model else [None]
     if model and ("deepseek-v4.1-flash" in model or model in DEEPSEEK_V41_FLASH_CHAIN):

@@ -1302,6 +1302,27 @@ def test_overlong_brief_exits_two_without_spawning(monkeypatch, capsys):
     assert "[guard] brief is" in capsys.readouterr().err
 
 
+def test_overlong_final_prompt_exits_two_without_spawning(
+    monkeypatch, tmp_path, capsys
+):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    called = []
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "run_agy_cli",
+        lambda **kwargs: called.append(kwargs) or ({"text": "ok", "error": None}, 0),
+    )
+
+    brief = "x" * (antigravity_delegate.MAX_PROMPT_CHARS - 100)
+    code = antigravity_delegate.main([brief, "--target-dir", str(ws)])
+
+    assert code == 2
+    assert not called
+    err = capsys.readouterr().err
+    assert "[guard] final prompt is" in err
+    assert f"The brief is {len(brief)}" in err
+
+
 def test_long_answer_spills_to_report_file(monkeypatch, tmp_path, capsys):
     ws, _ = _wire_main(monkeypatch, tmp_path)
     monkeypatch.setattr(antigravity_delegate, "ROOT", tmp_path)

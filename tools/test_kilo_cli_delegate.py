@@ -1349,6 +1349,31 @@ def test_overlong_brief_exits_two_without_spawning(monkeypatch, capsys):
     assert "[guard] brief is" in capsys.readouterr().err
 
 
+def test_overlong_final_prompt_exits_two_without_spawning(
+    monkeypatch, tmp_path, capsys
+):
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+    called = []
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **kwargs: called.append(kwargs) or _ok_result(),
+    )
+
+    brief = "x" * (kilo_cli_delegate.MAX_PROMPT_CHARS - 100)
+    code = kilo_cli_delegate.main([brief, "--directory", str(tmp_path)])
+
+    assert code == 2
+    assert not called
+    err = capsys.readouterr().err
+    assert "[guard] final prompt is" in err
+    assert f"The brief is {len(brief)}" in err
+
+
 def test_long_answer_spills_to_report_file(monkeypatch, tmp_path, capsys):
     ws = tmp_path / "ws"
     (ws / "src").mkdir(parents=True)

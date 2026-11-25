@@ -725,6 +725,14 @@ def main(argv: list[str] | None = None) -> int:
         guardrail=not args.no_guardrail,
         allow_tools=args.allow_tools,
     )
+    if len(prompt) > MAX_PROMPT_CHARS:
+        _stderr(
+            f"[guard] final prompt is {len(prompt)} characters; the limit is "
+            f"{MAX_PROMPT_CHARS} because the command line accepts 32767. "
+            f"The brief is {len(args.prompt)} and the guardrail adds "
+            f"{len(prompt) - len(args.prompt)}."
+        )
+        return 2
     before = (
         snapshot_workspace(target_dir) if args.auto_approve or args.allow_tools else {}
     )
