@@ -306,3 +306,84 @@ def test_recent_ignored_writes_stops_when_tree_exceeds_limit(tmp_path: Path):
 
     hits = protected_state.recent_ignored_writes(tmp_path, since=since, limit=3)
     assert hits[-1] == "<walk truncated after 3 entries>"
+
+
+def test_home_fingerprint_detects_a_changed_key_file(tmp_path: Path):
+    ssh_dir = tmp_path / ".ssh"
+    ssh_dir.mkdir()
+    key = ssh_dir / "id_ed25519"
+    key.write_bytes(b"key-v1\n")
+
+    before = protected_state.home_fingerprint(tmp_path)
+    key.write_bytes(b"key-v2\n")
+    after = protected_state.home_fingerprint(tmp_path)
+
+    assert protected_state.home_changes(before, after) == [".ssh/id_ed25519"]
+
+
+def test_home_fingerprint_detects_a_new_credential_file(tmp_path: Path):
+    before = protected_state.home_fingerprint(tmp_path)
+    assert before[".netrc"] == "<absent>"
+
+    (tmp_path / ".netrc").write_bytes(b"machine example.com\n")
+    after = protected_state.home_fingerprint(tmp_path)
+
+    assert protected_state.home_changes(before, after) == [".netrc"]
+
+
+def test_home_fingerprint_detects_a_symlink_swap(tmp_path: Path, monkeypatch):
+    target = tmp_path / ".gitconfig"
+    target.write_bytes(b"[user]\n\tname = a\n")
+
+    before = protected_state.home_fingerprint(tmp_path)
+    assert not before[".gitconfig"].startswith("link:")
+
+    other_file = tmp_path / "other-gitconfig"
+    other_file.write_bytes(b"[user]\n\tname = a\n")
+
+    target.unlink()
+    try:
+        target.symlink_to(other_file)
+    except OSError:
+        target.write_bytes(b"[user]\n\tname = a\n")
+        real_is_symlink = Path.is_symlink
+        monkeypatch.setattr(
+            Path, "is_symlink", lambda self: self == target or real_is_symlink(self)
+        )
+        real_readlink = os.readlink
+        monkeypatch.setattr(
+            os,
+            "readlink",
+            lambda p: str(other_file) if Path(p) == target else real_readlink(p),
+        )
+
+    after = protected_state.home_fingerprint(tmp_path)
+    assert after[".gitconfig"].startswith("link:")
+    assert protected_state.home_changes(before, after) == [".gitconfig"]
+
+
+def test_home_fingerprint_leaves_unrelated_files_out(tmp_path: Path):
+    (tmp_path / "notes.txt").write_text("hello\n", encoding="utf-8")
+    (tmp_path / ".bashrc").write_text("export X=1\n", encoding="utf-8")
+    other_cfg = tmp_path / ".config" / "other"
+    other_cfg.mkdir(parents=True)
+    (other_cfg / "cfg.json").write_text("{}", encoding="utf-8")
+
+    fp = protected_state.home_fingerprint(tmp_path)
+    assert "notes.txt" not in fp
+    assert ".bashrc" not in fp
+    assert ".config/other/cfg.json" not in fp
+    assert set(fp) == set(protected_state.HOME_PROTECTED_PATHS)
+
+
+def test_home_changes_empty_when_nothing_moved(tmp_path: Path):
+    (tmp_path / ".gitconfig").write_text("[user]\n", encoding="utf-8")
+    ssh_dir = tmp_path / ".ssh"
+    ssh_dir.mkdir()
+    (ssh_dir / "known_hosts").write_text("host\n", encoding="utf-8")
+
+    fp1 = protected_state.home_fingerprint(tmp_path)
+    fp2 = protected_state.home_fingerprint(tmp_path)
+
+    assert fp1 == fp2
+    assert protected_state.home_changes(fp1, fp2) == []

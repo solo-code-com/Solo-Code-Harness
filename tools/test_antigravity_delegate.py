@@ -1232,3 +1232,52 @@ def test_worktree_swaps_the_target_dir(monkeypatch, tmp_path):
     code = antigravity_delegate.main(["task", "--target-dir", str(ws), "--worktree"])
     assert code == 0
     assert seen_target_dir == [wt_path]
+
+
+def test_home_credential_change_blocks_the_run(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    def fake_run(**_kwargs):
+        (fake_home / ".gitconfig").write_text("[user]\nname=evil\n", encoding="utf-8")
+        return {"text": "done", "error": None}, 0
+
+    monkeypatch.setattr(antigravity_delegate, "run_agy_cli", fake_run)
+
+    code = antigravity_delegate.main(_wrapper_argv(ws))
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "[home] the run changed operator credentials:" in err
+    assert ".gitconfig" in err
+
+
+def test_allow_home_writes_lets_run_finish(monkeypatch, tmp_path):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    def fake_run(**_kwargs):
+        (fake_home / ".gitconfig").write_text("[user]\nname=ok\n", encoding="utf-8")
+        return {"text": "done", "error": None}, 0
+
+    monkeypatch.setattr(antigravity_delegate, "run_agy_cli", fake_run)
+
+    code = antigravity_delegate.main(_wrapper_argv(ws) + ["--allow-home-writes"])
+    assert code == 0

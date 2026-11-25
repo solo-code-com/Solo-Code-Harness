@@ -1211,6 +1211,11 @@ def main(argv: list[str] | None = None) -> int:
         help="let the brief name a credential path (harness maintenance only)",
     )
     parser.add_argument(
+        "--allow-home-writes",
+        action="store_true",
+        help="permit the run to touch the operator credential files (never expected)",
+    )
+    parser.add_argument(
         "--no-guardrail",
         action="store_true",
         help="Skip prepending the strict guardrail preamble",
@@ -1442,6 +1447,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.allow_control_paths:
         with contextlib.suppress(Exception):
             before_gates = protected.gate_fingerprint(ROOT)
+    home_before = None
+    if not args.allow_home_writes:
+        home_before = protected.home_fingerprint(Path.home())
     run_started = time.time()
     restore_snapshot = None
     restore_module = _load_sibling("restore")
@@ -1620,6 +1628,15 @@ def main(argv: list[str] | None = None) -> int:
             _stderr(
                 "[control-path] the fence moved during the run: " + ", ".join(moved)
             )
+    if not args.allow_home_writes and home_before is not None:
+        moved = protected.home_changes(
+            home_before, protected.home_fingerprint(Path.home())
+        )
+        if moved:
+            _stderr(
+                "[home] the run changed operator credentials: " + ", ".join(moved[:10])
+            )
+            return 3
     ignored_writes = protected.recent_ignored_writes(ROOT, run_started - 2)
     if ignored_writes:
         if args.allow_ignored_writes:

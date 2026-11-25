@@ -40,6 +40,17 @@ GATE_PATHS = (
 
 IGNORED_TREES = ("node_modules", "build", "dist", ".venv", "venv", "target")
 
+#: Credential locations in the operator home directory. Fingerprinted because
+#: the repository snapshot cannot see them, and a worker that edits one is doing
+#: something no delegation should do without a person saying so.
+HOME_PROTECTED_PATHS = (
+    ".ssh",
+    ".aws",
+    ".netrc",
+    ".gitconfig",
+    ".config/gh",
+)
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -116,6 +127,43 @@ def gate_fingerprint(root: Path) -> dict[str, str]:
 
 def gate_changes(before: dict[str, str], after: dict[str, str]) -> list[str]:
     """Gate files that differ between two fingerprints."""
+    return new_violations(before, after)
+
+
+def home_fingerprint(home: Path) -> dict[str, str]:
+    """Typed fingerprint of the home credential paths.
+
+    The hashes are computed in memory and never written anywhere; only the list
+    of changed paths leaves this process. A missing path still gets an entry, so
+    creating one registers as a change.
+    """
+    state: dict[str, str] = {}
+    for relative in HOME_PROTECTED_PATHS:
+        target = home / relative
+        try:
+            if target.is_symlink():
+                state[relative] = "link:" + os.readlink(target)
+            elif target.is_dir():
+                files = sorted(
+                    p for p in target.rglob("*") if p.is_file() and not p.is_symlink()
+                )
+                if not files:
+                    state[relative] = "<empty>"
+                for path in files:
+                    state[f"{relative}/{path.relative_to(target).as_posix()}"] = (
+                        _sha256(path)
+                    )
+            elif target.is_file():
+                state[relative] = _sha256(target)
+            else:
+                state[relative] = "<absent>"
+        except OSError:
+            state[relative] = "<unreadable>"
+    return state
+
+
+def home_changes(before: dict[str, str], after: dict[str, str]) -> list[str]:
+    """Credential paths that differ between two home fingerprints."""
     return new_violations(before, after)
 
 

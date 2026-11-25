@@ -540,6 +540,11 @@ def main(argv: list[str] | None = None) -> int:
         help="permit writes into node_modules, build, dist, .venv, venv or target",
     )
     parser.add_argument(
+        "--allow-home-writes",
+        action="store_true",
+        help="permit the run to touch the operator credential files (never expected)",
+    )
+    parser.add_argument(
         "--worktree",
         action="store_true",
         help=(
@@ -725,6 +730,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.allow_control_paths:
             with contextlib.suppress(Exception):
                 protected_gates = protected_state.gate_fingerprint(Path(target_dir))
+        home_before = None
+        if not args.allow_home_writes:
+            home_before = protected_state.home_fingerprint(Path.home())
         run_started = time.time()
         restore_snapshot = None
         # A read-only run cannot write, so it has nothing to undo.
@@ -814,6 +822,16 @@ def main(argv: list[str] | None = None) -> int:
                 _stderr(
                     "[control-path] the fence moved during the run: " + ", ".join(moved)
                 )
+        if not args.allow_home_writes and home_before is not None:
+            moved = protected_state.home_changes(
+                home_before, protected_state.home_fingerprint(Path.home())
+            )
+            if moved:
+                _stderr(
+                    "[home] the run changed operator credentials: "
+                    + ", ".join(moved[:10])
+                )
+                return 3
         ignored_writes = protected_state.recent_ignored_writes(
             Path(target_dir), run_started - 2
         )

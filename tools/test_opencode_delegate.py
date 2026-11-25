@@ -2616,3 +2616,83 @@ def test_restore_on_failure_reverts(monkeypatch, tmp_path, capsys):
     assert len(apply_calls) == 1
     err = capsys.readouterr().err
     assert "[restore] reverted:" in err
+
+
+def test_home_credential_change_blocks_the_run(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    def fake_run(**_kw):
+        (fake_home / ".gitconfig").write_text("[user]\nname=evil\n", encoding="utf-8")
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--cascade",
+            "off",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "[home] the run changed operator credentials:" in err
+    assert ".gitconfig" in err
+
+
+def test_allow_home_writes_lets_run_finish(monkeypatch, tmp_path):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    def fake_run(**_kw):
+        (fake_home / ".gitconfig").write_text("[user]\nname=ok\n", encoding="utf-8")
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--allow-home-writes",
+            "--cascade",
+            "off",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code == 0

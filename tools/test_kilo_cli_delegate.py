@@ -1273,3 +1273,62 @@ def test_ignored_write_blocks_the_run(monkeypatch, tmp_path, capsys):
     err = capsys.readouterr().err
     assert "[ignored-writes] the run wrote into a generated tree:" in err
     assert "node_modules/pkg/index.js" in err
+
+
+def test_home_credential_change_blocks_the_run(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr(kilo_cli_delegate, "ROOT", ws)
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+
+    def fake_run(**_kw):
+        (fake_home / ".gitconfig").write_text("[user]\nname=evil\n", encoding="utf-8")
+        return _ok_result()
+
+    monkeypatch.setattr(kilo_cli_delegate, "run_kilo_cli", fake_run)
+
+    code = kilo_cli_delegate.main(
+        ["hello", "--no-guardrail", "--directory", str(ws / "src")]
+    )
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "[home] the run changed operator credentials:" in err
+    assert ".gitconfig" in err
+
+
+def test_allow_home_writes_lets_run_finish(monkeypatch, tmp_path):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr(kilo_cli_delegate, "ROOT", ws)
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+
+    def fake_run(**_kw):
+        (fake_home / ".gitconfig").write_text("[user]\nname=ok\n", encoding="utf-8")
+        return _ok_result()
+
+    monkeypatch.setattr(kilo_cli_delegate, "run_kilo_cli", fake_run)
+
+    code = kilo_cli_delegate.main(
+        [
+            "hello",
+            "--no-guardrail",
+            "--allow-home-writes",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code == 0

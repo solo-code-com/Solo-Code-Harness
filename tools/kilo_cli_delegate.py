@@ -645,6 +645,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="permit writes into node_modules, build, dist, .venv, venv or target",
     )
+    parser.add_argument(
+        "--allow-home-writes",
+        action="store_true",
+        help="permit the run to touch the operator credential files (never expected)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -711,6 +716,9 @@ def main(argv: list[str] | None = None) -> int:
             before_state = protected_state.fingerprint(ROOT)
         except Exception:  # noqa: BLE001 - absence is reported after the run
             before_state = None
+    home_before = None
+    if not args.allow_home_writes:
+        home_before = protected_state.home_fingerprint(Path.home())
     run_started = time.time()
 
     # ── Server precondition ──
@@ -801,6 +809,15 @@ def main(argv: list[str] | None = None) -> int:
             _stderr(
                 "[control-path] worker changed protected state: "
                 + ", ".join(state_violations)
+            )
+            return 3
+    if not args.allow_home_writes and home_before is not None:
+        moved = protected_state.home_changes(
+            home_before, protected_state.home_fingerprint(Path.home())
+        )
+        if moved:
+            _stderr(
+                "[home] the run changed operator credentials: " + ", ".join(moved[:10])
             )
             return 3
     ignored_writes = protected_state.recent_ignored_writes(ROOT, run_started - 2)
