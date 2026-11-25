@@ -40,7 +40,10 @@ try:
 except ImportError:  # pragma: no cover - script-dir import path
     from tools import restore  # noqa: E402
 
-DEFAULT_MODEL = "gemini-3.8-flash-medium"
+# Operator directive 2026-11-25: Hydrogen is preferred, medium by default and
+# high when the answer must be trusted. The 3.8-flash ids remain valid and are
+# the fallback when Hydrogen is unavailable to the signed-in account.
+DEFAULT_MODEL = "gemini-4-hydrogen-medium"
 DEFAULT_TIMEOUT_SECONDS = 600
 DIRECTORY_LOCK_ENGINE = "gemini"
 WORKTREE_ERROR_EXIT_CODE = 7

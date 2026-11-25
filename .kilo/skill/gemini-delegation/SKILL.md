@@ -1,6 +1,6 @@
 ---
 name: gemini-delegation
-description: Routes read-heavy work, broad scoped changes, and independent review to Gemini through the Antigravity headless CLI, selecting gemini-3.8-flash high/medium/low by task complexity. Use GUI inbox/outbox handoff only when a rendered UI needs human verification.
+description: Routes read-heavy work, broad scoped changes, and independent review to Gemini through the Antigravity headless CLI, selecting gemini-4-hydrogen medium or high by task complexity. Use GUI inbox/outbox handoff only when a rendered UI needs human verification.
 ---
 
 # Gemini/Antigravity Delegation — Headless Worker
@@ -75,7 +75,7 @@ Poor fit:
 - A single small mechanical edit - use Kilo CLI instead; it is headless and does
   not cost the user a relay step. A batch of edits is handled in the next rule.
 
-Rule of thumb: a **single** tiny edit goes to Kilo CLI, which has no relay cost. A **batch** of mechanical edits inside one directory goes to `gemini-3.8-flash-medium` with an exact brief (five files at low took 61.2s on 2026-11-24; medium is the floor, so budget 600s). On anything broader, Gemini earns its relay cost.
+Rule of thumb: a **single** tiny edit goes to Kilo CLI, which has no relay cost. A **batch** of mechanical edits inside one directory goes to `gemini-4-hydrogen-medium` with an exact brief (a five-file batch took 61.2s at 3.8-flash-low on 2026-11-24; budget 600s). On anything broader, Gemini earns its relay cost.
 
 ## Maximizing Antigravity CLI use
 
@@ -119,14 +119,14 @@ gate.
 
 ```powershell
 # Read-only task
-python tools/antigravity_delegate.py "<task>" --model gemini-3.8-flash-medium
+python tools/antigravity_delegate.py "<task>" --model gemini-4-hydrogen-medium
 
 # Read-only task that needs tools (greps, tests, git status), no write scope
-python tools/antigravity_delegate.py "<task>" --allow-tools --model gemini-3.8-flash-medium
+python tools/antigravity_delegate.py "<task>" --allow-tools --model gemini-4-hydrogen-medium
 
 # Write task: narrow directory scope and explicit auto approval
 # Note: --allow-tools cannot be combined with --auto-approve; "." is rejected as not narrower
-python tools/antigravity_delegate.py "<task>" --target-dir <dir> --allow-dir <subdir> --auto-approve --model gemini-3.8-flash-medium
+python tools/antigravity_delegate.py "<task>" --target-dir <dir> --allow-dir <subdir> --auto-approve --model gemini-4-hydrogen-medium
 ```
 
 ### Tool permissions and silent failures
@@ -158,9 +158,9 @@ used to approve a change.
 
 | Tier | Model id | Use for |
 |---|---|---|
-| Medium (floor) | `gemini-3.8-flash-medium` | every default task: mechanical edits, multi-file summarize/compare, scoped refactor |
-| High (accuracy) | `gemini-3.8-flash-high` | independent review, subtle bug hunt, any verdict that gates a merge |
-| Low (legacy) | `gemini-3.8-flash-low` | not a default; kept because the id is still valid |
+| Medium (floor) | `gemini-4-hydrogen-medium` | every default task: mechanical edits, multi-file summarize/compare, scoped refactor |
+| High (accuracy) | `gemini-4-hydrogen-high` | independent review, subtle bug hunt, any verdict that gates a merge |
+| Flash (fallback) | `gemini-3.8-flash-{low,medium,high}` | still served; use when Hydrogen is unavailable, and note that older measurements were taken here |
 
 The earlier rule recommended low, and its reason is worth keeping. In a ~100-line
 implementation benchmark, low finished in 99.1s and passed 16/16. Medium hit the 200s and
@@ -174,9 +174,8 @@ record the fallback in the brief. One more measurement points the same way: in t
 `gemini-4-hydrogen-{low,medium,high,xhigh}`, `gemini-3.8-flash-{low,medium,high}`,
 `claude-sonnet-4-6`, `claude-opus-4-6-thinking`, `gpt-oss-120b-medium`. The fleet
 now serves a second Gemini family and non-Gemini models, so a tier name alone no
-longer identifies a model. Hydrogen has not been measured here: the floor-and-high
-policy above still names `gemini-3.8-flash-*` until a run shows Hydrogen wins on a
-task this harness actually delegates.
+longer identifies a model. An operator directive of 2026-11-25 makes Hydrogen the default: medium for
+everything, high when the answer gates a decision. `xhigh` exists and is not used.
 
 ### Authentication, quota, and account rotation
 

@@ -110,8 +110,8 @@ pick the cheapest worker that can finish it, then verify the result.
 | **Deep code work** — implement the brief | **DeepSeek V4.1 Flash via OpenCode CLI**, or **via Kilo CLI** when the OpenCode path is unstable | OpenCode: `python tools/opencode_delegate.py "<the brief>" --agent solo-code-engineer --model opencode-go/deepseek-v4.1-flash` · Kilo: `python tools/kilo_cli_delegate.py "<the brief>" --model opencode-go/deepseek-v4.1-flash` (same model, but the Kilo route drops the nested `deepseek/` segment; measured 2026-11-24, the nested id returns Unknown error. The Kilo server must be running: `python tools/kilo_server_manager.py ensure`) |
 | **A brief-shaped change, one file or one precise edit** — fastest path, and the worker can run the tests itself | **DeepSeek V4.1 Flash over the provider's own API** (no CLI in the middle) | `python tools/model_api.py --prompt-file <brief> --tools read,command --allow-program python3,ruff --sandbox wsl --transcript <file>` — measured: a trivial prompt 2.3s, a one-file change 22s, a two-command self-verification 10.9s inside the WSL fence; **the orchestrator applies and verifies the result**, and `--sandbox wsl` runs each command in namespaces where only the workspace is writable. Limits: keep the prompt under ~35K tokens (a 38K prompt drew HTTP 503 from the provider's gateway), and the returned diff may need a manual apply. |
 | DeepSeek-native heavier runs | **dsh** | `python tools/dsh_delegate.py "<brief>"` (needs its environment set up) |
-| **Fast / light work** — lookups, one-liners, "just check this": its tokens are free | **Gemini 3.8 Flash via Antigravity CLI** | `python tools/antigravity_delegate.py "<task>" --model gemini-3.8-flash-medium` |
-| **Independent review at the end of a batch** - one pass over the diff | **Gemini 3.8 Flash via Antigravity CLI** (free); escalate only when the diff touches auth, secrets, or its verdict contradicts a measured number | `python tools/antigravity_delegate.py "<review brief>" --model gemini-3.8-flash-medium --allow-tools` - run it only when no writer is active: the wrapper compares a workspace snapshot, so a concurrent worker's edits are reported as a read-only violation |
+| **Fast / light work** — lookups, one-liners, "just check this": its tokens are free | **Gemini 4 Hydrogen via Antigravity CLI** | `python tools/antigravity_delegate.py "<task>" --model gemini-4-hydrogen-medium` |
+| **Independent review at the end of a batch** - one pass over the diff | **Gemini 4 Hydrogen via Antigravity CLI** (free); escalate only when the diff touches auth, secrets, or its verdict contradicts a measured number | `python tools/antigravity_delegate.py "<review brief>" --model gemini-4-hydrogen-medium --allow-tools` - run it only when no writer is active: the wrapper compares a workspace snapshot, so a concurrent worker's edits are reported as a read-only violation |
 | Architecture, product, security decision | **Here** | Judgment is not delegable |
 
 The loop: **Jev** receives and splits → **Gemini or a read-only worker writes the
@@ -124,7 +124,7 @@ instead of at the honour system. Gemini takes the quick/light work because its
 tokens are free.
 
 The OpenCode wrapper also reaches the DeepSeek **strong** tier with
-`--model opencode-go/deepseek-v4-pro`. Pick the Antigravity tier by complexity, with medium as the floor: medium for the default case including mechanical and multi-file work, high for review and for any verdict that gates a merge. Low is legacy and is not a default.
+`--model opencode-go/deepseek-v4-pro`. Pick the Antigravity tier by complexity, with Hydrogen as the preferred family: `gemini-4-hydrogen-medium` for the default case including mechanical and multi-file work, `gemini-4-hydrogen-high` for review and for any verdict that gates a merge. The 3.8-flash ids remain the fallback.
 
 A live `dsh` run still needs its environment set up: `CI=true`, a one-time
 `pnpm build` in the checkout, and no exported `DEEPSEEK_BASE_URL` (dsh uses its
@@ -151,7 +151,7 @@ change; what differs is the relay and what goes wrong:
 | Shape | Route | Why |
 |---|---|---|
 | One precise edit, result wanted immediately | `model_api.py` | 22s measured, and the diff lands in this session to apply and verify |
-| A batch of mechanical edits in one directory | `agy`, `--model gemini-3.8-flash-medium` | 61.2s for five files at low on 2026-11-24; medium is the floor, so budget 600s |
+| A batch of mechanical edits in one directory | `agy`, `--model gemini-4-hydrogen-medium` | 61.2s for five files at low on 2026-11-24; medium is the floor, so budget 600s |
 | One tiny edit, or the OpenCode lane is unhealthy | `kilo_cli_delegate.py` | No relay cost, and it is the measured fallback when OpenCode fails |
 
 Never route a one-line edit through agy at any tier: the relay costs more than the edit.
