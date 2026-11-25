@@ -4,12 +4,6 @@
 -- File này chỉ để đọc hiểu — sửa schema thật thì sửa trong tools/shared_state.py.
 -- Four legacy tables (features, shared_memory_conventions, shared_memory_gotchas, shared_memory_decisions) are removed when SharedState opens an older database.
 
-CREATE TABLE IF NOT EXISTS meta (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
--- keys hợp lệ: version, updated_at, updated_by_engine, updated_by_model
-
 CREATE TABLE IF NOT EXISTS session_log (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp     TEXT NOT NULL,     -- ISO 8601 UTC

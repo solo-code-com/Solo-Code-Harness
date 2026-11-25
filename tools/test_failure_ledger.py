@@ -177,6 +177,13 @@ def test_report_counts(tmp_path):
     assert report["sessions"]["duration"]["max_s"] == 600.0
 
 
+def test_report_sessions_latest_tracks_newest_session_log_row(tmp_path):
+    root = _seed_repo(tmp_path)
+    report = collect(root)
+
+    assert report["sessions"]["latest"] == "2026-10-01T12:00:00+00:00"
+
+
 def test_failures_name_the_right_worker(tmp_path):
     root = _seed_repo(tmp_path)
     report = collect(root)

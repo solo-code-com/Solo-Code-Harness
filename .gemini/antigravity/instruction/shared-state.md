@@ -5,7 +5,7 @@
 
 ## Mục đích và schema hiện tại
 
-`.solocode/shared-state.db` hiện chỉ lưu đúng hai thứ: `active_locks` và `session_log` (cùng bảng nội bộ `meta`).
+`.solocode/shared-state.db` hiện chỉ lưu đúng hai thứ: `active_locks` và `session_log`.
 Bốn bảng cũ (`features`, `shared_memory_conventions`, `shared_memory_gotchas`, `shared_memory_decisions`) đã bị xoá khỏi schema và sẽ bị gỡ bỏ khỏi file DB cũ mỗi khi module mở file.
 
 ### Tri thức dự án nằm ở đâu

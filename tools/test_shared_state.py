@@ -360,6 +360,10 @@ def test_legacy_tables_are_removed_on_open(tmp_path):
     conn = sqlite3.connect(path)
     conn.executescript(
         """
+        CREATE TABLE meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
         CREATE TABLE features (
             id TEXT PRIMARY KEY,
             name TEXT,
@@ -408,6 +412,7 @@ def test_legacy_tables_are_removed_on_open(tmp_path):
             ).fetchall()
         }
         for legacy in (
+            "meta",
             "features",
             "shared_memory_conventions",
             "shared_memory_gotchas",

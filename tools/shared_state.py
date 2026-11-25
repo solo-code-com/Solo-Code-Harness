@@ -136,6 +136,7 @@ def pid_alive(pid: int) -> bool:
 #: Tables an older database still carries. Nothing ever wrote them, and they are
 #: removed on open so the file cannot suggest a memory store that does not exist.
 _LEGACY_TABLES = (
+    "meta",
     "features",
     "shared_memory_conventions",
     "shared_memory_gotchas",
@@ -143,10 +144,6 @@ _LEGACY_TABLES = (
 )
 
 SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS meta (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
 CREATE TABLE IF NOT EXISTS session_log (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp     TEXT NOT NULL,
@@ -440,21 +437,6 @@ class SharedState:
         ]
 
     # ── Meta / Health ────────────────────────────────────────
-
-    def touch_meta(self, *, engine: str, model: str) -> None:
-        now = _now()
-        with self._transaction():
-            for k, v in (
-                ("version", "1.0.0"),
-                ("updated_at", now),
-                ("updated_by_engine", engine),
-                ("updated_by_model", model),
-            ):
-                self._conn.execute(
-                    "INSERT INTO meta (key, value) VALUES (?, ?) "
-                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                    (k, v),
-                )
 
     def integrity_check(self) -> list[str]:
         """PRAGMA integrity_check — returns [] if the DB file is healthy."""

@@ -391,8 +391,12 @@ def collect(root: Path) -> dict[str, Any]:
     usage_rows = _read_usage(root, notes)
 
     by_engine: Counter[str] = Counter()
+    latest_log_stamp: datetime | None = None
     for row in log_rows:
         by_engine[str(row.get("engine") or "unknown")] += 1
+        stamp = _parse_iso(row.get("timestamp"))
+        if stamp is not None and (latest_log_stamp is None or stamp > latest_log_stamp):
+            latest_log_stamp = stamp
 
     by_status: Counter[str] = Counter()
     durations: list[float] = []
@@ -515,6 +519,7 @@ def collect(root: Path) -> dict[str, Any]:
         "root": str(root),
         "sessions": {
             "total": len(log_rows),
+            "latest": latest_log_stamp.isoformat() if latest_log_stamp else None,
             "session_records": len(session_rows),
             "by_engine": dict(by_engine.most_common()),
             "by_status": dict(by_status.most_common()),
@@ -572,6 +577,8 @@ def print_report(report: dict[str, Any]) -> None:
     print()
     print("Sessions")
     print(f"  total (session_log): {sessions['total']}")
+    latest = _short_stamp(sessions["latest"]) if sessions["latest"] else "none"
+    print(f"  newest session_log row: {latest}")
     print(f"  rows in sessions.db: {sessions['session_records']}")
     print(f"  by engine: {_format_counts(sessions['by_engine'])}")
     print(f"  by status: {_format_counts(sessions['by_status'])}")
