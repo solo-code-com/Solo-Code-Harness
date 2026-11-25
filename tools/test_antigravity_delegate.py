@@ -1031,6 +1031,45 @@ def test_destructive_prompt_is_refused_before_spawning(monkeypatch, capsys):
     assert "refused" in capsys.readouterr().err
 
 
+def test_credential_path_prompt_is_refused_before_spawning(
+    monkeypatch, tmp_path, capsys
+):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+
+    def _must_not_spawn(**kwargs):
+        raise AssertionError("worker was spawned for a credential path prompt")
+
+    monkeypatch.setattr(antigravity_delegate, "run_agy_cli", _must_not_spawn)
+    prompt = "inspect " + "id" + "_ed25519"
+    code = antigravity_delegate.main([prompt, "--target-dir", str(ws)])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "refused" in err
+    assert "credential path (ssh_key_file)" in err
+
+
+def test_allow_credential_paths_bypasses_credential_check(
+    monkeypatch, tmp_path, capsys
+):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    called: list[str] = []
+
+    def fake_run(**kwargs):
+        called.append(kwargs["prompt"])
+        return {"text": "done", "error": None}, 0
+
+    monkeypatch.setattr(antigravity_delegate, "run_agy_cli", fake_run)
+    prompt = "inspect " + "id" + "_ed25519"
+    code = antigravity_delegate.main(
+        [prompt, "--target-dir", str(ws), "--allow-credential-paths"]
+    )
+    assert code == 0
+    assert len(called) == 1
+    err = capsys.readouterr().err
+    assert "[control-path] credential-path check bypassed for this run" in err
+    assert "credential path" not in err
+
+
 def test_protected_state_change_blocks_the_run(monkeypatch, tmp_path, capsys):
     ws, _ = _wire_main(monkeypatch, tmp_path)
     calls = 0

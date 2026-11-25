@@ -27,6 +27,7 @@ from pathlib import Path
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
+
 class Colors:
     HEADER = "\033[95m"
     BLUE = "\033[94m"
@@ -45,6 +46,7 @@ class EvalResult:
     message: str = ""
     suite: str = ""
 
+
 @dataclass
 class EvalRunner:
     project: Path
@@ -60,8 +62,9 @@ class EvalRunner:
         self.results.append(EvalResult(name, False, msg, suite))
         print(f"  {Colors.RED}FAIL{Colors.ENDC} {name}: {msg}")
 
-    def assert_true(self, condition: bool, name: str, suite: str = "",
-                    msg: str = "") -> None:
+    def assert_true(
+        self, condition: bool, name: str, suite: str = "", msg: str = ""
+    ) -> None:
         if condition:
             self.ok(name, suite, msg)
         else:
@@ -78,7 +81,10 @@ class EvalRunner:
         try:
             result = subprocess.run(
                 ["node", "-c", str(script)],
-                capture_output=True, text=True, timeout=10, cwd=str(self.project)
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(self.project),
             )
             if result.returncode == 0:
                 return True, ""
@@ -101,12 +107,16 @@ class EvalRunner:
         try:
             result = subprocess.run(
                 [sys.executable, str(scan), str(self.project)],
-                capture_output=True, text=True, timeout=60, cwd=str(self.project)
+                capture_output=True,
+                text=True,
+                timeout=60,
+                cwd=str(self.project),
             )
             self.assert_true(
                 result.returncode == 0,
-                "Security scan passes on own codebase", suite,
-                f"exit={result.returncode}"
+                "Security scan passes on own codebase",
+                suite,
+                f"exit={result.returncode}",
             )
         except Exception as e:
             self.fail("Security scan execution", suite, str(e))
@@ -119,12 +129,14 @@ class EvalRunner:
                 "rm -rf /*" in content, "Gate guard: rm -rf blocked in config", suite
             )
             self.assert_true(
-                "DROP TABLE" in content, "Gate guard: DROP TABLE blocked in config",
-                suite
+                "DROP TABLE" in content,
+                "Gate guard: DROP TABLE blocked in config",
+                suite,
             )
             self.assert_true(
                 "git push --force" in content,
-                "Gate guard: force push blocked in config", suite
+                "Gate guard: force push blocked in config",
+                suite,
             )
 
         # Check AGENTS.md has security rules
@@ -133,11 +145,13 @@ class EvalRunner:
             content = agents.read_text(encoding="utf-8")
             self.assert_true(
                 "security_scan.py" in content,
-                "AGENTS.md: references security scan", suite
+                "AGENTS.md: references security scan",
+                suite,
             )
             self.assert_true(
                 "Never hardcode credentials" in content,
-                "AGENTS.md: no hardcoded credentials rule", suite
+                "AGENTS.md: no hardcoded credentials rule",
+                suite,
             )
 
     # ── Hooks Suite ───────────────────────────────────────────────────────
@@ -159,7 +173,7 @@ class EvalRunner:
                 self.assert_true(
                     len(all_hooks) >= 6,
                     f"At least 6 hooks registered (found {len(all_hooks)})",
-                    suite
+                    suite,
                 )
             except json.JSONDecodeError as e:
                 self.fail("hooks.json is valid JSON", suite, str(e))
@@ -183,10 +197,7 @@ class EvalRunner:
             self.assert_file(script, f"Hook file: {name}", suite)
             if script.is_file():
                 ok, err = self.run_node_check(script)
-                self.assert_true(
-                    ok, f"Hook syntax: {name}", suite,
-                    err
-                )
+                self.assert_true(ok, f"Hook syntax: {name}", suite, err)
 
     # ── Artifacts Suite ───────────────────────────────────────────────────
 
@@ -213,7 +224,8 @@ class EvalRunner:
             # Must not contain dead template markers
             self.assert_true(
                 "<!-- One paragraph:" not in content,
-                "AGENTS.md: no unfilled template markers", suite
+                "AGENTS.md: no unfilled template markers",
+                suite,
             )
 
         # Checklist exists
@@ -232,9 +244,7 @@ class EvalRunner:
         cmd_dir = self.project / ".kilo" / "command"
         expected_cmds = ["plan", "verify", "debug", "test", "brainstorm", "decide"]
         for cmd in expected_cmds:
-            self.assert_file(
-                cmd_dir / f"{cmd}.md", f"Command /{cmd} exists", suite
-            )
+            self.assert_file(cmd_dir / f"{cmd}.md", f"Command /{cmd} exists", suite)
 
     # ── Context Suite ─────────────────────────────────────────────────────
 
@@ -249,62 +259,68 @@ class EvalRunner:
             content = ctx_monitor.read_text(encoding="utf-8")
             self.assert_true(
                 "OUTPUT_TRIM_LINES" in content,
-                "Context monitor: output size threshold defined", suite
+                "Context monitor: output size threshold defined",
+                suite,
             )
             self.assert_true(
                 "checkToolOutputSize" in content,
-                "Context monitor: observe-only design (no output mutation)", suite
+                "Context monitor: observe-only design (no output mutation)",
+                suite,
             )
             self.assert_true(
                 "NEVER modifies" in content or "DO NOT modify" in content,
-                "Context monitor: docs state output is never modified", suite
+                "Context monitor: docs state output is never modified",
+                suite,
             )
             self.assert_true(
                 "buildTrimmedResponse" not in content
                 and "trimToolOutput" not in content,
-                "Context monitor: no legacy output-trimming functions", suite
+                "Context monitor: no legacy output-trimming functions",
+                suite,
             )
             self.assert_true(
                 "TOOL_CALL_WARN_1" in content and "TOOL_CALL_WARN_2" in content,
-                "Context monitor: two-stage warning thresholds", suite
+                "Context monitor: two-stage warning thresholds",
+                suite,
             )
             self.assert_true(
                 "TOKEN_LOG_FILE" in content,
-                "Context monitor: token logging configured", suite
+                "Context monitor: token logging configured",
+                suite,
             )
             self.assert_true(
                 "HIGH_OUTPUT_TOOLS" in content,
-                "Context monitor: high-output tool list defined", suite
+                "Context monitor: high-output tool list defined",
+                suite,
             )
             self.assert_true(
                 "estimateTokens" in content,
-                "Context monitor: token estimation logic", suite
+                "Context monitor: token estimation logic",
+                suite,
             )
 
         # Session hooks have observability
-        session_end = (
-            self.project / ".kilo" / "hooks" / "session" / "session-end.js"
-        )
+        session_end = self.project / ".kilo" / "hooks" / "session" / "session-end.js"
         if session_end.is_file():
             content = session_end.read_text(encoding="utf-8")
             self.assert_true(
-                "Session Summary" in content,
-                "Session end: emits summary report", suite
+                "Session Summary" in content, "Session end: emits summary report", suite
             )
             self.assert_true(
                 "estimatedCostUSD" in content or "cost" in content.lower(),
-                "Session end: tracks cost estimation", suite
+                "Session end: tracks cost estimation",
+                suite,
             )
             self.assert_true(
                 "formatDuration" in content,
-                "Session end: human-readable duration", suite
+                "Session end: human-readable duration",
+                suite,
             )
 
         # State directory
         state_dir = self.project / ".kilo" / "state"
         self.assert_true(
-            state_dir.is_dir(),
-            "State directory exists (.kilo/state)", suite
+            state_dir.is_dir(), "State directory exists (.kilo/state)", suite
         )
 
     # ── Summary ───────────────────────────────────────────────────────────
@@ -321,9 +337,9 @@ class EvalRunner:
             else:
                 suites[s]["failed"] += 1
 
-        print(f"\n{Colors.BOLD}{Colors.CYAN}{'='*60}{Colors.ENDC}")
+        print(f"\n{Colors.BOLD}{Colors.CYAN}{'=' * 60}{Colors.ENDC}")
         print(f"{Colors.BOLD}{Colors.CYAN}  EVAL SUMMARY{Colors.ENDC}")
-        print(f"{Colors.BOLD}{Colors.CYAN}{'='*60}{Colors.ENDC}")
+        print(f"{Colors.BOLD}{Colors.CYAN}{'=' * 60}{Colors.ENDC}")
 
         total_pass = 0
         total_fail = 0
@@ -353,20 +369,21 @@ class EvalRunner:
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Solo-Code Harness Evaluator"
+    parser = argparse.ArgumentParser(description="Solo-Code Harness Evaluator")
+    parser.add_argument("project", help="Project path to evaluate")
+    parser.add_argument(
+        "--suite",
+        choices=["security", "hooks", "artifacts", "context", "all"],
+        default="all",
+        help="Eval suite to run (default: all)",
     )
     parser.add_argument(
-        "project", help="Project path to evaluate"
-    )
-    parser.add_argument(
-        "--suite", choices=["security", "hooks", "artifacts", "context", "all"],
-        default="all", help="Eval suite to run (default: all)"
-    )
-    parser.add_argument(
-        "--verbose", "-v", action="store_true",
-        help="Show all checks, not just failures"
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show all checks, not just failures",
     )
     args = parser.parse_args()
 
@@ -375,9 +392,9 @@ def main():
         print(f"{Colors.RED}Project path does not exist: {project}{Colors.ENDC}")
         sys.exit(1)
 
-    print(f"\n{Colors.BOLD}{Colors.CYAN}{'='*60}{Colors.ENDC}")
+    print(f"\n{Colors.BOLD}{Colors.CYAN}{'=' * 60}{Colors.ENDC}")
     print(f"{Colors.BOLD}{Colors.CYAN}  SOLO-CODE HARNESS EVALUATOR{Colors.ENDC}")
-    print(f"{Colors.BOLD}{Colors.CYAN}{'='*60}{Colors.ENDC}")
+    print(f"{Colors.BOLD}{Colors.CYAN}{'=' * 60}{Colors.ENDC}")
     print(f"  Project: {project}")
 
     runner = EvalRunner(project, verbose=args.verbose)

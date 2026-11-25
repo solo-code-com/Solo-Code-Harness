@@ -479,8 +479,8 @@ def _git_porcelain(root: Path) -> str:
     return proc.stdout
 
 
-def _blocked_prompt(prompt: str) -> str | None:
-    """Return the first destructive rule the prompt names, if any.
+def _blocked_prompt(prompt: str, *, allow_credential_paths: bool = False) -> str | None:
+    """Return the first destructive rule or credential path the prompt names, if any.
 
     agy never meets .claude/hooks/guard.py, so the shared rule table is applied
     to the prompt before a session is created or any quota is spent.
@@ -489,7 +489,13 @@ def _blocked_prompt(prompt: str) -> str | None:
         import guard_rules
     except ImportError:  # pragma: no cover - script-dir import path
         from tools import guard_rules  # type: ignore[no-redef]
-    return guard_rules.match_prompt(prompt)
+    matched = guard_rules.match_prompt(prompt)
+    if matched:
+        return matched
+    if allow_credential_paths:
+        return None
+    label = guard_rules.credential_path_in(prompt)
+    return f"credential path ({label})" if label else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -522,6 +528,11 @@ def main(argv: list[str] | None = None) -> int:
         "--allow-control-paths",
         action="store_true",
         help="Allow the worker to edit harness control paths (only when maintaining the harness)",
+    )
+    parser.add_argument(
+        "--allow-credential-paths",
+        action="store_true",
+        help="let the brief name a credential path (harness maintenance only)",
     )
     parser.add_argument(
         "--allow-ignored-writes",
@@ -677,7 +688,11 @@ def main(argv: list[str] | None = None) -> int:
         snapshot_workspace(target_dir) if args.auto_approve or args.allow_tools else {}
     )
 
-    _blocked = _blocked_prompt(prompt)
+    if args.allow_credential_paths:
+        _stderr("[control-path] credential-path check bypassed for this run")
+    _blocked = _blocked_prompt(
+        prompt, allow_credential_paths=args.allow_credential_paths
+    )
     if _blocked:
         _stderr(
             "[control-path] refused: prompt names a blocked command (" + _blocked + ")"

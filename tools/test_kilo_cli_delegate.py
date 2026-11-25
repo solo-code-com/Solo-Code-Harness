@@ -1088,6 +1088,75 @@ def test_blocked_prompt_refused_before_spawn(monkeypatch, tmp_path, capsys):
     assert "[control-path] refused:" in capsys.readouterr().err
 
 
+def test_credential_path_prompt_refused_before_spawn(monkeypatch, tmp_path, capsys):
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    popen_called: list[object] = []
+    monkeypatch.setattr(
+        kilo_cli_delegate.subprocess,
+        "Popen",
+        lambda *a, **k: popen_called.append(a),
+    )
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **kw: run_called.append(kw) or _ok_result(),
+    )
+
+    prompt = "inspect " + "id" + "_ed25519"
+    code = kilo_cli_delegate.main(
+        [prompt, "--no-guardrail", "--directory", str(tmp_path)]
+    )
+
+    assert code == 2
+    assert len(popen_called) == 0
+    assert len(run_called) == 0
+    err = capsys.readouterr().err
+    assert "[control-path] refused:" in err
+    assert "credential path (ssh_key_file)" in err
+
+
+def test_allow_credential_paths_bypasses_credential_check(
+    monkeypatch, tmp_path, capsys
+):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(kilo_cli_delegate, "ROOT", ws)
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+
+    called: list[str] = []
+
+    def fake_run(**kwargs):
+        called.append(kwargs["prompt"])
+        return _ok_result()
+
+    monkeypatch.setattr(kilo_cli_delegate, "run_kilo_cli", fake_run)
+
+    prompt = "inspect " + "id" + "_ed25519"
+    code = kilo_cli_delegate.main(
+        [
+            prompt,
+            "--no-guardrail",
+            "--allow-credential-paths",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+
+    assert code == 0
+    assert called == [prompt]
+    err = capsys.readouterr().err
+    assert "[control-path] credential-path check bypassed for this run" in err
+    assert "credential path" not in err
+
+
 def test_tier_gate_refusal_blocks_before_spawn(monkeypatch, tmp_path, capsys):
     _reach_scope_run(monkeypatch, tmp_path)
     monkeypatch.setattr(

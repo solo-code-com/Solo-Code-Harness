@@ -489,3 +489,28 @@ def match_prompt(text: str) -> str | None:
         if pattern.search(lowered):
             return label
     return None
+
+
+#: These are wrapper-level only: the delegation wrappers apply them to a brief
+#: before spawning. The Kilo hook does not, because that session has a person at
+#: the keyboard who can see the command.
+#: Paths that hold credentials for the operator account. Matched as path shapes,
+#: not as words, so prose about a protocol does not trip them.
+CREDENTIAL_PATH_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("ssh_key_dir", re.compile(r"(?:^|[^\w])\.ssh[/\\]")),
+    ("ssh_key_file", re.compile(r"\b(?:id_rsa|id_dsa|id_ecdsa|id_ed25519)\b")),
+    ("authorized_keys", re.compile(r"\bauthorized_keys\b", re.IGNORECASE)),
+    ("aws_dir", re.compile(r"(?:^|[^\w])\.aws[/\\]")),
+    ("netrc", re.compile(r"(?:^|[^\w])\.?netrc\b")),
+    ("gh_config", re.compile(r"\.config[/\\]gh[/\\]")),
+    ("sudoers", re.compile(r"/etc/sudoers\b")),
+    ("nt_device", re.compile(r"\\\\[.?]")),
+)
+
+
+def credential_path_in(text: str) -> str | None:
+    """Return the label of the first credential path the text names, or None."""
+    for label, pattern in CREDENTIAL_PATH_PATTERNS:
+        if pattern.search(text):
+            return label
+    return None

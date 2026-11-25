@@ -1686,6 +1686,69 @@ def test_destructive_prompt_is_refused_before_spawning(monkeypatch, tmp_path, ca
     assert "refused" in capsys.readouterr().err
 
 
+def test_credential_path_prompt_is_refused_before_spawning(
+    monkeypatch, tmp_path, capsys
+):
+    def _must_not_spawn(**kwargs):
+        raise AssertionError("worker was spawned for a credential path prompt")
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", _must_not_spawn)
+    prompt = "inspect " + "id" + "_ed25519"
+    code = opencode_delegate.main([prompt, "--directory", str(tmp_path)])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "refused" in err
+    assert "credential path (ssh_key_file)" in err
+
+
+def test_allow_credential_paths_bypasses_credential_check(
+    monkeypatch, tmp_path, capsys
+):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    called: list[str] = []
+
+    def fake_run(**kwargs):
+        called.append(kwargs["prompt"])
+        return _ok_result()
+
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+    monkeypatch.setattr(
+        protected_state, "fingerprint", lambda _root: {".solocode/reviews": "<empty>"}
+    )
+
+    prompt = "inspect " + "id" + "_ed25519"
+    code = opencode_delegate.main(
+        [
+            prompt,
+            "--no-guardrail",
+            "--cascade",
+            "off",
+            "--allow-credential-paths",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code == 0
+    assert called == [prompt]
+    err = capsys.readouterr().err
+    assert "[control-path] credential-path check bypassed for this run" in err
+    assert "credential path" not in err
+
+
 # ── cascade fallback tests ───────────────────────────────────────────────────
 
 

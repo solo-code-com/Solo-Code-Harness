@@ -1021,8 +1021,8 @@ def log_usage(
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 
-def _blocked_prompt(prompt: str) -> str | None:
-    """Return the first destructive rule the prompt names, if any.
+def _blocked_prompt(prompt: str, *, allow_credential_paths: bool = False) -> str | None:
+    """Return the first destructive rule or credential path the prompt names, if any.
 
     The wrapper drives a worker that never meets .claude/hooks/guard.py, so the
     same rule table is applied to the prompt before any tokens are spent.
@@ -1031,7 +1031,13 @@ def _blocked_prompt(prompt: str) -> str | None:
         import guard_rules
     except ImportError:  # pragma: no cover - script-dir import path
         from tools import guard_rules  # type: ignore[no-redef]
-    return guard_rules.match_prompt(prompt)
+    matched = guard_rules.match_prompt(prompt)
+    if matched:
+        return matched
+    if allow_credential_paths:
+        return None
+    label = guard_rules.credential_path_in(prompt)
+    return f"credential path ({label})" if label else None
 
 
 def _control_violations(directory: str) -> list[str]:
@@ -1200,6 +1206,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Allow the worker to edit harness control paths (only when maintaining the harness)",
     )
     parser.add_argument(
+        "--allow-credential-paths",
+        action="store_true",
+        help="let the brief name a credential path (harness maintenance only)",
+    )
+    parser.add_argument(
         "--no-guardrail",
         action="store_true",
         help="Skip prepending the strict guardrail preamble",
@@ -1300,7 +1311,11 @@ def main(argv: list[str] | None = None) -> int:
     # Refuse a destructive prompt before any subprocess runs: the WSL probe and
     # the model fallback list both spawn processes, so the check cannot sit next
     # to the worker call.
-    _blocked = _blocked_prompt(args.prompt)
+    if args.allow_credential_paths:
+        _stderr("[control-path] credential-path check bypassed for this run")
+    _blocked = _blocked_prompt(
+        args.prompt, allow_credential_paths=args.allow_credential_paths
+    )
     if _blocked:
         _stderr(
             "[control-path] refused: prompt names a blocked command (" + _blocked + ")"
@@ -1451,7 +1466,9 @@ def main(argv: list[str] | None = None) -> int:
         detail = f" ({type(before_exc).__name__})" if before_exc else ""
         _stderr(f"scope: snapshot unavailable{detail}")
         return SCOPE_ERROR_EXIT_CODE
-    _blocked = _blocked_prompt(args.prompt)
+    _blocked = _blocked_prompt(
+        args.prompt, allow_credential_paths=args.allow_credential_paths
+    )
     if _blocked:
         _stderr(
             "[control-path] refused: prompt names a blocked command (" + _blocked + ")"

@@ -636,6 +636,11 @@ def main(argv: list[str] | None = None) -> int:
         help="allow the worker to edit harness control paths (maintenance only)",
     )
     parser.add_argument(
+        "--allow-credential-paths",
+        action="store_true",
+        help="let the brief name a credential path (harness maintenance only)",
+    )
+    parser.add_argument(
         "--allow-ignored-writes",
         action="store_true",
         help="permit writes into node_modules, build, dist, .venv, venv or target",
@@ -689,6 +694,16 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
+    if args.allow_credential_paths:
+        _stderr("[control-path] credential-path check bypassed for this run")
+    else:
+        cred = guard_rules.credential_path_in(args.prompt)
+        if cred:
+            print(
+                f"[control-path] refused: prompt names a blocked command (credential path ({cred}))",
+                file=sys.stderr,
+            )
+            return 2
     before_porcelain = _git_porcelain(args.directory)
     before_state = None
     if not args.allow_control_paths:
