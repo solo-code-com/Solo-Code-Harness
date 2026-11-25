@@ -296,6 +296,26 @@ def _read_receipt(path: Path, tree_hash: str) -> dict[str, object] | None:
     return stored
 
 
+def requires_receipt(policy: dict[str, object], change: dict[str, object]) -> bool:
+    """Return True when the change meets both policy thresholds."""
+    return (
+        change["changed_files"] >= policy["min_changed_files"]
+        and change["changed_lines"] >= policy["min_changed_lines"]
+    )
+
+
+def _has_findings_counts(stored: dict[str, object]) -> bool:
+    """Return True when `stored` carries a findings block with integer counts."""
+    findings = stored.get("findings")
+    if not isinstance(findings, dict):
+        return False
+    for key in ("total", "verified", "read", "inferred"):
+        value = findings.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            return False
+    return True
+
+
 def record_receipt(
     reviewer: str,
     model: str,
@@ -308,9 +328,21 @@ def record_receipt(
 
     `rationale` records why the tree was approved. It is metadata about
     the review, never part of the tree: the hash inputs stay untouched.
+    When the change requires a receipt, `findings_path` is mandatory.
     When `findings_path` is provided, the report must pass `review_check`
     before anything is written, and its counts and sha256 are recorded.
     """
+    policy = load_policy(root)
+    change = compute_change_set(root, git)
+    tree_hash = str(change["tree_hash"])
+
+    if requires_receipt(policy, change) and findings_path is None:
+        raise ReceiptError(
+            f"change is large ({change['changed_files']} file(s) / "
+            f"{change['changed_lines']} changed line(s)): "
+            "pass --findings with a report from the reviewer"
+        )
+
     findings_summary: dict[str, object] | None = None
     if findings_path is not None:
         try:
@@ -328,10 +360,6 @@ def record_receipt(
             "inferred": counts["inferred"],
             "sha256": checked["sha256"],
         }
-
-    policy = load_policy(root)
-    change = compute_change_set(root, git)
-    tree_hash = str(change["tree_hash"])
 
     receipt: dict[str, object] = {
         "schema": SCHEMA_VERSION,
@@ -373,10 +401,7 @@ def verify(root: Path = ROOT, git: str = GIT) -> dict[str, object]:
     changed_files = change["changed_files"]
     changed_lines = change["changed_lines"]
     tree_hash = str(change["tree_hash"])
-    required = (
-        changed_files >= policy["min_changed_files"]
-        and changed_lines >= policy["min_changed_lines"]
-    )
+    required = requires_receipt(policy, change)
 
     result: dict[str, object] = {
         "required": required,
@@ -412,6 +437,14 @@ def verify(root: Path = ROOT, git: str = GIT) -> dict[str, object]:
                 f" ({len(others)} receipt(s) exist for other trees; a receipt for a "
                 "stale tree does not count)"
             )
+        return result
+
+    if not _has_findings_counts(stored):
+        result["exit_code"] = 1
+        result["reason"] = (
+            f"review required: {measured} - receipt for tree {tree_hash} "
+            "predates the findings requirement and has to be recorded again with --findings"
+        )
         return result
 
     rationale = stored.get("rationale")

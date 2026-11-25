@@ -116,6 +116,21 @@ def _over_threshold(root: Path) -> None:
     _write(root, "extra.txt", "alpha\nbeta\ngamma\ndelta\n")
 
 
+def _accepted_report(tmp_path: Path) -> Path:
+    """Write a minimal review report that passes `review_check.check_file`."""
+    report = tmp_path / "accepted_report.txt"
+    report.write_text(
+        (
+            "1. high | code | base.txt:2 | missing check\n"
+            "  proof: ran python -m pytest -q\n"
+            "2. low | feature | typo in comment\n"
+            "  proof: inferred\n"
+        ),
+        encoding="utf-8",
+    )
+    return report
+
+
 def test_same_tree_hashes_identically(tmp_path: Path) -> None:
     """Measurement is deterministic: two reads of one tree agree."""
     tool = _load_tool()
@@ -213,7 +228,9 @@ def test_record_then_verify_exits_0(tmp_path: Path) -> None:
     root = _repo(tmp_path)
     _over_threshold(root)
 
-    path, receipt = tool.record_receipt("codex", "gpt-6.1-sol", root)
+    path, receipt = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
 
     assert path.is_file()
     assert path.name == f"{receipt['tree_hash']}.json"
@@ -225,7 +242,9 @@ def test_stale_receipt_does_not_satisfy(tmp_path: Path, capsys) -> None:
     tool = _load_tool()
     root = _repo(tmp_path)
     _over_threshold(root)
-    stale, _ = tool.record_receipt("codex", "gpt-6.1-sol", root)
+    stale, _ = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
 
     _write(root, "base.txt", "one\nedited after review\nthree\nfour\n")
 
@@ -256,7 +275,9 @@ def test_receipt_schema_boolean_exits_2(tmp_path: Path, capsys) -> None:
     root = _repo(tmp_path, AND_POLICY)
     _write(root, "base.txt", "one\n" + "added line\n" * 20)
     _write(root, "extra.txt", "alpha\n" + "added line\n" * 20)
-    path, _ = tool.record_receipt("codex", "gpt-6.1-sol", root)
+    path, _ = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
 
     stored = json.loads(path.read_text(encoding="utf-8"))
     stored["schema"] = True
@@ -310,10 +331,12 @@ def test_receipt_json_has_exactly_the_documented_fields(tmp_path: Path) -> None:
     root = _repo(tmp_path)
     _over_threshold(root)
 
-    path, _ = tool.record_receipt("codex", "gpt-6.1-sol", root)
+    path, _ = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
     stored = json.loads(path.read_text(encoding="utf-8"))
 
-    assert set(stored) == RECEIPT_FIELDS
+    assert set(stored) == RECEIPT_FIELDS | {"findings"}
     assert stored["schema"] == 1
     assert isinstance(stored["schema"], int) and not isinstance(stored["schema"], bool)
     assert len(stored["tree_hash"]) == 64
@@ -487,7 +510,9 @@ def test_stage_after_receipt_moves_hash_and_verify_exits_1(
     tool = _load_tool()
     root = _repo(tmp_path)
     _over_threshold(root)
-    _, receipt = tool.record_receipt("codex", "gpt-6.1-sol", root)
+    _, receipt = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
     staged_hash = receipt["tree_hash"]
 
     # Edit again, still unstaged: the index is untouched, so the receipt fits.
@@ -554,7 +579,9 @@ def test_record_then_add_file_past_threshold_exits_1(tmp_path: Path, capsys) -> 
     for i in range(1, 6):
         _write(root, f"f{i}.txt", "".join(f"line {j}\n" for j in range(1, 25)))
 
-    path, receipt = tool.record_receipt("codex", "gpt-6.1-sol", root)
+    path, receipt = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
     assert path.is_file()
     assert tool.main(["verify"], root=root) == 0
 
@@ -612,7 +639,11 @@ def test_record_with_rationale_stores_it(tmp_path: Path) -> None:
     _over_threshold(root)
 
     path, receipt = tool.record_receipt(
-        "codex", "gpt-6.1-sol", root, rationale="contract change, tests cover it"
+        "codex",
+        "gpt-6.1-sol",
+        root,
+        rationale="contract change, tests cover it",
+        findings_path=_accepted_report(tmp_path),
     )
 
     stored = json.loads(path.read_text(encoding="utf-8"))
@@ -625,6 +656,7 @@ def test_cli_record_accepts_rationale_flag(tmp_path: Path) -> None:
     tool = _load_tool()
     root = _repo(tmp_path, RATIONALE_POLICY)
     _over_threshold(root)
+    report = _accepted_report(tmp_path)
 
     assert (
         tool.main(
@@ -636,6 +668,8 @@ def test_cli_record_accepts_rationale_flag(tmp_path: Path) -> None:
                 "gpt-6.1-sol",
                 "--rationale",
                 "reviewed end to end",
+                "--findings",
+                str(report),
             ],
             root=root,
         )
@@ -651,7 +685,9 @@ def test_empty_rationale_passes_when_policy_does_not_require_it(
     tool = _load_tool()
     root = _repo(tmp_path)
     _over_threshold(root)
-    tool.record_receipt("codex", "gpt-6.1-sol", root)
+    tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
 
     assert tool.main(["verify"], root=root) == 0
 
@@ -661,7 +697,9 @@ def test_required_rationale_missing_exits_1(tmp_path: Path, capsys) -> None:
     tool = _load_tool()
     root = _repo(tmp_path, RATIONALE_POLICY)
     _over_threshold(root)
-    tool.record_receipt("codex", "gpt-6.1-sol", root)
+    tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
 
     assert tool.main(["verify"], root=root) == 1
     assert "--rationale" in capsys.readouterr().out
@@ -672,7 +710,11 @@ def test_required_rationale_present_exits_0(tmp_path: Path) -> None:
     root = _repo(tmp_path, RATIONALE_POLICY)
     _over_threshold(root)
     tool.record_receipt(
-        "codex", "gpt-6.1-sol", root, rationale="reviewed the diff end to end"
+        "codex",
+        "gpt-6.1-sol",
+        root,
+        rationale="reviewed the diff end to end",
+        findings_path=_accepted_report(tmp_path),
     )
 
     assert tool.main(["verify"], root=root) == 0
@@ -683,7 +725,9 @@ def test_old_receipt_without_rationale_key_is_tolerated(tmp_path: Path) -> None:
     tool = _load_tool()
     root = _repo(tmp_path)
     _over_threshold(root)
-    path, _ = tool.record_receipt("codex", "gpt-6.1-sol", root)
+    path, _ = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
 
     stored = json.loads(path.read_text(encoding="utf-8"))
     stored.pop("rationale")
@@ -779,6 +823,148 @@ def test_record_with_rejected_findings_writes_nothing_and_returns_2(
     assert "rejected" in err
     receipt_dir = root / str(POLICY["receipt_dir"])
     assert not receipt_dir.exists() or list(receipt_dir.glob("*.json")) == []
+
+
+def test_large_change_without_findings_raises_and_writes_nothing(
+    tmp_path: Path, capsys
+) -> None:
+    """A large change without --findings raises ReceiptError and writes no file."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+
+    with pytest.raises(tool.ReceiptError) as excinfo:
+        tool.record_receipt("codex", "gpt-6.1-sol", root)
+
+    msg = str(excinfo.value)
+    assert "large" in msg
+    assert "2 file(s)" in msg
+    assert "6 changed line(s)" in msg
+    assert "--findings" in msg
+    assert "reviewer" in msg
+
+    assert (
+        tool.main(
+            ["record", "--reviewer", "codex", "--model", "gpt-6.1-sol"], root=root
+        )
+        == 2
+    )
+    assert "large" in capsys.readouterr().err
+
+    receipt_dir = root / str(POLICY["receipt_dir"])
+    assert not receipt_dir.exists() or list(receipt_dir.glob("*.json")) == []
+
+
+def test_large_change_with_accepted_report_writes_counts(tmp_path: Path) -> None:
+    """A large change with an accepted findings report writes a receipt with counts."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+    report = _accepted_report(tmp_path)
+
+    path, receipt = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=report
+    )
+
+    assert path.is_file()
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert receipt["findings"] == stored["findings"]
+    assert stored["findings"]["total"] == 2
+    assert stored["findings"]["verified"] == 1
+    assert stored["findings"]["read"] == 0
+    assert stored["findings"]["inferred"] == 1
+
+
+def test_small_change_without_findings_still_writes_receipt(tmp_path: Path) -> None:
+    """A change below threshold keeps writing a receipt when --findings is omitted."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _write(root, "base.txt", "one\ntwo\n")
+
+    path, receipt = tool.record_receipt("codex", "gpt-6.1-sol", root)
+
+    assert path.is_file()
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert set(stored) == RECEIPT_FIELDS
+    assert "findings" not in receipt
+    assert tool.main(["verify"], root=root) == 0
+
+
+def test_small_change_with_findings_writes_counts(tmp_path: Path) -> None:
+    """A change below threshold with --findings still validates and stores counts."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _write(root, "base.txt", "one\ntwo\n")
+    report = _accepted_report(tmp_path)
+
+    path, receipt = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=report
+    )
+
+    assert path.is_file()
+    assert receipt["findings"]["total"] == 2
+    assert tool.main(["verify"], root=root) == 0
+
+
+def test_verify_large_change_receipt_without_findings_not_ok(
+    tmp_path: Path, capsys
+) -> None:
+    """A receipt for a large change without a findings block is not valid."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+    path, _ = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
+
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    stored.pop("findings")
+    path.write_text(json.dumps(stored, indent=2) + "\n", encoding="utf-8")
+
+    decision = tool.verify(root)
+    assert decision["exit_code"] == 1
+    assert decision["receipt"] is None
+    assert "predates the findings requirement" in decision["reason"]
+    assert "--findings" in decision["reason"]
+
+    assert tool.main(["verify"], root=root) == 1
+    assert "predates the findings requirement" in capsys.readouterr().out
+
+
+def test_verify_large_change_receipt_with_non_integer_findings_not_ok(
+    tmp_path: Path,
+) -> None:
+    """A findings block with non-integer counts (e.g. bool) is not accepted."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+    path, _ = tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
+
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    stored["findings"]["verified"] = True
+    path.write_text(json.dumps(stored, indent=2) + "\n", encoding="utf-8")
+
+    decision = tool.verify(root)
+    assert decision["exit_code"] == 1
+    assert decision["receipt"] is None
+    assert "predates the findings requirement" in decision["reason"]
+
+
+def test_verify_large_change_receipt_with_findings_ok(tmp_path: Path) -> None:
+    """A receipt for a large change carrying integer findings counts passes verify."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+    tool.record_receipt(
+        "codex", "gpt-6.1-sol", root, findings_path=_accepted_report(tmp_path)
+    )
+
+    decision = tool.verify(root)
+    assert decision["exit_code"] == 0
+    assert decision["receipt"] is not None
+    assert tool.main(["verify"], root=root) == 0
 
 
 if __name__ == "__main__":
