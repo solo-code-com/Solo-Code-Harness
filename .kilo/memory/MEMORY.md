@@ -14,6 +14,10 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 ## Stack
 - Python 3.10+ stdlib for `tools/`; pytest and ruff are dev tools. Kilo hooks are Node 18+. Pre-commit pins ruff 0.9.1.
 - `.solocode/shared-state.db` holds `active_locks` and `session_log` only; the four legacy memory tables are removed when an older file is opened. This file is the memory; git log is the task history.
+- `tools/portfolio.py` is a derived index of the sibling projects in the folder above
+  this checkout: `sync` mirrors the scanned roots into `.solocode/portfolio.db`, `status`
+  compares each project lock fingerprint with this repo, `failures` and `usage` read the
+  per-arm logs. Delete the database and `sync` rebuilds it.
 
 ## Verify
 `security_scan.py .` - `checklist.py .` - `check_skips.py tools/` - `garden.py` - `pytest tools` - `prose_lint.py`
