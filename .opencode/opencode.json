@@ -8,7 +8,7 @@
       ],
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": {
-        "baseURL": "https://api.deepseek.com/v1"
+        "baseURL": "https://api.deepseek.com"
       },
       "models": {
         "deepseek-flash": {

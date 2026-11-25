@@ -13,7 +13,7 @@ This project supports two external LLM API providers beyond the primary model:
 
 | Provider | API Type | Base URL Env | Key Env |
 |----------|----------|-------------|---------|
-| **DeepSeek** | OpenAI-compatible | `DEEPSEEK_BASE_URL` | `DEEPSEEK_API_KEY` |
+| **DeepSeek** | OpenAI-compatible | fixed (`https://api.deepseek.com`) | `DEEPSEEK_API_KEY` |
 | **OpenRouter** | OpenAI-compatible proxy | fixed (`_OPENROUTER_BASE_URL`) | `OPENROUTER_API_KEY` |
 
 Both providers expose OpenAI-compatible `/v1/chat/completions` endpoints. OpenRouter proxies multiple models (DeepSeek, Claude, GPT, Gemini, Qwen, Kimi, GLM, MiniMax, Step) through a single API key.
@@ -45,7 +45,7 @@ After setting, restart the client that reads them.
 
 The harness declares a self-contained `deepseek` provider in
 `.opencode/opencode.json`, generated from `_DEEPSEEK_MODELS` in
-`tools/opencode_engine.py` (base URL `${DEEPSEEK_BASE_URL}`, key
+`tools/opencode_engine.py` (fixed endpoint `https://api.deepseek.com`, key
 `DEEPSEEK_API_KEY`, both from `.env`). The `.env.template` ships
 `https://api.deepseek.com/v1`.
 

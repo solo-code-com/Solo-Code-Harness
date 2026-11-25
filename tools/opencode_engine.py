@@ -585,7 +585,7 @@ _PROVIDER_MODELS: dict[str, dict[str, Any]] = {
 # "DeepSeek-V4.1-Flash", and `deepseek-v4-pro`. So V4.1 Flash IS on the direct
 # API, under the id `deepseek-flash` (there is no `deepseek-v4.1-flash` here).
 # Both report context_window 1,048,576 and max_output_tokens 393,216.
-_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 _DEEPSEEK_MODELS: dict[str, dict[str, Any]] = {
     "deepseek-flash": {
         "modelID": "deepseek-flash",
