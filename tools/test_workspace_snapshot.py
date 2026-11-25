@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = Path(__file__).resolve().parent
@@ -100,6 +103,19 @@ def test_snapshot_detects_change_in_nested_build_dir(tmp_path):
     ]
 
 
+def _make_junction(link: Path, target: Path) -> None:
+    if sys.platform != "win32":
+        pytest.skip("Windows directory junctions require win32")
+    proc = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        pytest.skip(f"mklink /J failed: {proc.stderr or proc.stdout}")
+
+
 def test_snapshot_reports_a_deleted_file(tmp_path):
     ws = tmp_path / "ws"
     (ws / "src").mkdir(parents=True)
@@ -110,3 +126,22 @@ def test_snapshot_reports_a_deleted_file(tmp_path):
     after = workspace_snapshot.snapshot_workspace(ws)
 
     assert workspace_snapshot.changed_workspace_paths(before, after) == ["src/a.py"]
+
+
+def test_snapshot_records_junction_as_link_marker_without_descending(tmp_path):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "inside.txt").write_text("inside", encoding="utf-8")
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("outside-secret", encoding="utf-8")
+
+    junc = ws / "ext"
+    _make_junction(junc, outside)
+
+    snap = workspace_snapshot.snapshot_workspace(ws)
+    assert "inside.txt" in snap
+    assert "ext" in snap
+    assert snap["ext"].startswith("link:")
+    assert not any(key.startswith("ext/") for key in snap)

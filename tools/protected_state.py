@@ -17,6 +17,17 @@ import stat
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+TOOLS = Path(__file__).resolve().parent
+for _entry in (str(ROOT), str(TOOLS)):
+    if _entry not in sys.path:
+        sys.path.insert(0, _entry)
+
+try:
+    from tools import workspace_snapshot
+except ImportError:
+    import workspace_snapshot  # noqa: F401
+
 PROTECTED_PATHS = (
     ".solocode/reviews",
     ".solocode/task-receipts",
@@ -61,15 +72,15 @@ def _sha256(path: Path) -> str:
 
 
 def _entry(path: Path) -> str:
-    """A typed fingerprint: a symlink is never read through.
+    """A typed fingerprint: a symlink or junction is never read through.
 
-    Hashing the content behind a symlink would report the target file as this
-    path, so a worker could point a receipt at any file it liked and the
+    Hashing the content behind a reparse point would report the target file as
+    this path, so a worker could point a receipt at any file it liked and the
     fingerprint would look unchanged.
     """
     try:
-        if path.is_symlink():
-            return "link:" + os.readlink(path)
+        if workspace_snapshot.is_reparse_point(path):
+            return "link:" + workspace_snapshot.read_reparse_target(path)
         if path.is_file():
             return f"file:{_sha256(path)}:{stat.S_IMODE(path.stat().st_mode):o}"
         return "other"
@@ -88,17 +99,34 @@ def fingerprint(root: Path) -> dict[str, str]:
     for relative in PROTECTED_PATHS:
         target = root / relative
         try:
-            if target.is_symlink():
+            if workspace_snapshot.is_reparse_point(target):
                 state[relative] = _entry(target)
             elif target.is_dir():
-                files = sorted(
-                    p for p in target.rglob("*") if p.is_file() or p.is_symlink()
-                )
-                if not files:
+                recorded = False
+                for dirpath, dirnames, filenames in os.walk(target, followlinks=False):
+                    dirpath_path = Path(dirpath)
+                    pruned_dirnames: list[str] = []
+                    for dirname in sorted(dirnames):
+                        sub_dir = dirpath_path / dirname
+                        if workspace_snapshot.is_reparse_point(sub_dir):
+                            key = sub_dir.relative_to(root).as_posix()
+                            state[key] = _entry(sub_dir)
+                            recorded = True
+                            continue
+                        pruned_dirnames.append(dirname)
+                    dirnames[:] = pruned_dirnames
+
+                    for filename in sorted(filenames):
+                        file_path = dirpath_path / filename
+                        if (
+                            workspace_snapshot.is_reparse_point(file_path)
+                            or file_path.is_file()
+                        ):
+                            key = file_path.relative_to(root).as_posix()
+                            state[key] = _entry(file_path)
+                            recorded = True
+                if not recorded:
                     state[relative] = "<empty>"
-                for path in files:
-                    key = path.relative_to(root).as_posix()
-                    state[key] = _entry(path)
             elif target.is_file():
                 state[relative] = _entry(target)
             else:
@@ -120,7 +148,9 @@ def gate_fingerprint(root: Path) -> dict[str, str]:
     for relative in GATE_PATHS:
         path = root / relative
         state[relative] = (
-            _entry(path) if path.exists() or path.is_symlink() else "<absent>"
+            _entry(path)
+            if path.exists() or workspace_snapshot.is_reparse_point(path)
+            else "<absent>"
         )
     return state
 
@@ -141,18 +171,42 @@ def home_fingerprint(home: Path) -> dict[str, str]:
     for relative in HOME_PROTECTED_PATHS:
         target = home / relative
         try:
-            if target.is_symlink():
-                state[relative] = "link:" + os.readlink(target)
-            elif target.is_dir():
-                files = sorted(
-                    p for p in target.rglob("*") if p.is_file() and not p.is_symlink()
+            if workspace_snapshot.is_reparse_point(target):
+                state[relative] = "link:" + workspace_snapshot.read_reparse_target(
+                    target
                 )
-                if not files:
+            elif target.is_dir():
+                recorded = False
+                for dirpath, dirnames, filenames in os.walk(target, followlinks=False):
+                    dirpath_path = Path(dirpath)
+                    pruned_dirnames: list[str] = []
+                    for dirname in sorted(dirnames):
+                        sub_dir = dirpath_path / dirname
+                        if workspace_snapshot.is_reparse_point(sub_dir):
+                            rel_sub = sub_dir.relative_to(target).as_posix()
+                            state[f"{relative}/{rel_sub}"] = (
+                                "link:"
+                                + workspace_snapshot.read_reparse_target(sub_dir)
+                            )
+                            recorded = True
+                            continue
+                        pruned_dirnames.append(dirname)
+                    dirnames[:] = pruned_dirnames
+
+                    for filename in sorted(filenames):
+                        file_path = dirpath_path / filename
+                        rel_file = file_path.relative_to(target).as_posix()
+                        if workspace_snapshot.is_reparse_point(file_path):
+                            state[f"{relative}/{rel_file}"] = (
+                                "link:"
+                                + workspace_snapshot.read_reparse_target(file_path)
+                            )
+                            recorded = True
+                        elif file_path.is_file():
+                            state[f"{relative}/{rel_file}"] = _sha256(file_path)
+                            recorded = True
+                if not recorded:
                     state[relative] = "<empty>"
-                for path in files:
-                    state[f"{relative}/{path.relative_to(target).as_posix()}"] = (
-                        _sha256(path)
-                    )
             elif target.is_file():
                 state[relative] = _sha256(target)
             else:

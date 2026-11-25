@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = Path(__file__).resolve().parent
@@ -179,6 +182,77 @@ def test_symlink_captured_and_restored_as_link(tmp_path: Path, monkeypatch) -> N
         restore.apply(root, snap)
         assert len(symlinks_created) == 1
         assert symlinks_created[0][0] == "target.txt"
+
+
+def _make_junction(link: Path, target: Path) -> None:
+    if sys.platform != "win32":
+        pytest.skip("Windows directory junctions require win32")
+    proc = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        pytest.skip(f"mklink /J failed: {proc.stderr or proc.stdout}")
+
+
+def test_junction_capture_does_not_copy_target_and_apply_refuses_write_through(
+    tmp_path: Path, capsys
+) -> None:
+    """A Windows junction is captured as a link without copying behind it, and apply refuses to write through one."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    outside_file = outside / "secret.txt"
+    outside_bytes = b"outside-must-remain-byte-identical\n"
+    outside_file.write_bytes(outside_bytes)
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "inside.txt").write_text("inside", encoding="utf-8")
+    junc = ws / "junc"
+    _make_junction(junc, outside)
+
+    snap = restore.capture(ws, ws)
+    junc_entries = [e for e in snap.entries if e.path == "junc"]
+    assert len(junc_entries) == 1
+    assert junc_entries[0].kind == "link"
+    assert not any(e.path.startswith("junc/") for e in snap.entries)
+    store_files = ws / restore.RESTORE_DIR / snap.run_id / "files"
+    assert not (store_files / "junc").exists()
+    assert not (store_files / "junc" / "secret.txt").exists()
+
+    # Now capture a normal tree, then replace a directory with a junction to outside.
+    ws2 = tmp_path / "ws2"
+    (ws2 / "sub").mkdir(parents=True)
+    (ws2 / "sub" / "secret.txt").write_bytes(b"corrupted-if-written-outside\n")
+    snap2 = restore.capture(ws2, ws2)
+
+    (ws2 / "sub" / "secret.txt").unlink()
+    (ws2 / "sub").rmdir()
+    _make_junction(ws2 / "sub", outside)
+
+    counts = restore.apply(ws2, snap2)
+    out = capsys.readouterr().out
+    assert "[restore] refusing to write through a reparse point:" in out
+    assert counts["skipped"] == 1
+    assert counts["create"] == 0
+    assert outside_file.read_bytes() == outside_bytes
+
+    # Also refuse when the target path itself was a file and is now a junction.
+    ws3 = tmp_path / "ws3"
+    ws3.mkdir()
+    (ws3 / "slot").write_bytes(b"original-file\n")
+    snap3 = restore.capture(ws3, ws3)
+    (ws3 / "slot").unlink()
+    _make_junction(ws3 / "slot", outside)
+
+    counts3 = restore.apply(ws3, snap3)
+    out3 = capsys.readouterr().out
+    assert "[restore] refusing to write through a reparse point:" in out3
+    assert counts3["skipped"] == 1
+    assert counts3["restore"] == 0
+    assert outside_file.read_bytes() == outside_bytes
 
 
 def test_ignored_directory_skipped_and_not_in_plan(tmp_path: Path) -> None:

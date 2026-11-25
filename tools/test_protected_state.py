@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = Path(__file__).resolve().parent
@@ -189,6 +192,41 @@ def test_protected_file_replaced_by_symlink_to_identical_content_reported_as_cha
     assert violations == [".solocode/executor-mode"]
 
 
+def _make_junction(link: Path, target: Path) -> None:
+    if sys.platform != "win32":
+        pytest.skip("Windows directory junctions require win32")
+    proc = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        pytest.skip(f"mklink /J failed: {proc.stderr or proc.stdout}")
+
+
+def test_junction_under_protected_path_recorded_as_link_marker_not_hashed(
+    tmp_path: Path,
+):
+    reviews = tmp_path / ".solocode" / "reviews"
+    reviews.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    outside_file = outside / "secret.json"
+    outside_file.write_bytes(b"secret-v1\n")
+
+    _make_junction(reviews / "ext", outside)
+
+    before = protected_state.fingerprint(tmp_path)
+    assert ".solocode/reviews/ext" in before
+    assert before[".solocode/reviews/ext"].startswith("link:")
+    assert not any(key.startswith(".solocode/reviews/ext/") for key in before)
+
+    outside_file.write_bytes(b"secret-v2\n")
+    after = protected_state.fingerprint(tmp_path)
+    assert after == before
+
+
 def test_permission_change_on_protected_file_reported_as_change(tmp_path: Path):
     """2. A permission change on a protected file is reported as a change."""
     solocode = tmp_path / ".solocode"
@@ -360,6 +398,28 @@ def test_home_fingerprint_detects_a_symlink_swap(tmp_path: Path, monkeypatch):
     after = protected_state.home_fingerprint(tmp_path)
     assert after[".gitconfig"].startswith("link:")
     assert protected_state.home_changes(before, after) == [".gitconfig"]
+
+
+def test_home_fingerprint_records_junction_as_link_marker_without_descending(
+    tmp_path: Path,
+):
+    ssh_dir = tmp_path / ".ssh"
+    ssh_dir.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    outside_key = outside / "id_rsa"
+    outside_key.write_bytes(b"outside-key-v1\n")
+
+    _make_junction(ssh_dir / "ext", outside)
+
+    before = protected_state.home_fingerprint(tmp_path)
+    assert ".ssh/ext" in before
+    assert before[".ssh/ext"].startswith("link:")
+    assert not any(key.startswith(".ssh/ext/") for key in before)
+
+    outside_key.write_bytes(b"outside-key-v2\n")
+    after = protected_state.home_fingerprint(tmp_path)
+    assert after == before
 
 
 def test_home_fingerprint_leaves_unrelated_files_out(tmp_path: Path):

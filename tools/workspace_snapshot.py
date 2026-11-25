@@ -8,6 +8,7 @@ post-run scope report compare the same files and ignore the same generated noise
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 
 SNAPSHOT_IGNORED_DIRS = frozenset(
@@ -46,21 +47,59 @@ def is_snapshot_ignored(relative: Path) -> bool:
     )
 
 
+def is_reparse_point(path: Path) -> bool:
+    """True for a symlink or a Windows directory junction.
+
+    Both redirect a path elsewhere, and both must be recorded rather than walked:
+    descending into one hashes or copies content from outside the root.
+    """
+    if path.is_symlink():
+        return True
+    checker = getattr(path, "is_junction", None)
+    return bool(checker and checker())
+
+
+def read_reparse_target(path: Path) -> str:
+    """Return the target string for a reparse point, or <reparse> if unreadable."""
+    try:
+        return os.readlink(path)
+    except OSError:
+        return "<reparse>"
+
+
 def snapshot_workspace(root: Path) -> dict[str, str]:
     """Hash workspace files so post-run scope validation sees untracked changes too."""
     snapshot: dict[str, str] = {}
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(root)
-        if is_snapshot_ignored(relative):
-            continue
-        try:
-            snapshot[relative.as_posix()] = hashlib.sha256(
-                path.read_bytes()
-            ).hexdigest()
-        except OSError:
-            continue
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirpath_path = Path(dirpath)
+        pruned_dirnames: list[str] = []
+        for dirname in dirnames:
+            sub_dir = dirpath_path / dirname
+            relative = sub_dir.relative_to(root)
+            if is_snapshot_ignored(relative):
+                continue
+            if is_reparse_point(sub_dir):
+                snapshot[relative.as_posix()] = f"link:{read_reparse_target(sub_dir)}"
+                continue
+            pruned_dirnames.append(dirname)
+        dirnames[:] = pruned_dirnames
+
+        for filename in filenames:
+            file_path = dirpath_path / filename
+            relative = file_path.relative_to(root)
+            if is_snapshot_ignored(relative):
+                continue
+            if is_reparse_point(file_path):
+                snapshot[relative.as_posix()] = f"link:{read_reparse_target(file_path)}"
+                continue
+            if not file_path.is_file():
+                continue
+            try:
+                snapshot[relative.as_posix()] = hashlib.sha256(
+                    file_path.read_bytes()
+                ).hexdigest()
+            except OSError:
+                continue
     return snapshot
 
 

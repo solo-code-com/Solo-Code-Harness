@@ -153,14 +153,14 @@ def capture(
             # call every path in it ignored and capture nothing.
             if workspace_snapshot.is_snapshot_ignored(sub_dir.relative_to(abs_dir)):
                 continue
-            if sub_dir.is_symlink():
+            if workspace_snapshot.is_reparse_point(sub_dir):
                 rel_str = rel_sub.as_posix()
                 st = sub_dir.lstat()
                 entries.append(
                     Entry(
                         path=rel_str,
                         kind="link",
-                        value=os.readlink(sub_dir),
+                        value=workspace_snapshot.read_reparse_target(sub_dir),
                         size=st.st_size,
                         mode=f"{stat.S_IMODE(st.st_mode):o}",
                     )
@@ -175,13 +175,13 @@ def capture(
             if workspace_snapshot.is_snapshot_ignored(item_path.relative_to(abs_dir)):
                 continue
             rel_str = rel_item.as_posix()
-            if item_path.is_symlink():
+            if workspace_snapshot.is_reparse_point(item_path):
                 st = item_path.lstat()
                 entries.append(
                     Entry(
                         path=rel_str,
                         kind="link",
-                        value=os.readlink(item_path),
+                        value=workspace_snapshot.read_reparse_target(item_path),
                         size=st.st_size,
                         mode=f"{stat.S_IMODE(st.st_mode):o}",
                     )
@@ -330,12 +330,16 @@ def plan(root: Path, snapshot: Snapshot) -> dict[str, list[str]]:
                     sub_dir.relative_to(abs_walk_dir)
                 ):
                     continue
-                if sub_dir.is_symlink():
+                if workspace_snapshot.is_reparse_point(sub_dir):
                     rel_str = rel_sub.as_posix()
                     found_paths.add(rel_str)
                     if rel_str in entries_by_path:
                         entry = entries_by_path[rel_str]
-                        if entry.kind == "link" and os.readlink(sub_dir) == entry.value:
+                        if (
+                            entry.kind == "link"
+                            and workspace_snapshot.read_reparse_target(sub_dir)
+                            == entry.value
+                        ):
                             result["unchanged"].append(rel_str)
                         else:
                             result["restore"].append(rel_str)
@@ -356,10 +360,11 @@ def plan(root: Path, snapshot: Snapshot) -> dict[str, list[str]]:
                 found_paths.add(rel_str)
                 if rel_str in entries_by_path:
                     entry = entries_by_path[rel_str]
-                    if item_path.is_symlink():
+                    if workspace_snapshot.is_reparse_point(item_path):
                         if (
                             entry.kind == "link"
-                            and os.readlink(item_path) == entry.value
+                            and workspace_snapshot.read_reparse_target(item_path)
+                            == entry.value
                         ):
                             result["unchanged"].append(rel_str)
                         else:
@@ -388,6 +393,18 @@ def plan(root: Path, snapshot: Snapshot) -> dict[str, list[str]]:
     return result
 
 
+def _has_reparse_component(root: Path, path_str: str) -> bool:
+    rel = Path(path_str)
+    if rel.is_absolute() or ".." in rel.parts:
+        return False
+    cur = root
+    for part in rel.parts:
+        cur = cur / part
+        if os.path.lexists(cur) and workspace_snapshot.is_reparse_point(cur):
+            return True
+    return False
+
+
 def apply(
     root: Path,
     snapshot: Snapshot,
@@ -412,15 +429,28 @@ def apply(
     planned = plan(root_path, snapshot)
     entries_by_path: dict[str, Entry] = {e.path: e for e in snapshot.entries}
 
-    for path_str in planned["restore"] + planned["create"]:
-        _verify_safe_path(root_path, path_str)
+    write_ops = [("restore", path_str) for path_str in planned["restore"]] + [
+        ("create", path_str) for path_str in planned["create"]
+    ]
+    for _, path_str in write_ops:
+        if not _has_reparse_component(root_path, path_str):
+            _verify_safe_path(root_path, path_str)
     if delete_new:
         for path_str in planned["delete"]:
-            _verify_safe_path(root_path, path_str)
+            if not _has_reparse_component(root_path, path_str):
+                _verify_safe_path(root_path, path_str)
 
-    for path_str in planned["restore"] + planned["create"]:
+    restored_count = 0
+    created_count = 0
+    skipped_count = 0
+
+    for op_kind, path_str in write_ops:
         entry = entries_by_path[path_str]
         target = root_path / path_str
+        if _has_reparse_component(root_path, path_str):
+            print(f"[restore] refusing to write through a reparse point: {path_str}")
+            skipped_count += 1
+            continue
         target.parent.mkdir(parents=True, exist_ok=True)
         if entry.kind == "file":
             source = store_files / path_str
@@ -437,20 +467,27 @@ def apply(
             if target.is_symlink() or target.is_file():
                 target.unlink(missing_ok=True)
             os.symlink(entry.value, target)
+        if op_kind == "restore":
+            restored_count += 1
+        else:
+            created_count += 1
 
     deleted_count = 0
     if delete_new:
         for path_str in planned["delete"]:
+            if _has_reparse_component(root_path, path_str):
+                continue
             target = root_path / path_str
             if target.is_symlink() or target.is_file():
                 target.unlink(missing_ok=True)
                 deleted_count += 1
 
     return CountsDict(
-        restore=len(planned["restore"]),
-        create=len(planned["create"]),
+        restore=restored_count,
+        create=created_count,
         delete=deleted_count,
         unchanged=len(planned["unchanged"]),
+        skipped=skipped_count,
     )
 
 
