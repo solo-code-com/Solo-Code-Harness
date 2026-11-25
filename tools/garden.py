@@ -22,7 +22,6 @@ import os
 import re
 import subprocess  # noqa: S404 — runs `--help` on this repo's own scripts only
 import sys
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -488,18 +487,6 @@ def check_shared_state() -> list[str]:
         if errors:
             issues.append(f"Corrupt DB: .solocode/shared-state.db — {errors}")
             return issues
-
-        now = datetime.now(timezone.utc)
-        for feat in state.get_features():
-            if feat["status"] == "in-progress" and feat["last_updated"]:
-                try:
-                    dt = datetime.fromisoformat(feat["last_updated"])
-                    if now - dt > timedelta(days=7):
-                        issues.append(
-                            f"Stale feature: {feat['id']} in-progress since {feat['last_updated'][:10]}"
-                        )
-                except ValueError:
-                    pass
 
     return issues
 

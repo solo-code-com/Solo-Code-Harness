@@ -1,72 +1,44 @@
 # Shared State — Cross-Engine Collaboration (Local-Only)
 
-> Auto-loaded at session start. Mọi engine **đọc** được `.solocode/shared-state.db` (SQLite).
-> Chỉ hook lifecycle hoặc một lệnh gọi `SharedState` tường minh mới **ghi** vào đó. Kilo có hook
-> nhưng chỉ ghi `.kilo/state/*.json`; OpenCode và Gemini không có lifecycle hook, nên
-> session của chúng không để lại row nào.
+> Auto-loaded at session start. `.solocode/shared-state.db` là SQLite DB local-only (đã gitignore), tự tạo ở lần dùng đầu tiên.
 > File này KHÔNG được commit vào git — chỉ tồn tại local trên máy đang chạy các engine.
 
-## Cái gì đang thực sự chạy (snapshot 2026-09-26)
+## Mục đích và schema hiện tại
 
-Đừng tin mô tả, hãy tin số đo — và **đo lại** bằng
-`python tools/shared_state.py show` trước khi dùng số liệu. Số dưới đây chỉ là
-một snapshot, sẽ cũ theo thời gian:
+`.solocode/shared-state.db` hiện chỉ lưu đúng hai thứ: `active_locks` và `session_log` (cùng bảng nội bộ `meta`).
+Bốn bảng cũ (`features`, `shared_memory_conventions`, `shared_memory_gotchas`, `shared_memory_decisions`) đã bị xoá khỏi schema và sẽ bị gỡ bỏ khỏi file DB cũ mỗi khi module mở file.
 
-| Bảng | Rows (snapshot) | Ai ghi |
-|---|---:|---|
-| `session_log` | 1000 | **Tự động** — `pre_compact.py` (Claude) |
-| `active_locks` | 1 | Writer lấy lock theo path; tự hết hạn sau `LOCK_TIMEOUT_HOURS` = 2 giờ |
-| `features` | 0 | Không ai — dùng git log + `MEMORY.md` thay thế |
-| `shared_memory_*` | 0 | Không ai — `MEMORY.md` đã làm việc này |
+### Tri thức dự án nằm ở đâu
 
-Một bản mô tả "Session Protocol (MANDATORY)" 9 bước từng nằm ở đây,
-trong đó **0/9 bước thực sự được chạy**. Nó đã bị gỡ: một quy trình
-bắt buộc mà không gì kiểm chứng chỉ dạy agent tin vào thứ không có thật.
+Tri thức dự án **không** nằm trong SQLite. Quy tắc, gotcha và quyết định nằm trong `.kilo/memory/MEMORY.md`, còn lịch sử tác vụ nằm trong `git log`.
+Lý do: mọi engine đều đọc được file mà không cần tích hợp riêng, trong khi DB trước đây có bên ghi nhưng không có bên đọc.
 
-### Session start / end — chỉ tự động ở engine có lifecycle hook
+## Ai đang ghi vào đâu (trạng thái thực tế)
 
-Claude Code có hook vòng đời và ghi vào **hai store khác nhau** (xem bảng dưới):
-`session_start.py` đọc `.solocode/sessions.db` và bơm bối cảnh; `session_end.py`
-ghi vào `.solocode/sessions.db`; `pre_compact.py` ghi checkpoint vào
-`.solocode/shared-state.db` và nhắc ghi `.solocode/context-checkpoint.json`.
-Kilo Code có hook vòng đời riêng nhưng chỉ ghi file JSON trong `.kilo/state/`,
-không đụng tới hai store đó.
+Đừng tin mô tả tĩnh — chạy `python tools/shared_state.py show` để đo lại trạng thái thực tế trên máy:
 
-OpenCode và Gemini **không** có lifecycle hook, nên phiên của chúng không
-tự động được ghi lại: đừng giả định có dòng mới trong bảng session sau một phiên như
-vậy. Nếu cần lưu, gọi `SharedState.add_session_entry` từ code —
-`.claude/hooks/pre_compact.py` dòng 88 là ví dụ đang chạy.
+| Bảng | Ai ghi | Ghi chú |
+|---|---|---|
+| `active_locks` | Ba delegation wrapper qua `acquire_lock` và `acquire_directory_lock` | Khoá tự hết hạn sau `LOCK_TIMEOUT_HOURS = 2` giờ; row có ghi `pid` chủ sở hữu sẽ bị thu hồi ngay khi process đó không còn chạy |
+| `session_log` | Không có gì tự động ghi hiện nay | Còn 1000 row lịch sử do Claude Code và Codex ghi trước khi cả hai engine bị gỡ vào ngày 2026-11-24; gọi `SharedState.add_session_entry` từ code khi một lượt chạy cần để lại row |
 
 ### Hai SQLite store — đừng nhầm
 
-Repo có hai DB SQLite local-only với tên dễ lẫn. Chúng phục vụ mục đích khác nhau
-và **không** phải hai nguồn sự thật cho cùng một dữ liệu:
+Repo có hai DB SQLite local-only với vai trò tách biệt:
 
 | Store | Bảng | Writer | Reader | Mục đích |
 |---|---|---|---|---|
-| `.solocode/shared-state.db` | `session_log`, `active_locks`, `shared_memory_*` | `pre_compact.py`, `acquire_lock` (locks) | `tools/shared_state.py` CLI, `garden.py`, `test_integration.py` | Nhật ký sự kiện đa engine + khoá file |
-| `.solocode/sessions.db` | `sessions` | `.claude/hooks/session_start.py`, `session_end.py` (qua `session_persistence`) | `session_persistence.py`, `session_analytics.py`, `session_start.py` | Vòng đời phiên (start/end/duration/files/status) cho analytics |
+| `.solocode/shared-state.db` | `active_locks`, `session_log` | Các delegation wrapper (locks) và mọi lệnh gọi `add_session_entry` tường minh | `tools/shared_state.py` CLI, `garden.py`, `test_integration.py` | Khoá đường dẫn chống ghi đè đa engine và nhật ký phiên thủ công |
+| `.solocode/sessions.db` | `sessions` | `tools/session_registry.py` qua `record_start` và `record_finish`, được gọi bởi các delegation wrapper của OpenCode, Kilo và Antigravity | Session analytics và chính các wrapper | Ghi nhận lượt chạy đã thoát bình thường, timeout hay thất bại |
 
-Quyết định (2026-09-26): **giữ song song, ghi rõ vai trò**, không hợp nhất khi chưa
-chứng minh consumer trùng — xem `docs/deepseek-harness-upgrade-acceptance.md`.
+## Khi nào cần dùng lock
 
-### Khi nào PHẢI dùng lock (còn giá trị)
-`active_locks` thường rỗng; nó chỉ có row khi một writer đang giữ lock (hoặc khi
-một lock rò rỉ chưa hết hạn). Trước khi giao một tác vụ **ghi** cho worker chạy
-song song (Gemini/Antigravity sửa cùng cây thư mục), hãy lấy lock cho các file
-trong phạm vi — xem `acquire_lock` ở phần API bên dưới. Đây là cơ chế chống ghi
-đè duy nhất giữa các engine.
-
-### `features` và `shared_memory_*` — schema còn, không dùng
-Giữ lại để tương thích ngược (`garden.py` cảnh báo feature `in-progress`
-quá 7 ngày nếu có ai ghi). Với dự án solo, dùng **git log** cho task và
-**`MEMORY.md`** cho convention/gotcha/decision: chúng nằm trong repo,
-agent đọc được, không cần đồng bộ. Chỉ dùng các bảng này nếu bạn thật
-sự chạy nhiều engine song song và cần trạng thái chung.
+Trước khi giao một tác vụ ghi cho worker chạy song song với một writer khác, hãy lấy lock cho các đường dẫn trong phạm vi và trả lock ngay khi xong. Đây là cơ chế chống ghi đè duy nhất giữa các engine.
+Delegation wrapper đã tự lấy directory lock sẵn, nên lock thủ công dùng cho các công việc chạy ngoài wrapper.
 
 ## Nếu DB bị hỏng (corrupt)
 
-Nếu `python tools/shared_state.py validate` báo lỗi, hoặc thao tác đọc/ghi báo `sqlite3.DatabaseError` — xoá file DB và để nó tự tái tạo schema rỗng ở lần chạy tiếp theo (KHÔNG còn nguồn migrate dự phòng từ `.opencode/state/` — đã gỡ ở v4.0.0; lịch sử feature/session trước đó sẽ mất nếu chưa backup):
+Nếu `python tools/shared_state.py validate` báo lỗi, hoặc thao tác đọc/ghi báo `sqlite3.DatabaseError` — xoá file DB và để nó tự tái tạo rỗng ở lần mở tiếp theo (không có nguồn migrate dự phòng; dữ liệu hiện tại sẽ mất nếu chưa backup):
 
 ```bash
 cp .solocode/shared-state.db .solocode/shared-state.db.bak   # backup trước khi xoá, nếu còn dùng được
@@ -78,7 +50,6 @@ rm .solocode/shared-state.db .solocode/shared-state.db-wal .solocode/shared-stat
 
 ```bash
 python tools/shared_state.py show
-python tools/shared_state.py features --status in-progress
 python tools/shared_state.py sessions --limit 10
 python tools/shared_state.py locks
 python tools/shared_state.py validate
@@ -89,14 +60,15 @@ python tools/shared_state.py validate
 ```python
 from tools.shared_state import SharedState
 
-# Trường hợp dùng thật: khoá file trước khi giao việc GHI cho worker
-# chạy song song, rồi trả khoá ngay sau khi xong.
+# Trường hợp dùng thật: khoá file với engine opencode trước khi uỷ quyền ghi,
+# rồi trả khoá ngay sau khi xong.
 with SharedState() as state:
-    if state.acquire_lock("src/auth.py", engine="claude", model="sonnet", reason="Delegating edit to Gemini"):
-        # ... thực hiện/uỷ quyền sửa file ...
-        state.release_lock("src/auth.py", engine="claude")
+    if state.acquire_lock('src/auth.py', engine='opencode', model='deepseek-chat', reason='Delegating write'):
+        try:
+            # ... thực hiện hoặc uỷ quyền sửa file ...
+            pass
+        finally:
+            state.release_lock('src/auth.py', engine='opencode')
 
-# add_session_entry() do hook tự gọi — không cần gọi tay:
-#   .claude/hooks/session_end.py, .claude/hooks/pre_compact.py
-# set_feature_status() còn tồn tại nhưng không dùng ở repo này (xem trên).
+# add_session_entry() là lệnh gọi thủ công, dùng các keyword argument: engine, model, summary.
 ```

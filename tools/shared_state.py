@@ -3,13 +3,14 @@
 shared_state.py — Cross-engine shared state reader/writer (SQLite backend).
 
 Single source of truth at .solocode/shared-state.db (LOCAL ONLY — not committed to git,
-directory already excluded via .gitignore). All engines (Claude Code, Kilo, Copilot, Gemini)
-read/write this file when running on the same machine/workspace.
+directory already excluded via .gitignore). The database keeps the delegation lock table
+and the session log; project knowledge lives in .kilo/memory/MEMORY.md and in the git
+log, not here.
 ("opencode" remains a VALID_ENGINES value: OpenCode was reintroduced as a
 primary engine in v4.2.0, and historical rows still name it that way.)
 
 Why SQLite instead of JSON + manual file locking:
-  - Each mutation (acquire_lock, set_feature_status, ...) runs inside its own
+  - Each mutation (acquire_lock, add_session_entry, ...) runs inside its own
     `BEGIN IMMEDIATE` transaction. SQLite's own OS-level locking (WAL mode) guarantees
     isolation between concurrent processes — no "load whole file, mutate in memory,
     save at the end" pattern that would lose concurrent writes from another engine.
@@ -19,7 +20,6 @@ Usage:
     from tools.shared_state import SharedState
 
     with SharedState() as state:
-        state.set_feature_status("feat-008", "in-progress", engine="copilot", model="deepseek-chat")
         if state.acquire_lock("src/auth.py", engine="copilot", model="deepseek-chat"):
             state.add_session_entry(engine="copilot", model="deepseek-chat", summary="Fixed bug in auth")
             state.release_lock("src/auth.py", engine="copilot")
@@ -40,7 +40,6 @@ DB_PATH = ROOT / ".solocode" / "shared-state.db"
 LOCK_TIMEOUT_HOURS = 2
 MAX_SESSION_LOG_ROWS = 1000
 VALID_ENGINES = ("kilo", "opencode", "claude", "copilot", "gemini", "codex")
-VALID_STATUSES = ("not-started", "in-progress", "completed", "blocked")
 
 
 # Windows resolves paths case-insensitively, so two workers that spell the same
@@ -134,31 +133,30 @@ def pid_alive(pid: int) -> bool:
     return True
 
 
+#: Tables an older database still carries. Nothing ever wrote them, and they are
+#: removed on open so the file cannot suggest a memory store that does not exist.
+_LEGACY_TABLES = (
+    "features",
+    "shared_memory_conventions",
+    "shared_memory_gotchas",
+    "shared_memory_decisions",
+)
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS features (
-    id           TEXT PRIMARY KEY,
-    name         TEXT,
-    status       TEXT NOT NULL,
-    owner_engine TEXT,
-    owner_model  TEXT,
-    evidence     TEXT,
-    last_updated TEXT NOT NULL
-);
 CREATE TABLE IF NOT EXISTS session_log (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp        TEXT NOT NULL,
-    engine           TEXT NOT NULL,
-    model            TEXT NOT NULL,
-    session_id       TEXT,
-    summary          TEXT NOT NULL,
-    features_touched TEXT,
-    files_changed    TEXT,
-    commits          TEXT,
-    verification     TEXT
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp     TEXT NOT NULL,
+    engine        TEXT NOT NULL,
+    model         TEXT NOT NULL,
+    session_id    TEXT,
+    summary       TEXT NOT NULL,
+    files_changed TEXT,
+    commits       TEXT,
+    verification  TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_session_log_ts ON session_log(timestamp DESC);
 CREATE TABLE IF NOT EXISTS active_locks (
@@ -170,30 +168,6 @@ CREATE TABLE IF NOT EXISTS active_locks (
     expires_at TEXT NOT NULL,
     reason     TEXT,
     pid        INTEGER
-);
-CREATE TABLE IF NOT EXISTS shared_memory_conventions (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    key             TEXT NOT NULL,
-    value           TEXT NOT NULL,
-    added_by_engine TEXT NOT NULL,
-    added_by_model  TEXT NOT NULL,
-    added_at        TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS shared_memory_gotchas (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    description     TEXT NOT NULL,
-    added_by_engine TEXT NOT NULL,
-    added_by_model  TEXT NOT NULL,
-    added_at        TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS shared_memory_decisions (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    title          TEXT NOT NULL,
-    decision       TEXT NOT NULL,
-    rationale      TEXT,
-    made_by_engine TEXT NOT NULL,
-    made_by_model  TEXT NOT NULL,
-    made_at        TEXT NOT NULL
 );
 """
 
@@ -245,6 +219,8 @@ class SharedState:
                     self._conn.execute(
                         "ALTER TABLE active_locks ADD COLUMN pid INTEGER"
                     )
+                for table in _LEGACY_TABLES:
+                    self._conn.execute(f"DROP TABLE IF EXISTS {table}")
                 return
             except sqlite3.OperationalError as e:
                 if "locked" not in str(e).lower() and "busy" not in str(e).lower():
@@ -292,62 +268,6 @@ class SharedState:
             (MAX_SESSION_LOG_ROWS,),
         )
 
-    # ── Feature Management ────────────────────────────────────
-
-    def get_features(self) -> list[dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT id, name, status, owner_engine, owner_model, evidence, last_updated "
-            "FROM features ORDER BY id"
-        ).fetchall()
-        return [self._feature_row_to_dict(r) for r in rows]
-
-    def get_feature(self, feature_id: str) -> dict[str, Any] | None:
-        row = self._conn.execute(
-            "SELECT id, name, status, owner_engine, owner_model, evidence, last_updated "
-            "FROM features WHERE id = ?",
-            (feature_id,),
-        ).fetchone()
-        return self._feature_row_to_dict(row) if row else None
-
-    @staticmethod
-    def _feature_row_to_dict(row: tuple) -> dict[str, Any]:
-        return {
-            "id": row[0],
-            "name": row[1],
-            "status": row[2],
-            "owner": {"engine": row[3], "model": row[4]},
-            "evidence": row[5],
-            "last_updated": row[6],
-        }
-
-    def set_feature_status(
-        self,
-        feature_id: str,
-        status: str,
-        *,
-        engine: str = "none",
-        model: str = "none",
-        evidence: str = "",
-        name: str = "",
-    ) -> None:
-        if status not in VALID_STATUSES:
-            raise ValueError(f"Invalid status: {status}")
-        now = _now()
-        with self._transaction():
-            self._conn.execute(
-                """
-                INSERT INTO features (id, name, status, owner_engine, owner_model, evidence, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    status = excluded.status,
-                    owner_engine = excluded.owner_engine,
-                    owner_model = excluded.owner_model,
-                    evidence = CASE WHEN excluded.evidence != '' THEN excluded.evidence ELSE features.evidence END,
-                    last_updated = excluded.last_updated
-                """,
-                (feature_id, name, status, engine, model, evidence, now),
-            )
-
     # ── Session Log ──────────────────────────────────────────
 
     def add_session_entry(
@@ -357,7 +277,6 @@ class SharedState:
         model: str,
         summary: str,
         session_id: str = "",
-        features_touched: list[str] | None = None,
         files_changed: list[str] | None = None,
         commits: list[str] | None = None,
         verification: dict[str, bool] | None = None,
@@ -368,8 +287,8 @@ class SharedState:
             self._conn.execute(
                 """
                 INSERT INTO session_log
-                    (timestamp, engine, model, session_id, summary, features_touched, files_changed, commits, verification)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (timestamp, engine, model, session_id, summary, files_changed, commits, verification)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     _now(),
@@ -377,7 +296,6 @@ class SharedState:
                     model,
                     session_id,
                     summary,
-                    json.dumps(features_touched or []),
                     json.dumps(files_changed or []),
                     json.dumps(commits or []),
                     json.dumps(verification or {}),
@@ -387,7 +305,7 @@ class SharedState:
 
     def get_recent_sessions(self, limit: int = 5) -> list[dict[str, Any]]:
         rows = self._conn.execute(
-            "SELECT timestamp, engine, model, session_id, summary, features_touched, "
+            "SELECT timestamp, engine, model, session_id, summary, "
             "files_changed, commits, verification FROM session_log "
             "ORDER BY timestamp DESC, id DESC LIMIT ?",
             (limit,),
@@ -399,10 +317,9 @@ class SharedState:
                 "model": r[2],
                 "session_id": r[3],
                 "summary": r[4],
-                "features_touched": json.loads(r[5]),
-                "files_changed": json.loads(r[6]),
-                "commits": json.loads(r[7]),
-                "verification": json.loads(r[8]),
+                "files_changed": json.loads(r[5]),
+                "commits": json.loads(r[6]),
+                "verification": json.loads(r[7]),
             }
             for r in rows
         ]
@@ -522,75 +439,6 @@ class SharedState:
             for r in rows
         ]
 
-    # ── Shared Memory ────────────────────────────────────────
-
-    def add_convention(self, key: str, value: str, *, engine: str, model: str) -> None:
-        with self._transaction():
-            self._conn.execute(
-                "INSERT INTO shared_memory_conventions (key, value, added_by_engine, added_by_model, added_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (key, value, engine, model, _now()),
-            )
-
-    def add_gotcha(self, description: str, *, engine: str, model: str) -> None:
-        with self._transaction():
-            self._conn.execute(
-                "INSERT INTO shared_memory_gotchas (description, added_by_engine, added_by_model, added_at) "
-                "VALUES (?, ?, ?, ?)",
-                (description, engine, model, _now()),
-            )
-
-    def add_decision(
-        self, title: str, decision: str, rationale: str = "", *, engine: str, model: str
-    ) -> None:
-        with self._transaction():
-            self._conn.execute(
-                "INSERT INTO shared_memory_decisions "
-                "(title, decision, rationale, made_by_engine, made_by_model, made_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (title, decision, rationale, engine, model, _now()),
-            )
-
-    def get_shared_memory(self) -> dict[str, list[dict[str, Any]]]:
-        conventions = self._conn.execute(
-            "SELECT key, value, added_by_engine, added_by_model, added_at FROM shared_memory_conventions"
-        ).fetchall()
-        gotchas = self._conn.execute(
-            "SELECT description, added_by_engine, added_by_model, added_at FROM shared_memory_gotchas"
-        ).fetchall()
-        decisions = self._conn.execute(
-            "SELECT title, decision, rationale, made_by_engine, made_by_model, made_at FROM shared_memory_decisions"
-        ).fetchall()
-        return {
-            "conventions": [
-                {
-                    "key": r[0],
-                    "value": r[1],
-                    "added_by": {"engine": r[2], "model": r[3]},
-                    "added_at": r[4],
-                }
-                for r in conventions
-            ],
-            "gotchas": [
-                {
-                    "description": r[0],
-                    "added_by": {"engine": r[1], "model": r[2]},
-                    "added_at": r[3],
-                }
-                for r in gotchas
-            ],
-            "decisions": [
-                {
-                    "title": r[0],
-                    "decision": r[1],
-                    "rationale": r[2],
-                    "made_by": {"engine": r[3], "model": r[4]},
-                    "made_at": r[5],
-                }
-                for r in decisions
-            ],
-        }
-
     # ── Meta / Health ────────────────────────────────────────
 
     def touch_meta(self, *, engine: str, model: str) -> None:
@@ -642,34 +490,16 @@ if __name__ == "__main__":
     sub = parser.add_subparsers(dest="command")
 
     show_parser = sub.add_parser("show", help="Display current shared state summary")
-    feat_parser = sub.add_parser("features", help="List feature status")
-    feat_parser.add_argument(
-        "--status", choices=VALID_STATUSES, help="Filter by status"
-    )
     sess_parser = sub.add_parser("sessions", help="Show recent session log")
     sess_parser.add_argument("--limit", type=int, default=5)
     sub.add_parser("locks", help="Show active file locks")
-    sub.add_parser("memory", help="Show shared memory entries")
     sub.add_parser("validate", help="Run PRAGMA integrity_check")
 
     args = parser.parse_args()
     with SharedState() as state:
         if args.command == "show" or args.command is None:
-            features = state.get_features()
-            print(f"Features: {len(features)}")
-            for f in features:
-                print(
-                    f"  {f['id']} [{f['status']}] — {f.get('name') or '?'} (owner: {f['owner']['engine'] or '-'})"
-                )
             print(f"Sessions: {len(state.get_recent_sessions(limit=10_000_000))}")
             print(f"Active locks: {len(state.get_active_locks())}")
-        elif args.command == "features":
-            for f in state.get_features():
-                if args.status and f["status"] != args.status:
-                    continue
-                print(
-                    f"  [{f['status']}] {f['id']}: {f.get('name') or '?'} (owner: {f['owner']['engine'] or '-'})"
-                )
         elif args.command == "sessions":
             for s in state.get_recent_sessions(args.limit):
                 print(f"  [{s['engine']}] {s['timestamp'][:16]} — {s['summary'][:80]}")
@@ -678,17 +508,6 @@ if __name__ == "__main__":
                 print(
                     f"  {lock['path']} — locked by {lock['locked_by']['engine']} ({lock['locked_by']['model']})"
                 )
-        elif args.command == "memory":
-            mem = state.get_shared_memory()
-            print("Conventions:")
-            for c in mem["conventions"]:
-                print(f"  {c['key']}: {c['value']}")
-            print("Gotchas:")
-            for g in mem["gotchas"]:
-                print(f"  {g['description']}")
-            print("Decisions:")
-            for d in mem["decisions"]:
-                print(f"  {d['title']}: {d['decision']}")
         elif args.command == "validate":
             errors = state.integrity_check()
             if errors:

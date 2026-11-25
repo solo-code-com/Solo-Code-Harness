@@ -13,7 +13,7 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 
 ## Stack
 - Python 3.10+ stdlib for `tools/`; pytest and ruff are dev tools. Kilo hooks are Node 18+. Pre-commit pins ruff 0.9.1.
-- `.solocode/shared-state.db` holds locks and `session_log` only. `shared_memory_*` and `features` are dead tables, nothing writes them. This file is the memory; git log is the task history.
+- `.solocode/shared-state.db` holds `active_locks` and `session_log` only; the four legacy memory tables are removed when an older file is opened. This file is the memory; git log is the task history.
 
 ## Verify
 `security_scan.py .` - `checklist.py .` - `check_skips.py tools/` - `garden.py` - `pytest tools` - `prose_lint.py`

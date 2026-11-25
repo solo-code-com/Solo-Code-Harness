@@ -18,46 +18,7 @@ def test_empty_state():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
-            assert state.get_features() == []
             assert state.get_active_locks() == []
-
-
-def test_set_feature_status():
-    """Setting feature status persists and retrieves correctly."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = Path(tmpdir) / "shared-state.db"
-        with SharedState(path) as state:
-            state.set_feature_status(
-                "feat-001",
-                "in-progress",
-                engine="copilot",
-                model="deepseek-chat",
-                evidence="PR #42 merged",
-            )
-        with SharedState(path) as state2:
-            feat = state2.get_feature("feat-001")
-            assert feat is not None
-            assert feat["status"] == "in-progress"
-            assert feat["owner"]["engine"] == "copilot"
-            assert feat["owner"]["model"] == "deepseek-chat"
-            assert feat["evidence"] == "PR #42 merged"
-
-
-def test_update_existing_feature():
-    """Updating an existing feature changes status, not creates duplicate."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = Path(tmpdir) / "shared-state.db"
-        with SharedState(path) as state:
-            state.set_feature_status(
-                "feat-001", "not-started", engine="kilo", model="claude"
-            )
-            state.set_feature_status(
-                "feat-001", "completed", engine="opencode", model="gpt-4o"
-            )
-            features = state.get_features()
-            assert len(features) == 1
-            assert features[0]["status"] == "completed"
-            assert features[0]["owner"]["engine"] == "opencode"
 
 
 def test_acquire_lock():
@@ -258,33 +219,6 @@ def test_add_session_entry():
             assert sessions[1]["engine"] == "copilot"
 
 
-def test_add_shared_memory():
-    """Conventions, gotchas, and decisions are stored correctly."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = Path(tmpdir) / "shared-state.db"
-        with SharedState(path) as state:
-            state.add_convention(
-                "branch_naming", "feature/<slug>", engine="copilot", model="gpt-4o"
-            )
-            state.add_gotcha(
-                "ruff config in .ruff.toml only, not pyproject.toml",
-                engine="kilo",
-                model="claude",
-            )
-            state.add_decision(
-                "Use SQLite for shared state",
-                "Chose SQLite over JSON+manual locking for real cross-process transaction isolation",
-                rationale="stdlib only, BEGIN IMMEDIATE gives real write isolation",
-                engine="copilot",
-                model="gpt-4o",
-            )
-            mem = state.get_shared_memory()
-            assert len(mem["conventions"]) == 1
-            assert len(mem["gotchas"]) == 1
-            assert len(mem["decisions"]) == 1
-            assert mem["conventions"][0]["key"] == "branch_naming"
-
-
 def test_integrity_check():
     """A fresh database always passes integrity_check."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -418,3 +352,67 @@ def test_old_table_gains_the_pid_column():
                 ).fetchall()
             }
             assert "pid" in cols
+
+
+def test_legacy_tables_are_removed_on_open(tmp_path):
+    """Opening SharedState drops legacy feature/shared-memory tables from older DBs."""
+    path = tmp_path / "shared-state.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE features (
+            id TEXT PRIMARY KEY,
+            name TEXT,
+            status TEXT NOT NULL,
+            owner_engine TEXT,
+            owner_model TEXT,
+            evidence TEXT,
+            last_updated TEXT NOT NULL
+        );
+        CREATE TABLE shared_memory_conventions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            added_by_engine TEXT NOT NULL,
+            added_by_model TEXT NOT NULL,
+            added_at TEXT NOT NULL
+        );
+        CREATE TABLE shared_memory_gotchas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            description TEXT NOT NULL,
+            added_by_engine TEXT NOT NULL,
+            added_by_model TEXT NOT NULL,
+            added_at TEXT NOT NULL
+        );
+        CREATE TABLE shared_memory_decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            rationale TEXT,
+            made_by_engine TEXT NOT NULL,
+            made_by_model TEXT NOT NULL,
+            made_at TEXT NOT NULL
+        );
+        INSERT INTO features (id, name, status, owner_engine, owner_model, evidence, last_updated)
+        VALUES ('feat-001', 'legacy', 'in-progress', 'kilo', 'claude', '', '2026-01-01T00:00:00+00:00');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    with SharedState(path) as state:
+        tables = {
+            row[0]
+            for row in state._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        for legacy in (
+            "features",
+            "shared_memory_conventions",
+            "shared_memory_gotchas",
+            "shared_memory_decisions",
+        ):
+            assert legacy not in tables
+        assert "session_log" in tables
+        assert "active_locks" in tables
