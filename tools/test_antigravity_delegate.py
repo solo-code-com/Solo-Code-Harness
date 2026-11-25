@@ -19,6 +19,8 @@ for _entry in (str(ROOT), str(TOOLS)):
 
 from tools import (  # noqa: E402
     antigravity_delegate,
+    control_paths,  # noqa: E402
+    post_run_checks,  # noqa: E402
     protected_state,  # noqa: E402
     restore,  # noqa: E402
     session_registry,  # noqa: E402
@@ -1352,3 +1354,135 @@ def test_long_answer_spills_to_report_file(monkeypatch, tmp_path, capsys):
     reports = list((tmp_path / ".solocode" / "reports").glob("*.md"))
     assert len(reports) == 1
     assert reports[0].read_text(encoding="utf-8") == long_text
+
+
+def test_worktree_refuses_a_target_outside_a_git_repo(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    monkeypatch.setattr(worktree, "repo_root", lambda _root: None)
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: [])
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        antigravity_delegate, "run_agy_cli", lambda **kwargs: run_called.append(kwargs)
+    )
+
+    code = antigravity_delegate.main(["task", "--target-dir", str(ws), "--worktree"])
+    assert code == 7
+    assert len(run_called) == 0
+    err = capsys.readouterr().err
+    assert "[worktree] refused: --target-dir is not inside a git work tree" in err
+
+
+def test_worktree_create_failure_exits_seven(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: [])
+    monkeypatch.setattr(worktree, "repo_root", lambda _root: ws)
+
+    def fail_create(*_a, **_k):
+        raise worktree.WorktreeError("git worktree add failed")
+
+    monkeypatch.setattr(worktree, "create", fail_create)
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        antigravity_delegate, "run_agy_cli", lambda **kwargs: run_called.append(kwargs)
+    )
+
+    code = antigravity_delegate.main(["task", "--target-dir", str(ws), "--worktree"])
+    assert code == 7
+    assert len(run_called) == 0
+    err = capsys.readouterr().err
+    assert "[worktree] git worktree add failed" in err
+
+
+def test_worktree_allow_dirty_warns_about_paths_left_behind(
+    monkeypatch, tmp_path, capsys
+):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "run_agy_cli",
+        lambda **kwargs: ({"text": "done", "error": None}, 0),
+    )
+
+    wt_path = ws / ".solocode" / "worktrees" / "task-1"
+    wt_path.mkdir(parents=True)
+    fake_wt = SimpleNamespace(path=wt_path, branch="jev/task-1")
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: ["src/x.py"])
+    monkeypatch.setattr(worktree, "repo_root", lambda _root: ws)
+    monkeypatch.setattr(worktree, "create", lambda *a, **k: fake_wt)
+    monkeypatch.setattr(worktree, "summary", lambda _path: "")
+
+    code = antigravity_delegate.main(
+        ["task", "--target-dir", str(ws), "--worktree", "--worktree-allow-dirty"]
+    )
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "[worktree] warning: 1 uncommitted path(s) are not in the worktree" in err
+
+
+def test_absolute_allow_dir_outside_the_target_is_refused(
+    monkeypatch, tmp_path, capsys
+):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    wt_path = ws / ".solocode" / "worktrees" / "task-1"
+    wt_path.mkdir(parents=True)
+    fake_wt = SimpleNamespace(path=wt_path, branch="jev/task-1")
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: [])
+    monkeypatch.setattr(worktree, "repo_root", lambda _root: ws)
+    monkeypatch.setattr(worktree, "create", lambda *a, **k: fake_wt)
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        antigravity_delegate, "run_agy_cli", lambda **kwargs: run_called.append(kwargs)
+    )
+
+    code = antigravity_delegate.main(
+        [
+            "task",
+            "--target-dir",
+            str(ws),
+            "--allow-dir",
+            str(outside),
+            "--auto-approve",
+            "--worktree",
+        ]
+    )
+    assert code == 7
+    assert len(run_called) == 0
+    err = capsys.readouterr().err
+    assert "[worktree] --allow-dir is outside --target-dir" in err
+
+
+def test_control_path_violation_exits_three(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        control_paths,
+        "new_violations",
+        lambda *_a, **_k: ["tools/guard_rules.py"],
+    )
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "run_agy_cli",
+        lambda **kwargs: ({"text": "done", "error": None}, 0),
+    )
+
+    code = antigravity_delegate.main(_wrapper_argv(ws) + ["--no-snapshot-writes"])
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "control-path violation; changed: tools/guard_rules.py" in err
+
+
+def test_unavailable_protected_fingerprint_exits_three(monkeypatch, tmp_path, capsys):
+    ws, _ = _wire_main(monkeypatch, tmp_path)
+    monkeypatch.setattr(protected_state, "fingerprint", lambda _root: None)
+    monkeypatch.setattr(
+        antigravity_delegate,
+        "run_agy_cli",
+        lambda **kwargs: ({"text": "done", "error": None}, 0),
+    )
+
+    code = antigravity_delegate.main(_wrapper_argv(ws) + ["--no-snapshot-writes"])
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "[control-path] could not fingerprint protected state before the run" in err

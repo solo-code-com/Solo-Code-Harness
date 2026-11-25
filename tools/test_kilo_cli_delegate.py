@@ -1402,3 +1402,80 @@ def test_long_answer_spills_to_report_file(monkeypatch, tmp_path, capsys):
     reports = list((tmp_path / ".solocode" / "reports").glob("*.md"))
     assert len(reports) == 1
     assert reports[0].read_text(encoding="utf-8") == long_text
+
+
+def test_worktree_refuses_a_target_outside_a_git_repo(monkeypatch, tmp_path, capsys):
+    _reach_the_runner(monkeypatch)
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
+    monkeypatch.setattr(worktree, "repo_root", lambda _root: None)
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: [])
+
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **kwargs: run_called.append(kwargs) or _ok_result(),
+    )
+
+    code = kilo_cli_delegate.main(
+        ["hello", "--no-guardrail", "--worktree", "--directory", str(tmp_path)]
+    )
+
+    assert code == 7
+    assert len(run_called) == 0
+    err = capsys.readouterr().err
+    assert "[worktree] refused: --directory is not inside a git work tree" in err
+
+
+def test_worktree_create_failure_exits_seven(monkeypatch, tmp_path, capsys):
+    _reach_the_runner(monkeypatch)
+    monkeypatch.setattr(kilo_cli_delegate, "_server_healthy", lambda _url: True)
+    monkeypatch.setattr(worktree, "repo_root", lambda _root: tmp_path)
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: [])
+
+    def fail_create(*_a, **_k):
+        raise worktree.WorktreeError("git worktree add failed")
+
+    monkeypatch.setattr(worktree, "create", fail_create)
+
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        kilo_cli_delegate,
+        "run_kilo_cli",
+        lambda **kwargs: run_called.append(kwargs) or _ok_result(),
+    )
+
+    code = kilo_cli_delegate.main(
+        ["hello", "--no-guardrail", "--worktree", "--directory", str(tmp_path)]
+    )
+
+    assert code == 7
+    assert len(run_called) == 0
+    err = capsys.readouterr().err
+    assert "[worktree] git worktree add failed" in err
+
+
+def test_control_path_violation_exits_three(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(kilo_cli_delegate, "ROOT", ws)
+    _reach_scope_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        kilo_cli_delegate.tier_gate, "refusal_for_project", lambda _dir: None
+    )
+    monkeypatch.setattr(kilo_cli_delegate, "_git_porcelain", lambda _dir: "")
+    monkeypatch.setattr(kilo_cli_delegate, "run_kilo_cli", lambda **_kw: _ok_result())
+    monkeypatch.setattr(
+        kilo_cli_delegate.control_paths,
+        "new_violations",
+        lambda *_a, **_k: ["tools/guard_rules.py"],
+    )
+
+    code = kilo_cli_delegate.main(
+        ["hello", "--no-guardrail", "--directory", str(ws / "src")]
+    )
+
+    assert code == 3
+    err = capsys.readouterr().err
+    assert "[control-path] worker changed harness control paths:" in err
+    assert "tools/guard_rules.py" in err

@@ -37,6 +37,7 @@ import protected_state  # noqa: E402
 import restore  # noqa: E402
 import session_control  # noqa: E402
 import session_registry  # noqa: E402
+import tier_gate  # noqa: E402
 import worktree  # noqa: E402
 
 from tools import opencode_delegate  # noqa: E402
@@ -2776,3 +2777,106 @@ def test_long_answer_spills_to_report_file(monkeypatch, tmp_path, capsys):
     reports = list((tmp_path / ".solocode" / "reports").glob("*.md"))
     assert len(reports) == 1
     assert reports[0].read_text(encoding="utf-8") == long_text
+
+
+def test_worktree_create_failure_exits_seven(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+
+    monkeypatch.setattr(worktree, "dirty_paths", lambda _root: [])
+
+    def fail_create(*_a, **_k):
+        raise worktree.WorktreeError("git worktree add failed")
+
+    monkeypatch.setattr(worktree, "create", fail_create)
+
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **kwargs: run_called.append(kwargs) or _ok_result(),
+    )
+
+    code = opencode_delegate.main(
+        ["do task", "--no-guardrail", "--worktree", "--cascade", "off"]
+    )
+    assert code == 7
+    assert len(run_called) == 0
+    err = capsys.readouterr().err
+    assert "[worktree] git worktree add failed" in err
+
+
+def test_tier_gate_refusal_exits_two(monkeypatch, tmp_path, capsys):
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        tier_gate,
+        "refusal_for_project",
+        lambda _dir: "tier=client refuses banned provider",
+    )
+    run_called: list[dict] = []
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **kwargs: run_called.append(kwargs) or _ok_result(),
+    )
+
+    code = opencode_delegate.main(
+        ["do task", "--no-guardrail", "--directory", str(tmp_path)]
+    )
+    assert code == 2
+    assert len(run_called) == 0
+    err = capsys.readouterr().err
+    assert "[tier-gate] refused: tier=client refuses banned provider" in err
+
+
+def test_cascade_budget_exhausted_skips_the_next_attempt(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(opencode_delegate, "_snapshot", lambda _root: {})
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
+
+    step = [0]
+
+    def fake_time():
+        step[0] += 1
+        if step[0] <= 2:
+            return 100.0
+        return 200.0
+
+    run_called: list[str] = []
+
+    def fake_run(**kwargs):
+        run_called.append(kwargs.get("model"))
+        return {
+            "text": "",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": "rate limit quota exceeded",
+        }
+
+    monkeypatch.setattr(opencode_delegate.time, "monotonic", fake_time)
+    monkeypatch.setattr(opencode_delegate, "run_opencode_cli", fake_run)
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--model",
+            "opencode/deepseek-v4.1-flash",
+            "--cascade-budget",
+            "60",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code != 0
+    assert len(run_called) == 1
+    err = capsys.readouterr().err
+    assert "[cascade] budget exhausted before the next attempt" in err
