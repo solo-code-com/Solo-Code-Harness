@@ -324,11 +324,12 @@ explicit fence. Four facts the routing table does not carry:
   is refused with exit 3 unless `--allow-control-paths` is passed. Pass it only when the
   task is maintaining this harness.
 - Tier: `gemini-4-hydrogen-medium` is the floor and `-high` is for accuracy, by operator
-  directives of 2026-11-24 and 2026-11-25. The `gemini-3.8-flash-*` ids still work and are the
-  fallback when Hydrogen is unavailable. Low is not a default: it finished a 100-line module
-  in 99s while medium hit that harness's 200s and 280s ceilings, which measured wall clock,
-  not answer quality. A timeout is a budget failure, so the fix is a larger budget: 600s
-  generation-only, 900s with commands.
+  directives of 2026-11-24 and 2026-11-25. The retired `gemini-3.8-flash-*` ids are gone from
+  the expected catalogue: if Hydrogen is unavailable the run fails and says so, rather than
+  silently downgrading to a model that is about to disappear. Low is not a default: it finished
+  a 100-line module in 99s while medium hit that harness's 200s and 280s ceilings, which
+  measured wall clock, not answer quality. A timeout is a budget failure, so the fix is a larger
+  budget: 600s generation-only, 900s with commands.
 
 GUI handoff, for rendered UI only: write the plan to
 `.gemini/antigravity/handoff/inbox/<slug>-plan.md`. Full guide:

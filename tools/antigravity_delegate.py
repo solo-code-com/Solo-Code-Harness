@@ -31,18 +31,18 @@ from tools import workspace_snapshot  # noqa: E402
 from tools.shared_state import SharedState  # noqa: E402
 
 try:
-    import protected_state
-except ImportError:  # pragma: no cover - script-dir import path
     from tools import protected_state  # noqa: E402
+except ImportError:  # pragma: no cover - script-dir import path
+    import protected_state
 
 try:
-    import restore
-except ImportError:  # pragma: no cover - script-dir import path
     from tools import restore  # noqa: E402
+except ImportError:  # pragma: no cover - script-dir import path
+    import restore
 
-# Operator directive 2026-11-25: Hydrogen is preferred, medium by default and
-# high when the answer must be trusted. The 3.8-flash ids remain valid and are
-# the fallback when Hydrogen is unavailable to the signed-in account.
+# Operator directive 2026-11-25: Hydrogen only, medium by default and high when
+# the answer must be trusted. The 3.8-flash ids are retired and are not a
+# fallback: a missing Hydrogen entitlement fails loudly instead.
 DEFAULT_MODEL = "gemini-4-hydrogen-medium"
 DEFAULT_TIMEOUT_SECONDS = 600
 DIRECTORY_LOCK_ENGINE = "gemini"
@@ -74,12 +74,22 @@ def _stderr(message: str) -> None:
 
 
 def _load_sibling(module_name: str):
-    """Import a sibling tool (tools/ may not be on sys.path)."""
-    if str(TOOLS_DIR) not in sys.path:
-        sys.path.insert(0, str(TOOLS_DIR))
+    """Import a sibling tool under its package name.
+
+    One canonical module object matters here: importing a bare sibling from a
+    context where tools/ is not yet on sys.path registers a second object under a
+    second name, and a test that patches the other one sees nothing change.
+    """
     import importlib
 
-    return importlib.import_module(module_name)
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    try:
+        return importlib.import_module(f"tools.{module_name}")
+    except ImportError:  # pragma: no cover - script-dir import path
+        if str(TOOLS_DIR) not in sys.path:
+            sys.path.insert(0, str(TOOLS_DIR))
+        return importlib.import_module(module_name)
 
 
 def _make_streams_encoding_safe() -> None:
@@ -486,9 +496,9 @@ def _blocked_prompt(prompt: str, *, allow_credential_paths: bool = False) -> str
     to the prompt before a session is created or any quota is spent.
     """
     try:
-        import guard_rules
-    except ImportError:  # pragma: no cover - script-dir import path
         from tools import guard_rules  # type: ignore[no-redef]
+    except ImportError:  # pragma: no cover - script-dir import path
+        import guard_rules
     matched = guard_rules.match_prompt(prompt)
     if matched:
         return matched
@@ -787,9 +797,9 @@ def main(argv: list[str] | None = None) -> int:
         # was allowed. agy never runs .claude/hooks/guard.py.
         if not args.allow_control_paths:
             try:
-                import control_paths
-            except ImportError:  # pragma: no cover - script-dir import path
                 from tools import control_paths  # type: ignore[no-redef]
+            except ImportError:  # pragma: no cover - script-dir import path
+                import control_paths
             # git status covers the enclosing repository, so a write to a control
             # path outside --target-dir is still seen; the snapshot diff only
             # looks inside the target.
@@ -848,9 +858,9 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 return 3
         try:
-            import post_run_checks
-        except ImportError:  # pragma: no cover - script-dir import path
             from tools import post_run_checks  # type: ignore[no-redef]
+        except ImportError:  # pragma: no cover - script-dir import path
+            import post_run_checks
         if post_run_checks.main(["--directory", str(target_dir), "--strict"]) == 3:
             _stderr("[post-run] blocking finding; see the lines above")
             return 3

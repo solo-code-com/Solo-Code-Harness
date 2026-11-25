@@ -124,7 +124,7 @@ instead of at the honour system. Gemini takes the quick/light work because its
 tokens are free.
 
 The OpenCode wrapper also reaches the DeepSeek **strong** tier with
-`--model opencode-go/deepseek-v4-pro`. Pick the Antigravity tier by complexity, with Hydrogen as the preferred family: `gemini-4-hydrogen-medium` for the default case including mechanical and multi-file work, `gemini-4-hydrogen-high` for review and for any verdict that gates a merge. The 3.8-flash ids remain the fallback.
+`--model opencode-go/deepseek-v4-pro`. Pick the Antigravity tier by complexity, with Hydrogen as the only family: `gemini-4-hydrogen-medium` for the default case including mechanical and multi-file work, `gemini-4-hydrogen-high` for review and for any verdict that gates a merge.
 
 A live `dsh` run still needs its environment set up: `CI=true`, a one-time
 `pnpm build` in the checkout, and no exported `DEEPSEEK_BASE_URL` (dsh uses its

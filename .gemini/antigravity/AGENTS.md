@@ -315,9 +315,9 @@ Available for domain-specific work. See `.gemini/antigravity/agents/`:
 
 ---
 
-## Model Guidance — Gemini 3.8 Flash (Antigravity IDE)
+## Model Guidance — Gemini 4 Hydrogen (Antigravity IDE)
 
-When operating with the **Gemini 3.8 Flash** model in Antigravity:
+When operating with the **Gemini 4 Hydrogen** model in Antigravity:
 
 ### 1. Strengths to Prioritize
 - **Repo-Wide Breadth & High Concurrency:** Leverage the 1M-token context window for repository-wide surveys, multi-file analysis (>5 files), architecture audits, and diff reviews.
@@ -325,7 +325,7 @@ When operating with the **Gemini 3.8 Flash** model in Antigravity:
 - **Fast Feedback Loop:** Run quick automated sanity checks and garden audits where fast turnarounds are required.
 
 ### 2. Guardrails & Execution Discipline
-- **Strict Surgical Changes:** Flash models must never rewrite entire files. Always use `replace_file_content` with exact matching strings or `multi_replace_file_content` for non-contiguous edits.
+- **Strict Surgical Changes:** never rewrite an entire file. Always use `replace_file_content` with exact matching strings or `multi_replace_file_content` for non-contiguous edits.
 - **Demand Evidence:** Adhere strictly to the `| Claim | Command run | Output |` evidence rule. Never assume compilation or syntax correctness without running the actual gate script.
 - **Anti-Staleness Gate:** If an API or signature is uncertain, verify against `package.json`, `pyproject.toml`, or source imports before writing dependent logic.
 

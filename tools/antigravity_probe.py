@@ -31,9 +31,6 @@ from tools.antigravity_delegate import (  # noqa: E402
 )
 
 EXPECTED_MODELS = (
-    "gemini-3.8-flash-low",
-    "gemini-3.8-flash-medium",
-    "gemini-3.8-flash-high",
     # Measured 2026-11-25: agy also serves a second family with four tiers,
     # including xhigh. Kept here so a catalogue change is reported by this probe
     # instead of surfacing as a failing run.

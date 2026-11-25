@@ -17,12 +17,14 @@ TOOLS = Path(__file__).resolve().parent
 for _entry in (str(ROOT), str(TOOLS)):
     sys.path.insert(0, _entry)
 
-import protected_state  # noqa: E402
-import restore  # noqa: E402
-import session_registry  # noqa: E402
-import worktree  # noqa: E402
-
-from tools import antigravity_delegate, shared_state  # noqa: E402
+from tools import (  # noqa: E402
+    antigravity_delegate,
+    protected_state,  # noqa: E402
+    restore,  # noqa: E402
+    session_registry,  # noqa: E402
+    shared_state,
+    worktree,  # noqa: E402
+)
 
 
 @pytest.fixture(autouse=True)

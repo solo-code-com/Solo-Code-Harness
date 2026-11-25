@@ -75,7 +75,7 @@ Poor fit:
 - A single small mechanical edit - use Kilo CLI instead; it is headless and does
   not cost the user a relay step. A batch of edits is handled in the next rule.
 
-Rule of thumb: a **single** tiny edit goes to Kilo CLI, which has no relay cost. A **batch** of mechanical edits inside one directory goes to `gemini-4-hydrogen-medium` with an exact brief (a five-file batch took 61.2s at 3.8-flash-low on 2026-11-24; budget 600s). On anything broader, Gemini earns its relay cost.
+Rule of thumb: a **single** tiny edit goes to Kilo CLI, which has no relay cost. A **batch** of mechanical edits inside one directory goes to `gemini-4-hydrogen-medium` with an exact brief (a five-file batch took 61.2s in an earlier measurement; budget 600s). On anything broader, Gemini earns its relay cost.
 
 ## Maximizing Antigravity CLI use
 
@@ -151,31 +151,30 @@ the run expensive, so in this repository the orchestrator applies a root-file ed
 
 ### Choose the model by task complexity
 
-Gemini 3.8 Flash exposes three reasoning levels as distinct model ids, all drawn from the
-same account quota. An operator directive of 2026-11-24 sets the floor at medium: low traded
-accuracy for wall clock, and this harness spends accuracy first. Pick high when the answer is
-used to approve a change.
+Gemini 4 Hydrogen exposes four reasoning levels as distinct model ids, all drawn from the
+same account quota. An operator directive of 2026-11-25 sets the family and the floor:
+`gemini-4-hydrogen-medium` for the default case, `gemini-4-hydrogen-high` when the answer
+gates a decision. `xhigh` exists and is not used here.
 
 | Tier | Model id | Use for |
 |---|---|---|
 | Medium (floor) | `gemini-4-hydrogen-medium` | every default task: mechanical edits, multi-file summarize/compare, scoped refactor |
 | High (accuracy) | `gemini-4-hydrogen-high` | independent review, subtle bug hunt, any verdict that gates a merge |
-| Flash (fallback) | `gemini-3.8-flash-{low,medium,high}` | still served; use when Hydrogen is unavailable, and note that older measurements were taken here |
 
-The earlier rule recommended low, and its reason is worth keeping. In a ~100-line
-implementation benchmark, low finished in 99.1s and passed 16/16. Medium hit the 200s and
-280s ceilings of that harness, and took 231.8s on a simpler task. That measured wall clock,
-not answer quality. A timeout is a budget failure rather than a wrong answer. The fix is a
-larger budget, not a lower tier: 600s for generation-only runs, 900s for runs that execute
-commands. If a medium run still times out, raise the timeout before falling back to low, and
-record the fallback in the brief. One more measurement points the same way: in this repo on 2026-11-24, three low-tier runs reported `thinking_tokens` 0, while a medium-tier run reported 6039.
+Two earlier rules explain the floor. A ~100-line implementation benchmark gave 99.1s and 16/16
+on the low tier, while medium hit that harness's 200s and 280s ceilings. That measured wall
+clock, not answer quality, and a timeout is a budget failure. Local measurements on 2026-11-24
+showed the rest: three low-tier runs reported `thinking_tokens` 0, and a medium run reported
+6039. The budget that goes with a higher tier is 600s for generation-only runs and 900s when
+the run executes commands.
 
-**Catalogue, measured 2026-11-25** with `agy models` (10 ids at the time):
-`gemini-4-hydrogen-{low,medium,high,xhigh}`, `gemini-3.8-flash-{low,medium,high}`,
-`claude-sonnet-4-6`, `claude-opus-4-6-thinking`, `gpt-oss-120b-medium`. The fleet
-now serves a second Gemini family and non-Gemini models, so a tier name alone no
-longer identifies a model. An operator directive of 2026-11-25 makes Hydrogen the default: medium for
-everything, high when the answer gates a decision. `xhigh` exists and is not used.
+The retired `gemini-3.8-flash-*` ids are no longer expected or used. If Hydrogen is unavailable
+to the signed-in account, the run fails and says so; there is no silent downgrade to a model
+that is about to disappear.
+
+**Catalogue, measured 2026-11-25** with `agy models`: `gemini-4-hydrogen-{low,medium,high,xhigh}`,
+`claude-sonnet-4-6`, `claude-opus-4-6-thinking` and `gpt-oss-120b-medium`. A tier name alone
+no longer identifies a model, so name the family too.
 
 ### Authentication, quota, and account rotation
 
