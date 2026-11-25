@@ -1430,3 +1430,49 @@ both earlier in this file; they moved only to reach the 7,900-character target.
 Moved verbatim out of `MEMORY.md`; the tooling these bullets name no longer exists.
 
 - [tech] Codex CLI 0.160.0 (npm global) is a harness consumer: it reads   `AGENTS.md` natively, so no `.codex/` engine mirror is generated. Launcher   `codex-env.ps1`, metering `tools/codex_usage.py`. - [verify] Full Codex gate: `python tools/codex_verify.py`. ## Gotchas - [gotcha] Codex CLI internal exec policy blocks `rm -f` / `-Force` patterns;   under `approval_policy = "never"` this aborts process creation. Avoid `-Force`
+
+## Moved from MEMORY.md 2026-11-25 (memory cap)
+
+- [decision] Router co ledger (2026-11-12): `tools/router.py` phan loai task bang bang rule (6 loai,
+  khong goi LLM), tra ve `{task_type, brain, worker, model, reason, budget, evidence}` va ghi
+  `.solocode/route-decisions.jsonl` khi `--dry-run`. Brain ghi `rules` cho moi route cho den khi
+  `--probe` duoc noi; brain fallback khai trong `routing_brains` (`openrouter/jev-router` ->
+  `opencode-go/claude-haiku-5-5`), khong bao gio la executor. `opencode_delegate.py` doc
+  `default_agent` tu `ROOT/opencode.json` (khong phai cwd) truoc khi cap `--auto`, nen thieu `--agent`
+  thi worker khong con quyen ghi. `gemini-decision-1` la decision API (`outputTokenLimit: 1`,
+  `POST /v1beta/decisions`), khong phai chat model.
+
+- [decision] Giu `.kilo/` lam goc sinh (2026-11-16): van sinh `.claude`, `.opencode`, `.copilot`,
+  `.gemini`. Do: 1.684 lan ".kilo" tren 250 file (~778 ".kilo/" tren 179); garden neo
+  `engines[".kilo"]`; deploy co `DIRS_KILO`. Phan bien doc lap (agy): KEEP, don rename vao
+  breaking release.
+- [decision] Noi gate hook-reference, do hau qua (2026-11-16): `check_hook_references` tra `[]`
+  khi `hooks.json` vang. Do 4 ca: vang 1->0; thieu script / trung id / JSON hong giu 1->1.
+  Mat bat xoa nham; file duoc git track nen xoa hien trong diff.
+- [decision] `select_provider` hoi router (2026-11-16): ca 5 worker cung capability
+  `{read,bash}` nen `min(capable, key=rank)` luon tra opencode. Khong co `--worker` thi goi
+  `router.route()` + `provider_id_for_router_worker`; survey->gemini, simple_edit->opencode;
+  loi route fall-through.
+- [decision] Evidence loi giu ca hai kenh (2026-11-16): `subagent_cli.py` gop `err` + `out`
+  (cat 2000) thay vi `err or out`; antigravity/codex in fragment timeout ra stdout nen truoc
+  do bi nuot.
+- [decision] Checklist Observability het false PASS (2026-11-16): 5 dong tro artifact chi
+  `.kilo/hooks/*` sinh ra. `.kilo/state/` la ban copy tu `D:\Project\Solo-Code-Harness`
+  (9 file, noi dung 6/2026, mtime 10/2026) -> da xoa; `.gitkeep` duoc track de
+  `eval_harness` `is_dir()` khong do (thieu dir -> context 11/12).
+- [decision] Ignore rule `.solocode` (2026-11-16): `.solocode/` loai ca thu muc nen moi
+  negation chet -> `.solocode/*`. `executor-config.json` track lai (deploy doc lam template
+  sau `if exists()`); `executor-mode` giu ignore vi noi dung `off` va deploy copy vao moi
+  target. Guard: `test_repo_ignore_rules.py`, mutation-checked.
+
+- [decision] Dong bo tai lieu CLI bang 3 reviewer doc lap (2026-11-17): Codex phu hop dong
+  wrapper, Claude (`--profile native`) phu mo hinh enforcement, agy phu claim theo engine.
+  13 claim sai da sua: `--timeout` help 120->900, xoa `--no-json` chet, sandbox default
+  `auto`, exit-69 wording, conversation id in ca khi loi, "three workers", executor-mode
+  "khong bypass duoc" (OpenCode bypass duoc bang `run --auto` tran), python3->python (stub
+  Windows exit 9009), shared-state/Copilot chi Claude hook ghi SQLite, `/doctor`->garden.
+  False positive bi chan: flash-free la `DEEPSEEK_V41_FLASH_CHAIN[0]`, Kilo 3-segment id
+  dung, commandcode con cau hinh. Coverage ratchet do -> xanh bang 32 test, khong ha budget.
+- 2026-11-23: bo FreeModel; Claude Code->DeepSeek /anthropic, Codex->CommandCode /responses (deepseek-v4.1-flash); tier gate tools/tier_gate.py (thieu marker => client); Codex sandbox=workspace-write (da do chay duoc tren Windows).
+- 2026-11-24: go Codex roi Claude Code engine. guard -> tools/guard_hook.py + guard_rules.py (2 wrapper dung); skills -> .agents/skills (tools/skills_engine.py); 5 workflow giu o .agents/workflows (tro, chua co engine chay); 6 hook trong phien thay bang tools/post_run_checks.py (2 wrapper goi) + .opencode/plugins/harness (session_start + pre_compact). agy KHONG co hook/plugin API (kiem 2026-11-24, agy 1.5.15). Lock phai sinh SAU git add.
+- 2026-11-24: P5 (sandbox khong chan mang) chap nhan bo qua - ly do ghi trong tools/win_sandbox.py. Khong xay egress proxy.
