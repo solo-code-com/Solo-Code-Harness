@@ -75,6 +75,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+_TOOLS_DIR = Path(__file__).resolve().parent
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
+import review_check  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 POLICY_PATH = Path("tools") / "config" / "review-policy.json"
 SCHEMA_VERSION = 1
@@ -297,12 +302,33 @@ def record_receipt(
     root: Path = ROOT,
     git: str = GIT,
     rationale: str = "",
+    findings_path: Path | None = None,
 ) -> tuple[Path, dict[str, object]]:
     """Write a receipt for the current change set and return (path, receipt).
 
     `rationale` records why the tree was approved. It is metadata about
     the review, never part of the tree: the hash inputs stay untouched.
+    When `findings_path` is provided, the report must pass `review_check`
+    before anything is written, and its counts and sha256 are recorded.
     """
+    findings_summary: dict[str, object] | None = None
+    if findings_path is not None:
+        try:
+            checked = review_check.check_file(findings_path)
+        except review_check.ReportReadError as exc:
+            raise ReceiptError(str(exc)) from exc
+        if not checked["ok"]:
+            reasons = "; ".join(str(r) for r in checked["reasons"])
+            raise ReceiptError(f"findings report rejected ({findings_path}): {reasons}")
+        counts = checked["counts"]
+        findings_summary = {
+            "total": counts["total"],
+            "verified": counts["verified"],
+            "read": counts["read"],
+            "inferred": counts["inferred"],
+            "sha256": checked["sha256"],
+        }
+
     policy = load_policy(root)
     change = compute_change_set(root, git)
     tree_hash = str(change["tree_hash"])
@@ -323,6 +349,8 @@ def record_receipt(
         "changed_lines": change["changed_lines"],
         "tool_version": TOOL_VERSION,
     }
+    if findings_summary is not None:
+        receipt["findings"] = findings_summary
 
     path = receipt_path(policy, tree_hash, root)
     try:
@@ -540,6 +568,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="why this tree was approved (stored with the receipt)",
     )
     record.add_argument(
+        "--findings",
+        type=Path,
+        default=None,
+        help="path to a review findings report verified before recording",
+    )
+    record.add_argument(
         "--json",
         action="store_true",
         help="print the receipt as JSON instead of its path",
@@ -571,7 +605,12 @@ def main(argv: list[str] | None = None, root: Path = ROOT, git: str = GIT) -> in
     try:
         if args.command == "record":
             path, receipt = record_receipt(
-                args.reviewer, args.model, root, git, args.rationale
+                args.reviewer,
+                args.model,
+                root,
+                git,
+                args.rationale,
+                findings_path=args.findings,
             )
             print(json.dumps(receipt, indent=2) if args.json else path)
             return 0

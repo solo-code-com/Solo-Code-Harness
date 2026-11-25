@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-25T13:25:45Z"
+generated_at = "2026-11-25T14:43:39Z"
 mode = "root"
-content_fingerprint = "sha256:e4ec96e4b15ebbd3c2843604ce8a8034ee7f422dffdd91f62d110306cfae0154"
+content_fingerprint = "sha256:cfa8ab16d86f4930a77e442100572cec6aa8391fa9fbe3567d39fe4e02554da2"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -123,6 +123,7 @@ paths = [
     "tools/provider_audit.py",
     "tools/restore.py",
     "tools/retention.py",
+    "tools/review_check.py",
     "tools/review_receipt.py",
     "tools/router.py",
     "tools/router_eval.py",
@@ -180,6 +181,7 @@ paths = [
     "tools/test_repo_ignore_rules.py",
     "tools/test_restore.py",
     "tools/test_retention.py",
+    "tools/test_review_check.py",
     "tools/test_review_receipt.py",
     "tools/test_router.py",
     "tools/test_router_eval.py",

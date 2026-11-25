@@ -16,6 +16,7 @@ Usage:
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import shutil
@@ -689,6 +690,95 @@ def test_old_receipt_without_rationale_key_is_tolerated(tmp_path: Path) -> None:
     path.write_text(json.dumps(stored, indent=2) + "\n", encoding="utf-8")
 
     assert tool.main(["verify"], root=root) == 0
+
+
+# --- findings gate -----------------------------------------------------------
+
+
+def test_record_with_accepted_findings_writes_counts_and_sha256(
+    tmp_path: Path,
+) -> None:
+    """10. `record --findings` with an accepted report writes counts and sha256."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+
+    report = tmp_path / "accepted_report.txt"
+    report_text = (
+        "1. high | code | base.txt:2 | missing check\n"
+        "  proof: ran python -m pytest -q\n"
+        "2. low | feature | typo in comment\n"
+        "  proof: inferred\n"
+    )
+    report.write_text(report_text, encoding="utf-8")
+    expected_sha = hashlib.sha256(report.read_bytes()).hexdigest()
+
+    assert (
+        tool.main(
+            [
+                "record",
+                "--reviewer",
+                "codex",
+                "--model",
+                "gpt-6.1-sol",
+                "--findings",
+                str(report),
+            ],
+            root=root,
+        )
+        == 0
+    )
+
+    tree_hash = str(tool.compute_change_set(root)["tree_hash"])
+    receipt_file = root / str(POLICY["receipt_dir"]) / f"{tree_hash}.json"
+    assert receipt_file.is_file()
+    stored = json.loads(receipt_file.read_text(encoding="utf-8"))
+    assert stored["findings"] == {
+        "total": 2,
+        "verified": 1,
+        "read": 0,
+        "inferred": 1,
+        "sha256": expected_sha,
+    }
+    assert tool.main(["verify"], root=root) == 0
+
+
+def test_record_with_rejected_findings_writes_nothing_and_returns_2(
+    tmp_path: Path, capsys
+) -> None:
+    """11. `record --findings` with a rejected report writes nothing and exits 2."""
+    tool = _load_tool()
+    root = _repo(tmp_path)
+    _over_threshold(root)
+
+    report = tmp_path / "rejected_report.txt"
+    report.write_text(
+        (
+            "3. high | code | base.txt:2 | unverified claim\n"
+            "  proof: read base.txt:1-4\n"
+        ),
+        encoding="utf-8",
+    )
+
+    rc = tool.main(
+        [
+            "record",
+            "--reviewer",
+            "codex",
+            "--model",
+            "gpt-6.1-sol",
+            "--findings",
+            str(report),
+        ],
+        root=root,
+    )
+
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "3" in err
+    assert "rejected" in err
+    receipt_dir = root / str(POLICY["receipt_dir"])
+    assert not receipt_dir.exists() or list(receipt_dir.glob("*.json")) == []
 
 
 if __name__ == "__main__":
