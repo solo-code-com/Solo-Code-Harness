@@ -246,6 +246,7 @@ def _error_result(error: str) -> dict[str, Any]:
         "tokens": None,
         "cost": None,
         "error": error,
+        "arm": "opencode",
     }
 
 
@@ -548,6 +549,7 @@ def parse_json_events(output: str) -> dict[str, Any]:
         "tokens": None,
         "cost": None,
         "error": None,
+        "arm": "opencode",
     }
 
     invalid_payload = None
@@ -1026,6 +1028,7 @@ def log_usage(
             "usage": result.get("tokens"),
             "cost": result.get("cost"),
             "error": result.get("error"),
+            "arm": result.get("arm"),
             "phase": "finish",
             "run_id": run_id,
             "sandbox": sandbox,
@@ -1181,6 +1184,9 @@ def _run_kilo_fallback(
         if proc.stderr:
             _stderr(proc.stderr[-2000:])
         return None
+    if not (proc.stdout or "").strip():
+        _stderr("[cascade] kilo arm exited 0 with no answer")
+        return None
     return {
         "text": proc.stdout,
         "events": [],
@@ -1188,6 +1194,7 @@ def _run_kilo_fallback(
         "tokens": None,
         "cost": None,
         "error": None,
+        "arm": "kilo",
     }
 
 

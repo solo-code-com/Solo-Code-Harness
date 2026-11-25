@@ -392,7 +392,11 @@ def has_drift(rows: list[dict[str, object]]) -> bool:
 
 
 def failure_rows(db_path: Path = DB_PATH) -> list[dict[str, object]]:
-    """Return one row per project and arm ordered by failures descending."""
+    """Return one row per project and arm ordered by failures descending.
+
+    ``same_error_count`` counts rows sharing ``error_text`` (the most common
+    exact error text), rather than all failures for the project and arm.
+    """
     with closing(_open_db(db_path, create=False)) as conn:
         agg_rows = conn.execute(
             """
@@ -441,8 +445,8 @@ def failure_rows(db_path: Path = DB_PATH) -> list[dict[str, object]]:
                 "runs": int(runs),
                 "failures": int(failures),
                 "unfinished": int(unfinished),
-                "top_error": top_err,
-                "top_error_count": top_cnt,
+                "error_text": top_err,
+                "same_error_count": top_cnt,
             }
         )
     return results
@@ -572,13 +576,13 @@ def _cmd_failures(args: argparse.Namespace) -> int:
             str(r["runs"]),
             str(r["failures"]),
             str(r["unfinished"]),
-            str(r["top_error_count"]),
-            str(r["top_error"] or "-"),
+            str(r["same_error_count"]),
+            str(r["error_text"] or "-"),
         ]
         for r in rows
     ]
     _print_table(
-        ["Project", "Arm", "Runs", "Failures", "Unfinished", "TopCount", "TopError"],
+        ["Project", "Arm", "Runs", "Failures", "Unfinished", "SameError", "ErrorText"],
         table,
         right_align={2, 3, 4, 5},
     )

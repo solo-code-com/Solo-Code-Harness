@@ -143,7 +143,8 @@ def test_failures_and_unfinished_runs(tmp_path: Path) -> None:
     assert len(failures) == 1
     assert failures[0]["failures"] == 1
     assert failures[0]["unfinished"] == 1
-    assert failures[0]["top_error"] == "Timeout after 120s"
+    assert failures[0]["error_text"] == "Timeout after 120s"
+    assert failures[0]["same_error_count"] == 1
 
 
 def test_sync_is_idempotent_and_rebuild_clears(tmp_path: Path) -> None:
@@ -385,3 +386,42 @@ def test_a_run_keeps_its_key_when_an_earlier_line_is_dropped(tmp_path: Path) -> 
     assert second["failures"] == first["failures"]
     assert second["projects"] == first["projects"]
     assert second["skipped"] == 0
+
+
+def test_failure_rows_separates_total_failures_from_same_error_count(
+    tmp_path: Path,
+) -> None:
+    scan_root = tmp_path / "portfolio"
+    alpha = scan_root / "alpha"
+    _write_lock(alpha)
+    _write_jsonl(
+        alpha / ".solocode" / "opencode-usage.jsonl",
+        [
+            {
+                "ts": f"2026-11-25T07:0{i}:00+00:00",
+                "model": "gpt-5",
+                "prompt_chars": 50,
+                "elapsed_s": 1.0,
+                "error": err,
+                "phase": "finish",
+                "run_id": f"r-{i}",
+            }
+            for i, err in enumerate(
+                [
+                    "rate limit exceeded",
+                    "rate limit exceeded",
+                    "rate limit exceeded",
+                    "timeout A",
+                    "timeout B",
+                ]
+            )
+        ],
+    )
+    db_path = tmp_path / "portfolio.db"
+
+    portfolio.sync([scan_root], db_path)
+    rows = portfolio.failure_rows(db_path)
+    assert len(rows) == 1
+    assert rows[0]["failures"] == 5
+    assert rows[0]["same_error_count"] == 3
+    assert rows[0]["error_text"] == "rate limit exceeded"

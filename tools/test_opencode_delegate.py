@@ -211,6 +211,7 @@ def test_parse_json_events_extracts_text_session_and_tokens():
     assert result["tokens"] == {"total": 3}
     assert result["cost"] == 0.0
     assert result["error"] is None
+    assert result["arm"] == "opencode"
 
 
 def test_parse_json_events_captures_error():
@@ -1898,6 +1899,88 @@ def test_cascade_uses_kilo_when_tree_clean(monkeypatch, tmp_path, capsys):
     assert "[cascade] opencode arm failed (opencode crashed)" in err
 
 
+def test_cascade_kilo_empty_stdout_keeps_primary_error(monkeypatch, tmp_path, capsys):
+    ws = tmp_path / "ws"
+    (ws / "src").mkdir(parents=True)
+    monkeypatch.setattr(opencode_delegate, "ROOT", ws)
+    _reach_the_wrapper(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        opencode_delegate, "_snapshot", lambda _root: {"file.txt": "hash1"}
+    )
+    monkeypatch.setattr(opencode_delegate, "_git_porcelain", lambda _root: "")
+    monkeypatch.setattr(opencode_delegate, "_porcelain_or_none", lambda _root: "")
+    monkeypatch.setattr(
+        opencode_delegate, "_run_kilo_fallback", _REAL_RUN_KILO_FALLBACK
+    )
+
+    try:
+        import post_run_checks
+
+        monkeypatch.setattr(post_run_checks, "main", lambda _argv: 0)
+    except ImportError:
+        pass
+
+    recorded: list[dict] = []
+
+    class _ReceiptModule:
+        @staticmethod
+        def record_task_receipt(**kwargs):
+            recorded.append(kwargs)
+            return tmp_path / "receipt.json"
+
+    real_load_sibling = opencode_delegate._load_sibling
+    monkeypatch.setattr(
+        opencode_delegate,
+        "_load_sibling",
+        lambda name: (
+            _ReceiptModule if name == "task_receipt" else real_load_sibling(name)
+        ),
+    )
+
+    class _EmptyKiloProc:
+        returncode = 0
+        stdout = "   \n"
+        stderr = ""
+
+    monkeypatch.setattr(
+        opencode_delegate.subprocess, "run", lambda *_a, **_k: _EmptyKiloProc()
+    )
+    monkeypatch.setattr(
+        opencode_delegate,
+        "run_opencode_cli",
+        lambda **_kw: {
+            "text": "",
+            "events": [],
+            "session_id": None,
+            "tokens": None,
+            "cost": None,
+            "error": "opencode crashed",
+            "arm": "opencode",
+        },
+    )
+
+    code = opencode_delegate.main(
+        [
+            "do task",
+            "--no-guardrail",
+            "--no-snapshot-writes",
+            "--record-receipt",
+            "--directory",
+            str(ws / "src"),
+        ]
+    )
+    assert code == 2
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert "[cascade] kilo arm exited 0 with no answer" in err
+    assert "Error: opencode crashed" in err
+    assert len(recorded) == 1
+    assert recorded[0]["status"] == "FAILED"
+    finish = _usage_rows(tmp_path / "opencode-usage.jsonl")[-1]
+    assert finish["error"] == "opencode crashed"
+    assert finish["arm"] == "opencode"
+
+
 def test_cascade_off_never_calls_kilo(monkeypatch, tmp_path, capsys):
     ws = tmp_path / "ws"
     (ws / "src").mkdir(parents=True)
@@ -1998,6 +2081,7 @@ def test_kilo_arm_never_adds_a_second_guardrail(monkeypatch):
     result = opencode_delegate._run_kilo_fallback("brief", ns)
 
     assert result is not None and result["text"] == "OK\n"
+    assert result["arm"] == "kilo"
     argv = seen["argv"]
     assert "--no-guardrail" in argv
     assert argv[argv.index("--model") + 1] == opencode_delegate.KILO_FALLBACK_MODEL

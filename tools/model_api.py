@@ -29,6 +29,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import subprocess
 import sys
@@ -333,6 +334,13 @@ def run_tool(
 
 
 def main(argv: list[str] | None = None) -> int:
+    # A Windows console is cp1252, and a model answer is not: an arrow or a
+    # box-drawing character used to kill the tool after the work was done.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            with contextlib.suppress(OSError):
+                reconfigure(errors="replace")
     parser = argparse.ArgumentParser(description="Worker over a provider's chat API")
     parser.add_argument("prompt", nargs="?", help="the task; '-' reads stdin")
     parser.add_argument("--prompt-file", help="read the task from a file instead")
