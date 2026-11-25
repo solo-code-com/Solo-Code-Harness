@@ -577,13 +577,15 @@ _PROVIDER_MODELS: dict[str, dict[str, Any]] = {
     },
 }
 
-# Official DeepSeek API provider (plan.md A1). OpenAI-compatible endpoint fed by
-# DEEPSEEK_API_KEY + DEEPSEEK_BASE_URL from .env (see .env.template).
-# Verified 2026-10-06 against GET {DEEPSEEK_BASE_URL}/models: the official API
+# Official DeepSeek API provider (plan.md A1). OpenAI-compatible endpoint whose key
+# comes from .env; the endpoint is the public constant below, so an OpenCode session
+# started without the launcher still resolves the provider.
+# Verified 2026-10-06 against GET https://api.deepseek.com/v1/models: the official API
 # serves two ids -- `deepseek-flash`, whose reported model name is
 # "DeepSeek-V4.1-Flash", and `deepseek-v4-pro`. So V4.1 Flash IS on the direct
 # API, under the id `deepseek-flash` (there is no `deepseek-v4.1-flash` here).
 # Both report context_window 1,048,576 and max_output_tokens 393,216.
+_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 _DEEPSEEK_MODELS: dict[str, dict[str, Any]] = {
     "deepseek-flash": {
         "modelID": "deepseek-flash",
@@ -1222,11 +1224,11 @@ def generate_opencode_json(
         "providers": {
             "deepseek": {
                 "name": "DeepSeek (official)",
-                # Direct DeepSeek API, not a proxy. Both vars come from .env via
-                # opencode-env.ps1; the template ships https://api.deepseek.com/v1.
+                # Only the key is secret; the endpoint is the public constant, so a
+                # session started without the launcher still resolves the provider.
                 "env": ["DEEPSEEK_API_KEY"],
                 "package": "@opencode/ai/providers/openai-compatible",
-                "settings": {"baseURL": "${DEEPSEEK_BASE_URL}"},
+                "settings": {"baseURL": _DEEPSEEK_BASE_URL},
                 "models": _DEEPSEEK_MODELS,
             },
             "openrouter": {
