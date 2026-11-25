@@ -80,7 +80,9 @@ def coverage_ratchet_check(project_path: Path) -> dict | None:
     return run_check(
         "Coverage Ratchet",
         [sys.executable, str(gate)],
-        timeout=900,
+        # The gate allows its inner coverage run 1800s; the outer wait has to sit
+        # above that, or the inner limit can never be reached on a slow machine.
+        timeout=2100,
     )
 
 

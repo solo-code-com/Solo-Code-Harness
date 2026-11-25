@@ -268,10 +268,11 @@ def run_coverage() -> dict[str, float]:
         ],
         capture_output=True,
         text=True,
-        # The suite measured ~345s locally (1668 tests). checklist.py gives this gate a
-        # 900s outer budget, so 840 leaves headroom for a slower CI runner while still
-        # finishing before the outer limit trips.
-        timeout=840,
+        # The suite measured ~866s locally (1935 tests) before the coverage
+        # instrumentation, which adds roughly half again. 1800 leaves room for a
+        # slower runner and still finishes inside the outer budget in checklist.py,
+        # which must stay above this number or the inner limit can never be reached.
+        timeout=1800,
         check=False,
         cwd=ROOT,
     )
