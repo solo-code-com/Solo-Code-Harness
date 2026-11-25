@@ -28,6 +28,17 @@ try:
 except ImportError:
     import workspace_snapshot  # noqa: F401
 
+# `.solocode/task-receipts` is the one protected directory where an addition is
+# allowed, and only when a caller passes it to `new_violations` via
+# `allow_new_under`. A wrapper writes its own receipt after it compares
+# fingerprints, and two runs with their own worktrees both write receipts into the
+# main tree where the store lives, so each would otherwise report the other's
+# receipt as tampering on a run that changed nothing it was not permitted to
+# change. A receipt is self-reported status that the verifier reads rather than
+# trusts, which is why adding one is harmless. Everything else stays strict:
+# rewriting or deleting a receipt is still a violation, and `.solocode/reviews`
+# allows no addition at all, because an evidence record a worker can create is
+# exactly what this gate exists to catch.
 PROTECTED_PATHS = (
     ".solocode/reviews",
     ".solocode/task-receipts",
@@ -136,10 +147,40 @@ def fingerprint(root: Path) -> dict[str, str]:
     return state
 
 
-def new_violations(before: dict[str, str], after: dict[str, str]) -> list[str]:
-    """Paths whose hash differs between two fingerprints, sorted."""
-    keys = set(before) | set(after)
-    return sorted(key for key in keys if before.get(key) != after.get(key))
+def new_violations(
+    before: dict[str, str],
+    after: dict[str, str],
+    *,
+    allow_new_under: tuple[str, ...] = (),
+) -> list[str]:
+    """Paths whose hash differs between two fingerprints, sorted.
+
+    A path that exists in `before` is never skipped: a changed hash or a
+    disappearance is still a violation. A path that appears only in `after` is
+    skipped when its posix form starts with one of the `allow_new_under`
+    prefixes. Each prefix keeps its trailing slash, so a sibling directory such
+    as `.solocode/task-receipts-other` cannot match. A directory's `<empty>` or
+    `<absent>` marker also yields to the allowed files that now fill it, since
+    that marker is the absence of entries rather than evidence of its own.
+    """
+    violations: list[str] = []
+    for key in set(before) | set(after):
+        if key in before:
+            if before[key] != after.get(key):
+                if (
+                    key not in after
+                    and before[key] in ("<empty>", "<absent>")
+                    and any(
+                        (key + "/").startswith(prefix) for prefix in allow_new_under
+                    )
+                ):
+                    continue
+                violations.append(key)
+            continue
+        if any(Path(key).as_posix().startswith(prefix) for prefix in allow_new_under):
+            continue
+        violations.append(key)
+    return sorted(violations)
 
 
 def gate_fingerprint(root: Path) -> dict[str, str]:

@@ -1576,7 +1576,9 @@ def main(argv: list[str] | None = None) -> int:
             state_changes: list[str] = []
             if before_state is not None:
                 state_changes = protected.new_violations(
-                    before_state, protected.fingerprint(ROOT)
+                    before_state,
+                    protected.fingerprint(ROOT),
+                    allow_new_under=(".solocode/task-receipts/",),
                 )
             if None in (before, before_target, after_root, after_target):
                 _stderr("[cascade] skipped: the tree state could not be read")
@@ -1646,7 +1648,9 @@ def main(argv: list[str] | None = None) -> int:
         return 3
     protected_now = _load_sibling("protected_state")
     state_violations = protected_now.new_violations(
-        before_state, protected_now.fingerprint(ROOT)
+        before_state,
+        protected_now.fingerprint(ROOT),
+        allow_new_under=(".solocode/task-receipts/",),
     )
     if state_violations:
         _stderr(

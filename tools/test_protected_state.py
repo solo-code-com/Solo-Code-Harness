@@ -447,3 +447,78 @@ def test_home_changes_empty_when_nothing_moved(tmp_path: Path):
 
     assert fp1 == fp2
     assert protected_state.home_changes(fp1, fp2) == []
+
+
+def test_new_task_receipt_is_no_violation_when_its_prefix_is_allowed(tmp_path: Path):
+    """1. A new file under .solocode/task-receipts produces no violation when the prefix is passed."""
+    receipts_dir = tmp_path / ".solocode" / "task-receipts"
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+
+    before = protected_state.fingerprint(tmp_path)
+    assert before[".solocode/task-receipts"] == "<empty>"
+
+    (receipts_dir / "task-43.json").write_bytes(b"id: task-43\n")
+    after = protected_state.fingerprint(tmp_path)
+
+    violations = protected_state.new_violations(
+        before, after, allow_new_under=(".solocode/task-receipts/",)
+    )
+    assert violations == []
+
+
+def test_new_task_receipt_is_violation_when_no_prefix_is_allowed(tmp_path: Path):
+    """2. The same new file produces a violation when no prefix is passed."""
+    receipts_dir = tmp_path / ".solocode" / "task-receipts"
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+
+    before = protected_state.fingerprint(tmp_path)
+
+    receipt = receipts_dir / "task-43.json"
+    receipt.write_bytes(b"id: task-43\n")
+    after = protected_state.fingerprint(tmp_path)
+
+    violations = protected_state.new_violations(before, after)
+    assert ".solocode/task-receipts/task-43.json" in violations
+
+
+def test_new_review_file_is_violation_even_with_receipts_prefix_allowed(
+    tmp_path: Path,
+):
+    """3. A new file under .solocode/reviews is still a violation even with the task-receipts prefix passed."""
+    reviews_dir = tmp_path / ".solocode" / "reviews"
+    reviews_dir.mkdir(parents=True, exist_ok=True)
+
+    before = protected_state.fingerprint(tmp_path)
+
+    review_file = reviews_dir / "2026-11-25-rev.json"
+    review_file.write_bytes(b"status: PASS\n")
+    after = protected_state.fingerprint(tmp_path)
+
+    violations = protected_state.new_violations(
+        before, after, allow_new_under=(".solocode/task-receipts/",)
+    )
+    assert ".solocode/reviews/2026-11-25-rev.json" in violations
+
+
+def test_modified_and_deleted_receipts_are_violations_despite_the_prefix(
+    tmp_path: Path,
+):
+    """4. Modifying an existing receipt file, and deleting one, are both still violations."""
+    receipts_dir = tmp_path / ".solocode" / "task-receipts"
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+    edited = receipts_dir / "task-44.json"
+    removed = receipts_dir / "task-45.json"
+    edited.write_bytes(b"status: FAIL\n")
+    removed.write_bytes(b"status: PASS\n")
+
+    before = protected_state.fingerprint(tmp_path)
+
+    edited.write_bytes(b"status: PASS\n")
+    removed.unlink()
+    after = protected_state.fingerprint(tmp_path)
+
+    violations = protected_state.new_violations(
+        before, after, allow_new_under=(".solocode/task-receipts/",)
+    )
+    assert ".solocode/task-receipts/task-44.json" in violations
+    assert ".solocode/task-receipts/task-45.json" in violations

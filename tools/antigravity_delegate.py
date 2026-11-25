@@ -849,7 +849,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 3
         state_violations = protected_state.new_violations(
-            before_state, protected_state.fingerprint(Path(target_dir))
+            before_state,
+            protected_state.fingerprint(Path(target_dir)),
+            allow_new_under=(".solocode/task-receipts/",),
         )
         if state_violations:
             _stderr(
