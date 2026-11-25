@@ -707,6 +707,20 @@ def check_opencode(src: Path, dst: Path) -> list[str]:
     return issues
 
 
+def check_skill_proposals(root: Path = ROOT) -> list[str]:
+    """Proposals past their expiry, as a warning rather than drift.
+
+    A proposal lives in the operator inbox under .solocode and is never loaded,
+    so a stale one cannot change behaviour. It is still noise, and the point of
+    an expiry is to force a decision: promote it or drop it.
+    """
+    try:
+        import skill_proposal
+    except ImportError:  # pragma: no cover - script-dir import path
+        from tools import skill_proposal  # type: ignore[no-redef]
+    return skill_proposal.expired(root)
+
+
 def check_harness_fingerprint(root: Path) -> list[str]:
     """Compare .harness.lock's content_fingerprint with the declared files.
 
@@ -1893,6 +1907,16 @@ def main() -> int:
         all_issues.extend(opencode_issues)
     else:
         print("[OK] OpenCode engine (.opencode)")
+
+    print("\n--- Skill proposals ---")
+    expired_proposals = check_skill_proposals(ROOT)
+    if expired_proposals:
+        print(
+            "[WARN] Skill proposals expired without a decision: "
+            + ", ".join(expired_proposals)
+        )
+    else:
+        print("[OK] Skill proposals (none expired)")
 
     # Shared state health (không thuộc riêng engine nào)
     print("\n--- Shared State ---")
