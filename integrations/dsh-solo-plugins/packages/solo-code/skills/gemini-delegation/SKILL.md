@@ -102,7 +102,7 @@ levers are all soft:
 | Lever | Kind | Where |
 |---|---|---|
 | Routing rules ("use Antigravity CLI for X") | advisory | `AGENTS.md`, this skill |
-| Session-start availability announcement | reminder | `.claude/hooks/session_start.py` |
+| Harness state block at session start (branch/sha/dirty) | reminder | `.opencode/plugins/harness/index.js`, `.kilo/hooks/session/session-start.js` |
 | `opencode.json` permission `ask` on the wrapper | prompt, not a block | `opencode.json` |
 | Wrapper `--allow-dir` / lock / scope audit | enforced *if a run happens* | `tools/antigravity_delegate.py` |
 

@@ -281,7 +281,7 @@ lớn kể từ v3.3.0:
   (`.gemini/antigravity/handoff/{inbox,outbox}/`).
 - Thêm `PreCompact` hook (`pre_compact.py`) + Context Summary Struct
   (`.solocode/context-checkpoint.json`, surfaced 1 lần bởi
-  `session_start.py` rồi xoá).
+  `session_start.py` rồi xoá; hook gỡ 2026-11-24 cùng engine Claude).
 - Thêm `memory_gate.py`/`memory-manager.js` — size gate cứng cho memory
   (WARN 4.000 / BLOCK 8.000 ký tự), cộng `garden.py`'s content-diff check
   (không chỉ existence) cho `memory/`, `instruction/`, `skill/` (bỏ qua
@@ -306,7 +306,7 @@ lớn kể từ v3.3.0:
   enforce bởi `.claude/hooks/memory_gate.py` (PostToolUse) và
   `.kilo/hooks/post-tool-use/memory-manager.js`. Khi chạm ngưỡng: MOVE
   (không xoá) entry cũ nhất/ít tham chiếu nhất sang `decisions-archive.md`.
-- Quy ước: nạp `MEMORY.md` đầu phiên (qua rulebook/`session_start.py`),
+- Quy ước: nạp `MEMORY.md` đầu phiên (qua rulebook `AGENTS.md`),
   lệnh `/remember` để ghi. Format: YAML frontmatter `type`, `created`.
 - **Không nới ngưỡng theo cửa sổ ngữ cảnh model lớn hơn** — chi phí lặp
   lại mỗi phiên, dùng chung cho engine yếu nhất (Kilo CLI); xem lý do đầy đủ

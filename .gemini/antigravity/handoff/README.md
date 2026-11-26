@@ -93,8 +93,8 @@ well, but does not infer one from this README.
 3. Open Antigravity, tell Gemini: *"Read
    `.gemini/antigravity/handoff/inbox/<slug>-plan.md` and follow it. Write
    your report to `.gemini/antigravity/handoff/outbox/<slug>-report.md`."*
-4. Next Claude Code session (or on request) auto-detects new files in
-   `outbox/` via `.claude/hooks/session_start.py` and reads them.
+4. Next session (or on request) the orchestrator lists `outbox/` and reads any
+   new report.
 
 ## Why inbox/outbox is separate from `knowledge/`
 
