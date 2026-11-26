@@ -183,17 +183,18 @@ gotchas and decisions in `.kilo/memory/MEMORY.md`.
 
 ### Startup
 
-1. `session_start.py` injects a summary: git branch/sha/dirty count, recent sessions,
-   any unseen Gemini/Antigravity handoff report, and a PreCompact checkpoint
-   (`.solocode/context-checkpoint.json`) if one was left.
+1. Session start surfaces a harness state block (`branch`, `sha`, `dirty`), written by the
+   OpenCode plugin (`.opencode/plugins/harness/index.js`) on every model call and by the Kilo
+   `session-start` hook (`.kilo/hooks/session/session-start.js`); the plugin also writes
+   `.solocode/context-checkpoint.json` before a compaction.
 2. Read `git log --oneline -10` and `.kilo/memory/MEMORY.md` for what is in progress.
    There is no `in-progress` feature row to wait for.
 
 ### Wrap-Up (before ending session)
 
 1. Log the session: `state.add_session_entry(engine=..., model=..., summary="...")` -
-   the newest entries are read first next session. `pre_compact.py` does this on Claude
-   Code; other engines call `tools/shared_state.py` themselves.
+   the newest entries are read first next session. No hook logs it for you now that the
+   Claude engine is gone: each engine calls `tools/shared_state.py` itself.
 2. Record settled decisions in `.kilo/memory/MEMORY.md`'s `## Decisions` section.
 
 ### Context Compaction Continuity (CRITICAL)
@@ -245,8 +246,8 @@ else, including an empty file, keeps the gate closed.
 
 ### Choosing a worker engine (routing table)
 
-Propose a worker **proactively** when the work fits; `session_start.py` announces which
-are available, which is a prompt to consider delegation, not to always delegate.
+Propose a worker **proactively** when the work fits; which engines are available depends on
+the environment, and that is a prompt to consider delegation, not to always delegate.
 
 | Work shape | Route to | Why |
 |---|---|---|
