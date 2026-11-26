@@ -93,7 +93,7 @@ python tools/deploy.py
 | Directory | Purpose |
 |---|---|
 | `.kilo/` | **Generation root** — every generated engine is produced from this directory. Kilo Code: agents (16), skills (54), commands (15, incl. `ship`), hooks, memory, instruction. Edit here first. The Kilo runtime hooks still live here, but the repository targets OpenCode v2, not the Kilo application. |
-| `.gemini/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
+| `.gemini/antigravity/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge (2). Auto-synced from `.kilo/` by `tools/generate_harness.py`; checked by `tools/garden.py`. |
 | `.github/` | Shared scripts: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py`, `security-allowlist.txt` |
 | `tools/` | Generator (`generate_harness.py`, `skills_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` |
 
@@ -103,10 +103,10 @@ Four providers are generated into `.opencode/opencode.json` — `deepseek`, `ope
 `commandcode` and `silkcompute` — with **18 model ids** (deepseek 2, openrouter 5, commandcode 5,
 silkcompute 6) declared in `tools/opencode_engine.py`. The `opencode-go` catalog (**95 ids**) is
 not generated: those ids come from OpenCode's global config (`~/.config/opencode/opencode.json`).
-`deepseek` and `commandcode` take their base URLs from `.env` (`DEEPSEEK_BASE_URL`,
-`COMMANDCODE_BASE_URL`) and are interpolated verbatim, so nothing may strip a trailing `/v1` or
-`/provider/v1` from them; `openrouter` and `silkcompute` use fixed public constants.
-`tools/check_model_catalog.py` checks the declared ids against `GET /models` (plus `--probe`) and
+`commandcode` takes its base URL from `.env` (`COMMANDCODE_BASE_URL`) and is interpolated
+verbatim, so nothing may strip a trailing `/v1` or `/provider/v1` from it; `deepseek` uses the
+fixed `https://api.deepseek.com`, and `openrouter` and `silkcompute` use fixed public constants.
+`tools/check_model_catalog.py` checks the declared provider ids except silkcompute against `GET /models` (plus `--probe`) and
 resolves each `opencode-go/...` role id against `_PROVIDER_MODELS`. Ids are never taken
 from memory.
 
@@ -115,8 +115,8 @@ Work is routed through three roles, declared in `.kilo/agents/solocode-orchestra
 | Role | Engine | Notes |
 |---|---|---|
 | **solocode-orchestrator** — routes only | agent on `opencode-go/deepseek-v4.1-flash` | `edit: deny`; the wrapper launches it without `--auto` so the deny binds; it also resolves the project `default_agent` before granting `--auto`, and `tools/router.py` records the routing decision |
-| **DeepSeek V4.1 Flash** — implementation | OpenCode CLI (`tools/opencode_delegate.py`) or the direct API arm (`tools/model_api.py`) | one-shot: 2.3 s trivial, 22 s one file; 503 above ~38 K-token prompts; `--sandbox wsl` runs the same brief inside the namespace fence (8.5 s warm); `--enforce-scope` strictly fails with exit 4 on out-of-scope edits |
-| **Gemini 3.8 Flash** — fast and broad work | Antigravity CLI, tiers `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | independent review, repo-wide survey |
+| **DeepSeek V4.1 Flash** — implementation | OpenCode CLI (`tools/opencode_delegate.py`) or the direct API arm (`tools/model_api.py`) | one-shot: 2.3 s trivial, 22 s one file; 503 above ~38 K-token prompts; `--sandbox wsl` runs the same brief inside the namespace fence (8.5 s warm); `--enforce-scope` (on opencode_delegate.py only) strictly fails with exit 4 on out-of-scope edits |
+| **Gemini 4 Hydrogen** — fast and broad work | Antigravity CLI, tiers `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | independent review, repo-wide survey |
 
 Architecture, product and security judgment is not delegated: workers are context-blind.
 
@@ -176,7 +176,7 @@ inside WSL to use its bwrap sandboxes, which are inert on Windows.
 ## DeepSeek Harness Port (Tier A)
 
 Ports architecture patterns from the upstream reference
-[`deepseek-harness-master/`](docs/dsh-port-map.md) (226 npm packages, MIT) as
+[DeepSeek harness](docs/dsh-port-map.md) (226 npm packages, MIT) as
 capability seams — Service Definition / Provider / Consumer — without pulling in
 Cordis or the TypeScript runtime.
 
@@ -186,7 +186,7 @@ Cordis or the TypeScript runtime.
 | `tools/compaction.py` | Byte/char budget policy | `compaction` |
 
 Decision record: [`docs/dsh-port-plan.md`](docs/dsh-port-plan.md) (scope),
-[`docs/dsh-port-map.md`](docs/dsh-port-map.md) (49-package map + postmortem
+[`docs/dsh-port-map.md`](docs/dsh-port-map.md) (49-package-group map covering 226 npm packages + postmortem
 lessons). Tier B/C (running the dsh SDK/runtime as a third executor) is blocked:
 the runtime's single-file executable is a Linux/macOS-only non-goal, and
 `deepseek-v4-pro` is already reachable via OpenCode CLI + opencode-go — no
@@ -197,9 +197,10 @@ harness change required.
 Hai file SQLite local-only, đều nằm trong `.solocode/` (đã bị `.gitignore` chặn):
 
 - **`.solocode/shared-state.db`** — nhật ký sự kiện đa engine + khoá file:
-  - **`session_log`** — mỗi session được ghi lại: engine, model, files changed, verification (giữ tối đa 1000 dòng gần nhất); ghi tự động bởi `pre_compact.py` (Kilo).
+  - **`session_log`** — mỗi session được ghi lại: engine, model, files changed, verification (giữ tối đa 1000 dòng gần nhất); ghi qua `SharedState.add_session_entry` (hook lifecycle hoặc gọi trực tiếp).
   - **`active_locks`** — ngăn 2 engine sửa cùng 1 file cùng lúc (tự hết hạn sau 2 giờ); do worker lấy/trả qua `acquire_lock`/`release_lock`.
-  - **`features`**, **`shared_memory_*`** — schema còn để tương thích ngược nhưng **không dùng** (không hook/engine nào gọi `set_feature_status()`). Task tracking dùng `git log` + `.kilo/memory/MEMORY.md`.
+  - **`features`**, **`shared_memory_*`** — đã gỡ khỏi schema (bị `DROP TABLE IF EXISTS` khi mở DB từ 2026-11-25); không dùng. Task tracking dùng `git log` + `.kilo/memory/MEMORY.md`.
+- **`.solocode/sessions.db`** — registry phiên (`tools/session_registry.py`): model, files changed, status mỗi session.
 
 ```bash
 python tools/shared_state.py show
@@ -256,7 +257,7 @@ read-only run cannot answer the `command` permission prompt, so pass
 `--allow-tools` when an audit must run greps or tests; the wrapper then fails
 loudly (exit 5) if a tool was auto-denied instead of reporting a silent success.
 
-Pick the model by task complexity — `gemini-3.8-flash-low|medium|high`. Inspect
+Pick the model by task complexity — `gemini-4-hydrogen-low|medium|high`. Inspect
 the binary and its models with `python tools/antigravity_probe.py`.
 
 The GUI inbox/outbox protocol in `.gemini/antigravity/handoff/` stays as a
@@ -267,8 +268,8 @@ start. Full protocol: `.gemini/antigravity/handoff/README.md`.
 ### Which worker gets which job
 
 The orchestrator proposes a worker on its own when the shape fits — you should
-not have to remember these exist. `session_start.py` announces each
-engine's availability at session start.
+not have to remember these exist. The Kilo session-start hook and the
+OpenCode harness plugin surface the harness state at session start.
 
 | Work shape | Route to | Why |
 |---|---|---|
@@ -298,8 +299,10 @@ Full guide: `.kilo/skill/gemini-delegation/SKILL.md`.
 
 | Server | Status | Purpose |
 |---|---|---|
-| `context7` | Active | Live library documentation lookup |
-| `playwright` | Disabled | Browser E2E testing |
+| `sequential-thinking` | Configured | Chain-of-thought reasoning for complex problems |
+| `memory` | Configured | Persistent knowledge-graph memory across sessions |
+| `context7` | Configured | Live library documentation lookup |
+| `playwright` | Configured | Browser E2E testing (needs `npx playwright install chromium`) |
 
 ---
 
@@ -393,7 +396,7 @@ python tools/deploy.py
 | Thư mục | Mục đích |
 |---|---|
 | `.kilo/` | **Gốc sinh mã** — các engine được sinh tự động từ thư mục này. Kilo Code: agents (16), skills (54), commands (15, gồm `ship`), hooks, memory, instruction. Sửa ở đây trước tiên. Kilo runtime hooks vẫn nằm ở đây, nhưng repository nhắm tới OpenCode v2, không phải ứng dụng Kilo. |
-| `.gemini/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
+| `.gemini/antigravity/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge (2). Auto-synced from `.kilo/` by `tools/generate_harness.py`; checked by `tools/garden.py`. |
 | `.github/` | Script dùng chung: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py` |
 | `tools/` | Generator (`generate_harness.py`, `skills_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` (runtime dep của session hooks) |
 
@@ -406,10 +409,10 @@ python tools/deploy.py
 Bốn provider được sinh vào `.opencode/opencode.json` — `deepseek`, `openrouter`, `commandcode` và
 `silkcompute` — với **18 model id** (deepseek 2, openrouter 5, commandcode 5, silkcompute 6) khai trong
 `tools/opencode_engine.py`. Catalog `opencode-go` (**95 id**) không được sinh vào repo: nó nằm trong config
-global của OpenCode (`~/.config/opencode/opencode.json`). `deepseek` và `commandcode` lấy base URL từ `.env`
-(`DEEPSEEK_BASE_URL`, `COMMANDCODE_BASE_URL`) và dùng nguyên văn, nên không được cắt `/v1` hay `/provider/v1`
-của chúng; `openrouter` và `silkcompute` dùng hằng số công khai cố định.
-`tools/check_model_catalog.py` đối chiếu id đã khai với `GET /models` (kèm `--probe`),
+global của OpenCode (`~/.config/opencode/opencode.json`). `commandcode` lấy base URL từ `.env`
+(`COMMANDCODE_BASE_URL`) và dùng nguyên văn, nên không được cắt `/v1` hay `/provider/v1`; `deepseek`
+dùng hằng số cố định `https://api.deepseek.com`; `openrouter` và `silkcompute` dùng hằng số công khai cố định.
+`tools/check_model_catalog.py` đối chiếu id đã khai (trừ silkcompute) với `GET /models` (kèm `--probe`),
 và resolve mọi role id `opencode-go/...` với `_PROVIDER_MODELS`. Id không bao giờ lấy từ trí nhớ.
 
 Việc được định tuyến qua 3 vai trò, khai ở `.kilo/agents/solocode-orchestrator.md`:
@@ -418,7 +421,7 @@ Việc được định tuyến qua 3 vai trò, khai ở `.kilo/agents/solocode-
 |---|---|---|
 | **solocode-orchestrator** — chỉ định tuyến | agent trên `opencode-go/deepseek-v4.1-flash` | `edit: deny`; wrapper chạy không `--auto` để deny có hiệu lực |
 | **DeepSeek V4.1 Flash** — code | OpenCode CLI (`tools/opencode_delegate.py`) hoặc arm API trực tiếp (`tools/model_api.py`) | one-shot: 2,3 s việc nhỏ, 22 s một file; 503 khi prompt trên ~38K token; `--sandbox wsl` chạy cùng brief trong fence namespace (8.5 s khi WSL ấm) |
-| **Gemini 3.8 Flash** — việc nhanh, rộng | Antigravity CLI, tier `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | review độc lập, khảo sát toàn repo |
+| **Gemini 4 Hydrogen** — việc nhanh, rộng | Antigravity CLI, tier `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | review độc lập, khảo sát toàn repo |
 
 Quyết định kiến trúc, sản phẩm, bảo mật không được giao: worker không có lịch sử hội thoại.
 
@@ -443,8 +446,8 @@ Windows phủ tmpfs riêng, `/home` + `/root` chỉ đọc. `/mnt/wsl*` cố ý 
 Đường restricted-token bằng ACL Windows đã đo và loại: nó phá TLS (`SEC_E_NO_CREDENTIALS`), nên
 worker gọi API không chạy trong đó được.
 
-Fence giờ chọn được thay vì bắt buộc: `tools/opencode_delegate.py` nhận `--sandbox {win,wsl}`
-(mặc định `win`). Ở chế độ `wsl`, worker chạy trong `tools/wsl_sandbox.sh` với HOME và các
+Fence giờ chọn được thay vì bắt buộc: `tools/opencode_delegate.py` nhận `--sandbox {auto,win,wsl}`
+(mặc định `auto`). Ở chế độ `wsl`, worker chạy trong `tools/wsl_sandbox.sh` với HOME và các
 thư mục XDG chuyển vào `.solocode/sandbox-home` trong workspace. Key đi qua `WSLENV`, và model
 mặc định đổi từ `opencode-go/beam-free` sang `deepseek/deepseek-flash`, vì gói Go không xác
 thực được trong WSL. Fence fail closed: thiếu mount hoặc chạy không có unshare thì thoát mã 69
@@ -461,7 +464,7 @@ bwrap (vô tác dụng trên Windows).
 ## DeepSeek Harness Port (Tầng A)
 
 Port các mẫu kiến trúc từ nguồn tham khảo
-[`deepseek-harness-master/`](docs/dsh-port-map.md) (226 npm package, MIT) dưới
+[DeepSeek harness](docs/dsh-port-map.md) (226 npm package, MIT) dưới
 dạng capability seam — Service Definition / Provider / Consumer — mà không kéo
 theo Cordis hay TypeScript runtime.
 
@@ -471,7 +474,7 @@ theo Cordis hay TypeScript runtime.
 | `tools/compaction.py` | Budget policy theo byte/ký tự | `compaction` |
 
 Ghi chép quyết định: [`docs/dsh-port-plan.md`](docs/dsh-port-plan.md) (phạm vi),
-[`docs/dsh-port-map.md`](docs/dsh-port-map.md) (bản đồ 49 package + bài học
+[`docs/dsh-port-map.md`](docs/dsh-port-map.md) (bản đồ 49 nhóm package / 226 npm package + bài học
 postmortem). Tầng B/C (chạy dsh SDK/runtime làm executor thứ ba) bị chặn:
 binary đóng gói của runtime chỉ hỗ trợ Linux/macOS (Windows là non-goal), và
 `deepseek-v4-pro` đã gọi được trực tiếp qua OpenCode CLI + opencode-go — không
@@ -518,7 +521,7 @@ scope sau khi chạy. Run read-only thường không trả lời được prompt
 `command`, nên truyền `--allow-tools` khi cần chạy grep/test; khi đó wrapper fail
 rõ ràng (exit 5) nếu tool bị auto-deny thay vì báo "thành công" giả.
 
-Chọn model theo độ phức tạp — `gemini-3.8-flash-low|medium|high`. Kiểm tra binary
+Chọn model theo độ phức tạp — `gemini-4-hydrogen-low|medium|high`. Kiểm tra binary
 và model bằng `python tools/antigravity_probe.py`.
 
 Giao thức GUI inbox/outbox trong `.gemini/antigravity/handoff/` vẫn là dự phòng
@@ -529,8 +532,8 @@ Chi tiết: `.gemini/antigravity/handoff/README.md`.
 ### Giao việc cho ai
 
 Orchestrator tự đề xuất worker khi gặp việc phù hợp — bạn không cần nhớ là
-chúng tồn tại. `session_start.py` thông báo engine nào đang sẵn sàng ở đầu
-mỗi phiên.
+chúng tồn tại. Hook session-start của Kilo và plugin harness của OpenCode
+hiển thị trạng thái harness ở đầu phiên.
 
 | Dạng công việc | Giao cho | Lý do |
 |---|---|---|
@@ -560,8 +563,10 @@ false positive kèm câu "không có gì không chắc". Bằng chứng nó đư
 
 | Server | Trạng thái | Chức năng |
 |---|---|---|
-| `context7` | Đang chạy | Tra cứu tài liệu thư viện trực tiếp |
-| `playwright` | Tắt | Browser E2E testing |
+| `sequential-thinking` | Đã khai | Suy luận chuỗi cho bài toán phức tạp |
+| `memory` | Đã khai | Bộ nhớ knowledge-graph bền vững giữa các phiên |
+| `context7` | Đã khai | Tra cứu tài liệu thư viện trực tiếp |
+| `playwright` | Đã khai | Browser E2E testing (cần `npx playwright install chromium`) |
 
 ## License / Giấy phép
 
