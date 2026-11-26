@@ -317,6 +317,27 @@ def test_pid_alive_reports_self_and_a_bogus_pid():
     assert shared_state.pid_alive(999999) is False
 
 
+def test_pid_alive_delegates_to_session_registry(monkeypatch):
+    """shared_state.pid_alive delegates to session_registry.pid_alive."""
+    from tools import session_registry
+
+    assert shared_state.pid_alive(999999) is False
+    assert session_registry.pid_alive(999999) is False
+    assert shared_state.pid_alive(os.getpid()) is True
+    assert session_registry.pid_alive(os.getpid()) is True
+
+    seen: list[int] = []
+
+    def fake_pid_alive(pid: int) -> bool:
+        seen.append(pid)
+        return pid == 12345
+
+    monkeypatch.setattr(session_registry, "pid_alive", fake_pid_alive)
+    assert shared_state.pid_alive(12345) is True
+    assert shared_state.pid_alive(999999) is False
+    assert seen == [12345, 999999]
+
+
 def test_dead_holder_is_reclaimed():
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "shared-state.db"

@@ -177,9 +177,9 @@ never committed), read and written through `tools/shared_state.py`'s `SharedStat
 class. Engines with a lifecycle hook write it automatically; the rest call
 `SharedState.add_session_entry` directly.
 
-**Feature/task tracking is NOT in SQLite.** The `features` and `shared_memory_*` tables
-remain for compatibility but nothing calls `set_feature_status()`. Track tasks with
-`git log`; record conventions, gotchas and decisions in `.kilo/memory/MEMORY.md`.
+**Feature/task tracking is NOT in SQLite.** Those tables were removed on 2026-11-25,
+because nothing ever wrote them. Track tasks with `git log`; record conventions,
+gotchas and decisions in `.kilo/memory/MEMORY.md`.
 
 ### Startup
 
@@ -268,19 +268,11 @@ are available, which is a prompt to consider delegation, not to always delegate.
 
 ## Using workflow templates
 
-Templates live in `.agents/workflows/` (preserved from the retired Claude engine, not yet adapted to any engine), one slash command per file stem. Pass
-arguments as an object keyed by name (`specFile`, `outputDir`, `entityName`); a
-single string fails with "missing required arg" before any agent starts.
+Templates live in `.agents/workflows/`. The five slash commands, their required
+arguments and the runtime limits are documented in the `dynamic-workflow-orchestration`
+skill; this file does not repeat them.
 
-```text
-/crud-module Product, fields id uuid, name string, price decimal, into src/modules/product/
-/adversarial-implementation specs/user-authentication.md, into src/auth/, rules docs/security-policy.md
-```
-
-`api-from-spec` and `crud-module` emit Express routes (needs `express`); their
-tests use `node:test`, so run `node --test` from the project root. Pass
-`includeTests: false` to skip the test stage. All five templates, their
-arguments and the runtime limits: `.agents/skills/dynamic-workflow-orchestration/SKILL.md`.
+## Delegation lanes
 
 OpenCode CLI, Kilo CLI, and Antigravity CLI are headless. **OpenCode CLI is the
 primary narrow executor and the orchestrator that plans and routes work**;

@@ -107,30 +107,11 @@ def pid_alive(pid: int) -> bool:
     """
     if pid <= 0:
         return False
-    if os.name == "nt":
-        import ctypes
-
-        process_query_limited_information = 0x1000
-        still_active = 259
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
-        if not handle:
-            # 5 is access denied, which can still mean a live process.
-            return ctypes.get_last_error() == 5
-        try:
-            code = ctypes.c_ulong()
-            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
-                return True
-            return code.value == still_active
-        finally:
-            kernel32.CloseHandle(handle)
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+        from tools import session_registry
+    except ImportError:  # pragma: no cover - script-dir import path
+        import session_registry  # type: ignore[no-redef]
+    return session_registry.pid_alive(pid)
 
 
 #: Tables an older database still carries. Nothing ever wrote them, and they are
