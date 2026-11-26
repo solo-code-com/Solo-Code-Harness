@@ -1,5 +1,5 @@
 ---
-name: "Harness Review Checklist"
+name: "harness-checklist"
 description: "Run through this before shipping a harness to production or handing it off."
 ---
 

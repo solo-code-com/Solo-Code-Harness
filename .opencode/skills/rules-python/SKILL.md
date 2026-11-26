@@ -1,5 +1,5 @@
 ---
-name: "Python Coding Rules"
+name: "rules-python"
 description: "Auto-loaded when editing `.py` files. Enforces PEP 8, Pythonic patterns, security."
 ---
 

@@ -377,3 +377,185 @@ def test_wsl_sandbox_hides_windows_interop():
     finally:
         if PROBE_WINDOWS_PATH.exists():
             PROBE_WINDOWS_PATH.unlink()
+
+
+# --- truncated tool output --------------------------------------------------
+# A blind head slice hid the error line of a failing test whenever it sat past
+# the budget; these pin the head-and-tail behaviour and the spill file that
+# keeps the dropped middle reachable.
+
+TRUNCATE_BUDGET = 4000
+HEAD_MARK = "HEADTOKEN"
+MIDDLE_MARK = "MIDDLETOKEN"
+TAIL_MARK = "TAILTOKEN"
+
+
+def _oversized_result(budget: int) -> str:
+    """A `budget * 3` character result with a token at the head, middle and tail."""
+    pad = "m" * (budget * 3 - len(HEAD_MARK) - len(MIDDLE_MARK) - len(TAIL_MARK))
+    half = len(pad) // 2
+    return HEAD_MARK + pad[:half] + MIDDLE_MARK + pad[half:] + TAIL_MARK
+
+
+def test_truncate_output_passes_through_a_short_text():
+    """Under the budget the caller's text is already the whole answer."""
+    assert model_api.truncate_output("x", budget=10) == "x"
+
+
+def test_truncate_output_passes_through_text_exactly_at_budget():
+    """The boundary sits on the pass-through side: no marker, no spill file."""
+    text = "y" * 50
+
+    assert model_api.truncate_output(text, budget=50) == text
+
+
+def test_truncate_output_keeps_head_and_tail_over_budget():
+    """Both ends survive, so a header and a trailing stack trace stay readable."""
+    result = model_api.truncate_output(
+        _oversized_result(TRUNCATE_BUDGET), budget=TRUNCATE_BUDGET
+    )
+
+    assert HEAD_MARK in result
+    assert TAIL_MARK in result
+    assert MIDDLE_MARK not in result
+
+
+def test_truncate_output_never_exceeds_the_budget():
+    """The marker is part of the result, so the whole string still has to fit."""
+    result = model_api.truncate_output(
+        _oversized_result(TRUNCATE_BUDGET), budget=TRUNCATE_BUDGET
+    )
+
+    assert len(result) <= TRUNCATE_BUDGET
+
+
+def test_truncate_output_names_a_temp_file_holding_the_full_text():
+    """Nothing is lost: the dropped middle is on disk, character for character."""
+    text = _oversized_result(TRUNCATE_BUDGET)
+    result = model_api.truncate_output(text, budget=TRUNCATE_BUDGET)
+    assert "full text:" in result
+    saved = Path(result.split("full text:", 1)[1].split("]", 1)[0].strip())
+    try:
+        assert saved.is_file()
+        assert saved.read_text(encoding="utf-8") == text
+    finally:
+        saved.unlink(missing_ok=True)
+
+
+@pytest.mark.parametrize("budget", [0, -1])
+def test_truncate_output_rejects_a_non_positive_budget(budget):
+    """A budget that keeps nothing is a caller bug, not a silent empty result."""
+    with pytest.raises(ValueError):
+        model_api.truncate_output("text", budget=budget)
+
+
+def test_truncate_output_survives_an_unwritable_temp_file(monkeypatch, tmp_path):
+    """A full disk costs the spill file, never the tool call nor the two ends."""
+
+    def unusable_spill(*args, **kwargs):
+        raise OSError("disk full")
+
+    # Redirected so a spill file written by an unpatched path cannot land in the repo.
+    monkeypatch.setattr(model_api, "SPILL_DIR", tmp_path)
+    monkeypatch.setattr(model_api.tempfile, "mkstemp", unusable_spill)
+    result = model_api.truncate_output(
+        _oversized_result(TRUNCATE_BUDGET), budget=TRUNCATE_BUDGET
+    )
+
+    assert HEAD_MARK in result
+    assert TAIL_MARK in result
+    assert "could not be saved" in result
+
+
+def test_truncate_output_keeps_multibyte_text_intact():
+    """Slicing characters rather than bytes leaves no broken code point behind."""
+    text = "é" * 1500 + "日本語" * 500 + "🙂" * 1500
+    result = model_api.truncate_output(text, budget=TRUNCATE_BUDGET)
+
+    assert "\ufffd" not in result
+
+
+@pytest.fixture
+def spill_dir():
+    """A spill directory inside the repository, removed afterwards.
+
+    `truncate_output` advertises a repo-relative path because `read_file` refuses
+    anything outside ROOT, so a spill outside the repo is not the real code path.
+    """
+    import shutil
+
+    path = model_api.ROOT / ".harness-tmp" / "test-spill"
+    shutil.rmtree(path, ignore_errors=True)
+    yield path
+    shutil.rmtree(path, ignore_errors=True)
+
+
+# ── the budget invariant, the spill, and the credential rule ───────────────────
+
+
+@pytest.mark.parametrize("budget", [1, 2, 3, 10, 40, 136, 137, 4000])
+def test_truncate_output_respects_the_budget_at_every_size(
+    budget, spill_dir, monkeypatch
+):
+    """The docstring promises `len(result) <= budget`; a small budget used to return a
+    135-character pure marker with no payload at all, which is worse than the slice it
+    replaced."""
+    monkeypatch.setattr(model_api, "SPILL_DIR", spill_dir)
+    result = model_api.truncate_output("A" * 9000, budget=budget)
+    assert len(result) <= budget
+
+
+def test_truncate_output_caps_an_oversized_label(spill_dir, monkeypatch):
+    """`run_command` labels a result with `" ".join(argv[:3])`, which is model-supplied
+    and unbounded; an uncapped label spent the whole budget on itself."""
+    monkeypatch.setattr(model_api, "SPILL_DIR", spill_dir)
+    result = model_api.truncate_output("A" * 9000, budget=4000, label="x" * 5000)
+    assert len(result) <= 4000
+
+
+def test_truncate_output_spills_inside_the_repository(spill_dir, monkeypatch):
+    """A spill path outside ROOT is unreachable: `read_file` refuses it, so the
+    fallback has to live where the model's own tool can open it."""
+    monkeypatch.setattr(model_api, "SPILL_DIR", spill_dir)
+    result = model_api.truncate_output("A" * 9000, budget=4000, label="spill.txt")
+    assert "full text:" in result
+
+
+def test_run_tool_can_read_the_spilled_text_back(spill_dir, monkeypatch):
+    """The claim "nothing is lost" is only true if the path in the marker is one the
+    model's own read tool accepts. `read_file` truncates too, so the guarantee is that
+    the file on disk holds every byte and the read reaches it -- not that one read
+    returns the whole thing in a single reply.
+    """
+    monkeypatch.setattr(model_api, "SPILL_DIR", spill_dir)
+    text = "B" * 9000
+    marker = model_api.truncate_output(text, budget=2000, label="readback.txt")
+    relative = marker.rsplit("full text: ", 1)[1].split("]", 1)[0].strip()
+    assert not Path(relative).is_absolute()
+    assert (model_api.ROOT / relative).read_text(encoding="utf-8") == text
+    result = model_api.run_tool(
+        "read_file", {"path": relative}, allow_dirs=[], allow_programs=set()
+    )
+    assert not result.startswith("refused:")
+    assert result.startswith("B")
+
+
+def test_reading_a_spill_does_not_write_another_spill(spill_dir, monkeypatch):
+    """A read path that spills recurses: each hop left a fresh copy on disk, so a model
+    following the pointer never arrived at the end of the text."""
+    monkeypatch.setattr(model_api, "SPILL_DIR", spill_dir)
+    marker = model_api.truncate_output("C" * 9000, budget=1000, label="hop.txt")
+    relative = marker.rsplit("full text: ", 1)[1].split("]", 1)[0].strip()
+    before = len(list(spill_dir.glob("*.txt")))
+    model_api.run_tool(
+        "read_file", {"path": relative}, allow_dirs=[], allow_programs=set()
+    )
+    assert len(list(spill_dir.glob("*.txt"))) == before
+
+
+def test_truncate_output_writes_no_spill_for_a_credential_path(spill_dir, monkeypatch):
+    """The label rule blanks a credential path; leaving a readable copy of the payload
+    beside it on disk would undo the refusal."""
+    monkeypatch.setattr(model_api, "SPILL_DIR", spill_dir)
+    model_api.truncate_output("A" * 9000, budget=2000, label=".env")
+    assert list(spill_dir.glob("*.txt")) == []

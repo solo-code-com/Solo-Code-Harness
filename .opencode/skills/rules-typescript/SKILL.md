@@ -1,5 +1,5 @@
 ---
-name: "TypeScript/JavaScript Coding Rules"
+name: "rules-typescript"
 description: "Auto-loaded when editing `.ts`, `.tsx`, `.js`, `.jsx` files."
 ---
 

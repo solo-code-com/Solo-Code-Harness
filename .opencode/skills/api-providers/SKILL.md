@@ -1,5 +1,5 @@
 ---
-name: "API Providers - DeepSeek & OpenCode"
+name: "api-providers"
 description: "Auto-loaded when the agent needs to call external LLM APIs or switch between model providers."
 ---
 

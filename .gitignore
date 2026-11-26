@@ -76,3 +76,7 @@ agents_md_complete_sdlc_guide_for_ai_agents.md
 guard-exec-off-*/
 secretpat-exec-off-*/
 tmp9n2i6nev/
+
+# Tool-output spill files: worker output too large for the model's budget. Written
+# inside the repo because `read_file` refuses anything outside it, swept on write.
+.harness-tmp/

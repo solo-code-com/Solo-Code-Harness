@@ -1,5 +1,5 @@
 ---
-name: "Security Patterns"
+name: "security-patterns"
 description: "When editing auth, controllers, middleware, config, or `.env` files, follow these security rules:"
 ---
 

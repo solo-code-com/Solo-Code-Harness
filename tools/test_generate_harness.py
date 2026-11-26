@@ -311,7 +311,9 @@ def test_generate_instruction_skills_emits_frontmatter(tmp_path):
         encoding="utf-8"
     )
     assert doc.startswith("---\n")
-    assert 'name: "Python Rules"' in doc
+
+    # The name is the slug, not the heading: the spec rejects a human title here.
+    assert 'name: "rules-python"' in doc
     assert 'description: "Auto-loaded when editing .py files."' in doc
     assert "Body line." in doc
 

@@ -1101,17 +1101,15 @@ def _yaml_quote(value: str) -> str:
 def _instruction_skill_doc(path: Path) -> tuple[str, str]:
     """Derive (name, description) for an instruction-derived skill.
 
-    The name comes from the first `# Heading`; the description from the
-    leading `> ...` usage note (the "Auto-loaded when ..." line), otherwise the
-    first non-heading line.
+    The name is the file stem, which is the slug the Agent Skills spec allows and
+    the directory the skill is generated into; a human title such as `API
+    Providers - DeepSeek & OpenCode` breaks the lowercase-hyphen rule and stays
+    in the body's `# Heading`. The description comes from the leading `> ...`
+    usage note (the "Auto-loaded when ..." line), otherwise the first
+    non-heading line.
     """
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
-    name = path.stem
-    for line in lines:
-        if line.startswith("# "):
-            name = line[2:].strip()
-            break
     description = ""
     for line in lines:
         stripped = line.strip()
@@ -1126,7 +1124,7 @@ def _instruction_skill_doc(path: Path) -> tuple[str, str]:
                 break
     if not description:
         description = f"Project instruction rules from {path.name}"
-    return name, description
+    return path.stem, description
 
 
 def generate_instruction_skills(kilo_root: Path, opencode_root: Path) -> int:

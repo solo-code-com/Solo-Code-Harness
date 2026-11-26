@@ -1,5 +1,5 @@
 ---
-name: "Database Rules"
+name: "rules-database"
 description: "Auto-loaded when editing SQL, migrations, ORM models, or database config."
 ---
 

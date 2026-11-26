@@ -1,9 +1,20 @@
-"""Tests for tools/validate_schemas.py"""
+"""Tests for tools/validate_schemas.py
+
+.opencode/skills/ is the generated tree an engine actually loads, so the
+suite covers it alongside the .kilo/ source.
+"""
 
 import tempfile
 from pathlib import Path
 
-from tools.validate_schemas import parse_frontmatter, validate_agent, validate_skill
+import pytest
+
+from tools.validate_schemas import (
+    parse_frontmatter,
+    read_frontmatter_scalar,
+    validate_agent,
+    validate_skill,
+)
 
 # ── parse_frontmatter ──────────────────────────────────────────────────────────
 
@@ -181,3 +192,163 @@ def test_validate_skill_missing_frontmatter():
         path = Path(f.name)
     errors = validate_skill(path)
     assert len(errors) == 1
+
+
+# ── read_frontmatter_scalar ────────────────────────────────────────────────────
+
+
+def test_read_frontmatter_scalar_reads_an_inline_value():
+    content = "---\nname: my-skill\ndescription: routes Claude work\n---\n"
+    assert read_frontmatter_scalar(content, "name") == "my-skill"
+
+
+def test_read_frontmatter_scalar_unfolds_a_literal_block():
+    content = "---\ndescription: |-\n  first line\n  second line\nlicense: MIT\n---\n"
+    value = read_frontmatter_scalar(content, "description")
+    assert value == "first line\nsecond line"
+    assert value != "|-"
+
+
+def test_read_frontmatter_scalar_unfolds_a_folded_block():
+    content = "---\ndescription: >-\n  first line\n  second line\n---\n"
+    value = read_frontmatter_scalar(content, "description")
+    assert value == "first line second line"
+
+
+def test_read_frontmatter_scalar_stops_at_the_next_key():
+    content = "---\ndescription: |-\n  trigger text\nlicense: MIT\n---\n"
+    value = read_frontmatter_scalar(content, "description")
+    assert value == "trigger text"
+    assert "MIT" not in value
+
+
+def test_read_frontmatter_scalar_returns_none_for_an_absent_key():
+    content = "---\nname: my-skill\n---\n"
+    assert read_frontmatter_scalar(content, "description") is None
+
+
+def test_read_frontmatter_scalar_returns_empty_for_an_empty_block():
+    # Present-but-empty is not absent: an empty `description:` is still a skill
+    # with no routing text, so the caller has to be able to tell the two apart.
+    content = "---\ndescription: |-\nname: my-skill\n---\n"
+    assert read_frontmatter_scalar(content, "description") == ""
+
+
+def test_read_frontmatter_scalar_reads_a_plain_multiline_scalar():
+    """YAML plain scalars continue on indented following lines; a reader that
+    stopped at the first line measured a 1201-character description as 100."""
+    content = "---\nname: probe\ndescription: first\n  second\n  third\n---\n"
+    assert read_frontmatter_scalar(content, "description") == "first second third"
+
+
+def test_read_frontmatter_scalar_keeps_a_dashed_line_inside_a_block_scalar():
+    """The closing fence holds only dashes, so an indented `---` is block
+    content; truncating there silently shortened every measured description."""
+    content = (
+        "---\n"
+        "description: |-\n"
+        "  line one\n"
+        "  ---\n"
+        "  line two after a dash line\n"
+        "license: MIT\n"
+        "---\n"
+    )
+    value = read_frontmatter_scalar(content, "description")
+    assert "line two after a dash line" in value
+
+
+# ── validate_skill against the Agent Skills spec ───────────────────────────────
+
+
+def _skill_file(frontmatter_body: str) -> Path:
+    with tempfile.NamedTemporaryFile(
+        suffix=".md", mode="w", delete=False, encoding="utf-8"
+    ) as f:
+        f.write(f"---\n{frontmatter_body}\n---\n# Skill\n")
+        return Path(f.name)
+
+
+def test_validate_skill_accepts_a_description_at_the_limit():
+    path = _skill_file(f"name: my-skill\ndescription: {'x' * 1024}")
+    assert validate_skill(path) == []
+
+
+def test_validate_skill_rejects_a_description_over_the_limit():
+    path = _skill_file(f"name: my-skill\ndescription: {'x' * 1025}")
+    errors = validate_skill(path)
+    assert len(errors) == 1
+    assert "1024" in errors[0]
+
+
+def test_validate_skill_rejects_a_name_over_64_characters():
+    path = _skill_file(f"name: {'a' * 65}\ndescription: routes Claude work")
+    errors = validate_skill(path)
+    assert len(errors) == 1
+    assert "64" in errors[0]
+
+
+def test_validate_skill_rejects_an_uppercase_name():
+    path = _skill_file("name: My-Skill\ndescription: routes Claude work")
+    errors = validate_skill(path)
+    assert len(errors) == 1
+    assert "lowercase" in errors[0]
+
+
+def test_validate_skill_rejects_a_trailing_hyphen_name():
+    path = _skill_file("name: my-skill-\ndescription: routes Claude work")
+    errors = validate_skill(path)
+    assert len(errors) == 1
+    assert "lowercase" in errors[0]
+
+
+def test_validate_skill_rejects_a_missing_description():
+    path = _skill_file("name: my-skill")
+    errors = validate_skill(path)
+    assert len(errors) == 1
+    assert "description" in errors[0]
+
+
+def test_validate_skill_with_a_block_scalar_description_is_measured_as_folded():
+    """The `|-` trap: `parse_frontmatter` returns `|-` here, which always passes."""
+    path = _skill_file(f"name: my-skill\ndescription: |-\n  {'x' * 1025}")
+    errors = validate_skill(path)
+    assert len(errors) == 1
+    assert "1025" in errors[0]
+
+
+def test_validate_skill_measures_a_plain_multiline_description():
+    """Plain-scalar twin of the `|-` trap above: the 1024 cap must bite
+    whatever YAML style the author happened to write the description in."""
+    path = _skill_file(
+        f"name: my-skill\ndescription: {'a' * 100}\n  {'b' * 600}\n  {'c' * 500}"
+    )
+    errors = validate_skill(path)
+    assert errors, "a 1202-character plain multiline description passed"
+    assert any("1024" in e for e in errors)
+
+
+def test_every_shipped_skill_obeys_the_spec():
+    """Shipped-roster guard, mirroring the agent-roster test above.
+
+    Nothing measured a shipped skill's description, so a 1068-character
+    description (claude-api) validated green while an engine would drop it.
+    """
+    skills_dir = Path(__file__).resolve().parent.parent / ".kilo" / "skill"
+    failures = {
+        f.parent.name: validate_skill(f) for f in sorted(skills_dir.glob("*/SKILL.md"))
+    }
+    assert failures, "no skill files found -- the path moved?"
+    assert {n: e for n, e in failures.items() if e} == {}
+
+
+def test_every_generated_opencode_skill_obeys_the_spec():
+    """Roster guard for the tree an engine actually loads: main() validates
+    .opencode/skills/*/SKILL.md, and a green .kilo/ source says nothing about
+    what the generator emitted into it."""
+    skills_dir = Path(__file__).resolve().parent.parent / ".opencode" / "skills"
+    if not skills_dir.is_dir():
+        pytest.skip("no generated .opencode/skills tree in this checkout")
+    failures = {
+        f.parent.name: validate_skill(f) for f in sorted(skills_dir.glob("*/SKILL.md"))
+    }
+    assert {n: e for n, e in failures.items() if e} == {}

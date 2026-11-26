@@ -1,5 +1,5 @@
 ---
-name: "Git Workflow Rules"
+name: "rules-git"
 description: "Auto-loaded for all sessions. Enforces conventional commits and safe git practices."
 ---
 

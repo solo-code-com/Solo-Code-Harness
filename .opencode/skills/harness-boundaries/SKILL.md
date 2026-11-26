@@ -1,5 +1,5 @@
 ---
-name: "Harness Boundary Rules"
+name: "harness-boundaries"
 description: "**CRITICAL:** File này là một phần của Solo-Code Harness infrastructure. Nó tồn tại để bảo vệ các agent khỏi nhầm lẫn giữa code harness và code dự án."
 ---
 

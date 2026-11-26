@@ -1,5 +1,5 @@
 ---
-name: "Shared State — Cross-Engine Collaboration (Local-Only)"
+name: "shared-state"
 description: "Auto-loaded at session start. `.solocode/shared-state.db` là SQLite DB local-only (đã gitignore), tự tạo ở lần dùng đầu tiên."
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: "Custom Framework Rules"
+name: "custom-framework-rules"
 description: "Quy tắc viết mã nguồn đặc thù cho các framework và kiến trúc sử dụng trong dự án này."
 ---
 

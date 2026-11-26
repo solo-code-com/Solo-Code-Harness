@@ -38,6 +38,21 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 - `Out-File -Encoding utf8` (PS 5.1) writes a BOM and `git commit -F` keeps it in the subject; write the message file with Python instead.
 
 ## Decisions
+- 2026-11-26: Work item 3 (add `$ARGUMENTS`/`argument-hint` to the 15 `.kilo/command/`
+  files) is DROPPED, decision C. Kilo is barely used here, and churn in a file no engine reads
+  buys nothing: OpenCode V2 already appends non-empty arguments after a blank line when a
+  template has no placeholder, so `/test auth.py` works today. `subtask:` stays untouched for
+  the same reason -- it is a dead field in a copied file, not a deprecated one needing a rename.
+- 2026-11-26: Pi (earendil-works/pi) evaluated as a reference, not adopted. Only two
+  of its practices were portable: keep head+tail when truncating tool output, and enforce
+  the Agent Skills frontmatter caps. MEASURED facts behind that: `parse_frontmatter` returns
+  `|-` for a YAML block scalar, so a naive 1024-char check passes every skill and enforces
+  nothing (2 of 54 skills use block scalars). The Kilo CLI binary is the OpenCode runtime
+  (`kilo.exe --help` logs `process_role=main ... opencode`); its VS Code extension reads
+  `.kilo/skills/`, `.kilo/setup-script` and `.kilo/worktrees/` only, never `.kilo/command/`.
+  Therefore `.kilo/command/` is this harness's own convention: `$ARGUMENTS` reaches OpenCode
+  (verified in the V2 docs) but nothing proves Kilo expands it, and `subtask:` is carried by
+  nothing but the copy. Keep command frontmatter a harness convention, not an engine contract.
 - 2026-11-25: Working split: Gemini analyses the problem and writes the code by default;
   DeepSeek takes the hard code and the adversarial review. A review covers features
   (reachable, wired, tested, documented) as well as code. SQLite stays: it is the only
