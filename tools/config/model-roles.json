@@ -7,8 +7,8 @@
     "fast-broad": "opencode-go/qwen3.8-flash",
     "mechanical": "opencode-go/qwen3.8-flash",
     "default-executor": "opencode-go/deepseek-v4.1-flash",
-    "orchestrator": "openrouter/jev-router",
-    "routing-brain": "openrouter/jev-router",
+    "orchestrator": "opencode-go/deepseek-v4.1-flash",
+    "routing-brain": "opencode-go/deepseek-v4.1-flash",
     "routing-brain-fallback": "opencode-go/claude-haiku-5-5"
   },
   "agents": {
@@ -29,5 +29,5 @@
     "solocode-orchestrator": "orchestrator",
     "data": "default-executor"
   },
-  "routing_brains": ["openrouter/jev-router", "opencode-go/claude-haiku-5-5"]
+  "routing_brains": ["opencode-go/deepseek-v4.1-flash", "opencode-go/claude-haiku-5-5"]
 }

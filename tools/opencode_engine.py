@@ -766,12 +766,9 @@ _SILK_MODELS: dict[str, dict[str, Any]] = {
     },
 }
 
-# The orchestrator agent runs on the model named Jev: TypeSafe's `typesafe/jev-router` on
-# OpenRouter, which picks a model and reasoning effort per request (verified live
-# 2026-10-15 -- it answered and reported routing to deepseek/deepseek-v4.1-flash).
-# Keeping it separate from _DEFAULT_MODEL matters: the default is what every other
-# run uses, while this one is the orchestrator's own brain.
-_ORCHESTRATOR_AGENT_MODEL = "openrouter/jev-router"
+# The orchestrator agent fallback brain when model-roles.json does not map it.
+# It runs on the free DeepSeek V4.1 Flash, the same model a fresh session takes.
+_ORCHESTRATOR_AGENT_MODEL = "opencode-go/deepseek-v4.1-flash"
 # Operator rule (2026-10-15): when the Jev model cannot be loaded, the agent runs
 # on a reasoning model. Kept for callers that name it explicitly; the routing path
 # in `_build_agent_models` reads the declared `routing_brains` chain instead.
@@ -798,10 +795,9 @@ def _routing_brains() -> list[str]:
 def _build_agent_models() -> dict[str, dict[str, str]]:
     """Per-agent model overrides, read from tools/config/model-roles.json.
 
-    Every agent the file maps gets an override. When the OpenRouter catalog does
-    not declare the Jev router, `solocode-orchestrator` falls to the second declared routing brain,
-    so the orchestrator keeps a reasoning model. A missing or unreadable file
-    leaves `solocode-orchestrator` on the Jev model itself.
+    Every agent the file maps gets an override. The orchestrator is mapped by
+    model-roles.json to the free DeepSeek V4.1 Flash, and a missing or
+    unreadable file leaves it on _ORCHESTRATOR_AGENT_MODEL.
     """
     models: dict[str, dict[str, str]] = {}
     with contextlib.suppress(OSError, json.JSONDecodeError):

@@ -268,13 +268,8 @@ def test_generated_opencode_json_gates_disabled_skills(tmp_path):
     # the solocode-orchestrator agent orchestrates and can spawn solo-code-engineer via its `task:` block, so
     # the orchestrator is the default and the executor stays reachable.
     assert data["default_agent"] == "solocode-orchestrator"
-    # The orchestrator agent runs on the model named Jev (TypeSafe's router, on OpenRouter)
-    # when the catalog declares it; otherwise the harness's default executor.
-    expected_orchestrator_model = (
-        "openrouter/jev-router"
-        if "jev-router" in opencode_engine._OPENROUTER_MODELS
-        else "opencode-go/deepseek-v4.1-flash"
-    )
+    # The orchestrator agent runs on the free DeepSeek V4.1 Flash.
+    expected_orchestrator_model = "opencode-go/deepseek-v4.1-flash"
     assert (
         data["agents"]["solocode-orchestrator"]["model"] == expected_orchestrator_model
     )

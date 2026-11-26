@@ -47,7 +47,7 @@
       "model": "opencode-go/deepseek-v4.1-flash"
     },
     "solocode-orchestrator": {
-      "model": "openrouter/jev-router"
+      "model": "opencode-go/deepseek-v4.1-flash"
     },
     "data": {
       "model": "opencode-go/deepseek-v4.1-flash"

@@ -1,8 +1,8 @@
 ---
-description: solocode-orchestrator — multi-worker orchestrator. Routes a task to the cheapest capable worker (OpenRouter's Jev router for routing decisions, DeepSeek V4.1 Flash for implementation, Gemini/Antigravity for broad reads and independent review) and verifies every result before trusting it.
+description: solocode-orchestrator — multi-worker orchestrator. Routes a task to the cheapest capable worker (the free DeepSeek V4.1 Flash for routing decisions, DeepSeek V4.1 Flash for implementation, Gemini/Antigravity for broad reads and independent review) and verifies every result before trusting it.
 mode: primary
 color: "#8B5CF6"
-model: openrouter/jev-router
+model: opencode-go/deepseek-v4.1-flash
 steps: 40
 permission:
   read: allow
@@ -57,7 +57,7 @@ pick the cheapest worker that can finish it, then verify the result.
 
 | Work shape | Worker | How |
 |---|---|---|
-| Receive the task, split it, dispatch, monitor, collect | **solocode-orchestrator itself** (the Jev router model) | `python tools/opencode_delegate.py "<task>" --agent solocode-orchestrator` — routing only, never the code |
+| Receive the task, split it, dispatch, monitor, collect | **solocode-orchestrator itself** (the free DeepSeek V4.1 Flash) | `python tools/opencode_delegate.py "<task>" --agent solocode-orchestrator` — routing only, never the code |
 | Additional check, second opinion on the same result | **DeepSeek V4.1 Flash via OpenCode CLI** | `python tools/opencode_delegate.py "<check this too>" --model opencode-go/deepseek-v4.1-flash` |
 | **Deep code work** — implement the brief | **DeepSeek V4.1 Flash via OpenCode CLI**, or **via Kilo CLI** when the OpenCode path is unstable | OpenCode: `python tools/opencode_delegate.py "<the brief>" --agent solo-code-engineer --model opencode-go/deepseek-v4.1-flash` · Kilo: `python tools/kilo_cli_delegate.py "<the brief>" --model opencode-go/deepseek-v4.1-flash` (same model, but the Kilo route drops the nested `deepseek/` segment; measured 2026-11-24, the nested id returns Unknown error. The Kilo server must be running: `python tools/kilo_server_manager.py ensure`) |
 | **A brief-shaped change, one file or one precise edit** — fastest path, and the worker can run the tests itself | **DeepSeek V4.1 Flash over the provider's own API** (no CLI in the middle) | `python tools/model_api.py --prompt-file <brief> --tools read,command --allow-program python3,ruff --sandbox wsl --transcript <file>` — measured: a trivial prompt 2.3s, a one-file change 22s, a two-command self-verification 10.9s inside the WSL fence; **the orchestrator applies and verifies the result**, and `--sandbox wsl` runs each command in namespaces where only the workspace is writable. Limits: keep the prompt under ~35K tokens (a 38K prompt drew HTTP 503 from the provider's gateway), and the returned diff may need a manual apply. |
