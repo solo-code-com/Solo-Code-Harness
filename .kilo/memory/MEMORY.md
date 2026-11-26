@@ -31,6 +31,7 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 - `agy --allow-tools` reports another writer's edits as its own; run it only when the tree is idle.
 - A Windows junction is not a symlink: use `workspace_snapshot.is_reparse_point`, never walk one.
 - argv caps a brief at 32767 characters; the wrappers stop at 30,000.
+- A bloated `.solocode` slows the suite: 866s with 2.8 GB of restore snapshots and 300k files, 290s after `retention --apply` and `--purge`. Run retention before blaming the tests.
 - Import tools as `tools.<name>`; a bare import elsewhere creates a second module object.
 
 ## Decisions
