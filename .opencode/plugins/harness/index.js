@@ -28,7 +28,7 @@ function safe(value) {
 
 function git(directory, args) {
   try {
-    return execFileSync("git", ["-C", directory, ...args], { encoding: "utf8" }).trim()
+    return execFileSync("git", ["-C", directory, ...args], { encoding: "utf8", windowsHide: true }).trim()
   } catch {
     return "-"
   }

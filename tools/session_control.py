@@ -39,6 +39,9 @@ _KILL_TIMEOUT_S = 10.0
 _POLL_INTERVAL_S = 0.1
 FILE_CHANNEL = "file"
 UNSUPPORTED = "unsupported"
+_CREATE_NO_WINDOW = (
+    getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+)
 
 
 def _descendant_pids_windows_free(pid: int) -> list[int]:
@@ -50,6 +53,7 @@ def _descendant_pids_windows_free(pid: int) -> list[int]:
             text=True,
             timeout=10,
             check=False,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError):
         return []
@@ -75,6 +79,7 @@ def kill_tree(pid: int) -> list[int]:
             text=True,
             timeout=30,
             check=False,
+            creationflags=_CREATE_NO_WINDOW,
         )
         return [pid]
     killed: list[int] = []

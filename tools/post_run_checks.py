@@ -25,6 +25,9 @@ from pathlib import Path
 
 MEMORY_CAP_WARN = 4000
 MEMORY_CAP_BLOCK = 8000
+_CREATE_NO_WINDOW = (
+    getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+)
 #: The archive is cold storage: memory_gate capped the hot files and left this
 #: one uncapped on purpose, so the same exemption applies here.
 UNCAPPED_MEMORY = frozenset({"decisions-archive.md"})
@@ -73,6 +76,7 @@ def secret_issues(root: Path) -> list[dict[str, object]]:
             text=True,
             timeout=180,
             check=False,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except (
         OSError,

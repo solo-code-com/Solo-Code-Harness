@@ -28,6 +28,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SESSION_DIR = ROOT / ".solocode" / "sessions"
+_CREATE_NO_WINDOW = (
+    getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+)
 
 RUNNING = "running"
 EXITED = "exited"
@@ -88,6 +91,7 @@ def _is_zombie(pid: int) -> bool:
             text=True,
             timeout=5,
             check=False,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError):
         return False
