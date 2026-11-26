@@ -78,7 +78,7 @@ _DISABLED_SKILL_PERMISSION = "ask"
 # OpenCode v2 no longer needs a declared provider for these models (the
 # opencode-go provider is configured globally), but
 # tools/check_model_catalog.py still resolves role ids against this catalog.
-_DEFAULT_MODEL = "opencode-go/deepseek-v4-pro"
+_DEFAULT_MODEL = "opencode-go/deepseek-v4.1-flash"
 _SMALL_MODEL = "opencode-go/deepseek-v4.1-flash"
 _PROVIDER_MODELS: dict[str, dict[str, Any]] = {
     "deepseek-v4-pro": {
