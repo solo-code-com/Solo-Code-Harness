@@ -112,12 +112,35 @@ def build_request(model: str, state: str, questions: dict) -> dict:
     return {"model": model, "state": state, "questions": questions}
 
 
+def _post_once(endpoint: str, payload: dict, key: str, *, timeout: int = 60) -> dict:
+    """Send one POST request with `key` and return the parsed JSON body."""
+    request = urllib.request.Request(  # noqa: S310 - operator-configured https endpoint
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": UA,
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:300].replace("\n", " ")
+        raise JevDecideError(f"HTTP {exc.code}: {detail}", status=exc.code) from exc
+    except OSError as exc:  # URLError, DNS failures and socket timeouts are all OSError
+        raise JevDecideError(f"{type(exc).__name__}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise JevDecideError(f"unexpected body: {exc}") from exc
+
+
 def decide(
     state: str, questions: dict, *, model: str = DEFAULT_MODEL, timeout: int = 60
 ) -> dict:
     """POST one decision request and return the parsed response body."""
     payload = build_request(model, state, questions)
-    # The chat path is the only place that knows the base url; `/systemone` replaces its suffix.
     record: dict = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "model": model,
@@ -135,31 +158,26 @@ def decide(
             raise JevDecideError(
                 "missing base url or commandcode credential in .env", config=True
             )
+        # The chat path is the only place that knows the base url; `/systemone` replaces its suffix.
         endpoint = url.removesuffix("/chat/completions") + ENDPOINT_PATH
-        request = urllib.request.Request(  # noqa: S310 - operator-configured https endpoint
-            endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": UA,
-            },
-        )
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
-                body = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            detail = (
-                exc.read().decode("utf-8", errors="replace")[:300].replace("\n", " ")
+            body = _post_once(endpoint, payload, key, timeout=timeout)
+        except JevDecideError as first_err:
+            if first_err.status != 401:
+                raise
+            env_key = env_file.parse_env_file(ROOT / ".env").get(
+                "COMMANDCODE_API_KEY", ""
             )
-            raise JevDecideError(f"HTTP {exc.code}: {detail}", status=exc.code) from exc
-        except (
-            OSError
-        ) as exc:  # URLError, DNS failures and socket timeouts are all OSError
-            raise JevDecideError(f"{type(exc).__name__}: {exc}") from exc
-        except json.JSONDecodeError as exc:
-            raise JevDecideError(f"unexpected body: {exc}") from exc
+            if not env_key or env_key == key:
+                raise
+            try:
+                body = _post_once(endpoint, payload, env_key, timeout=timeout)
+            except JevDecideError as second_err:
+                raise JevDecideError(
+                    f"first attempt with shell value lost ({first_err}); "
+                    f"retry with .env key also failed ({second_err})",
+                    status=second_err.status,
+                ) from second_err
         usage = body.get("usage") or {}
         record["input_tokens"] = usage.get("input_tokens") or 0
         record["output_tokens"] = usage.get("output_tokens") or 0

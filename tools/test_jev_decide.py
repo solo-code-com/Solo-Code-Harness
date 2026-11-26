@@ -262,3 +262,168 @@ def test_ask_parses_name_type_and_instructions(monkeypatch, capsys):
         == 0
     )
     assert seen["questions"]["urgent"]["instructions"] == "Is this: urgent?"
+
+
+def _setup_retry_env(monkeypatch, tmp_path, *, shell_key: str, env_text: str | None):
+    monkeypatch.setattr(jev_decide, "ROOT", tmp_path)
+    monkeypatch.setattr(jev_decide, "USAGE_LOG", tmp_path / "usage.jsonl")
+    if env_text is not None:
+        (tmp_path / ".env").write_text(env_text, encoding="utf-8")
+    monkeypatch.setattr(
+        jev_decide.env_file,
+        "provider_endpoint",
+        lambda provider, kind="chat": (
+            "https://api.example/provider/v1/chat/completions",
+            shell_key,
+        ),
+    )
+
+
+def _http_error(url: str, code: int, body: bytes) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(url, code, "ERR", {}, io.BytesIO(body))
+
+
+def test_decide_retries_once_with_env_key_on_401_and_succeeds(monkeypatch, tmp_path):
+    _setup_retry_env(
+        monkeypatch,
+        tmp_path,
+        shell_key="stale-shell-key",
+        env_text="COMMANDCODE_API_KEY=good-env-key\n",
+    )
+    helper_calls: list[tuple[str, dict, str]] = []
+    real_post_once = jev_decide._post_once
+
+    def spy_post_once(endpoint, payload, key, *, timeout=60):
+        helper_calls.append((endpoint, payload, key))
+        return real_post_once(endpoint, payload, key, timeout=timeout)
+
+    def fake_urlopen(request, timeout=None):
+        auth = dict(request.header_items()).get("Authorization")
+        if auth == "Bearer stale-shell-key":
+            raise _http_error(request.full_url, 401, b'{"error": "unauthorized"}')
+        if auth == "Bearer good-env-key":
+            return FakeResponse(RESPONSE)
+        raise AssertionError(f"unexpected Authorization header: {auth!r}")
+
+    monkeypatch.setattr(jev_decide, "_post_once", spy_post_once)
+    monkeypatch.setattr(jev_decide.urllib.request, "urlopen", fake_urlopen)
+
+    assert jev_decide.decide(STATE, QUESTIONS) == RESPONSE
+    assert len(helper_calls) == 2
+    assert helper_calls[0][2] == "stale-shell-key"
+    assert helper_calls[1][2] == "good-env-key"
+    assert helper_calls[0][0] == helper_calls[1][0]
+    assert helper_calls[0][1] == helper_calls[1][1]
+
+
+def test_decide_raises_combined_error_when_401_retry_also_fails(monkeypatch, tmp_path):
+    _setup_retry_env(
+        monkeypatch,
+        tmp_path,
+        shell_key="stale-shell-key",
+        env_text="COMMANDCODE_API_KEY=other-bad-key\n",
+    )
+    attempts: list[str | None] = []
+
+    def fake_urlopen(request, timeout=None):
+        attempts.append(dict(request.header_items()).get("Authorization"))
+        raise _http_error(request.full_url, 401, b'{"error": "unauthorized"}')
+
+    monkeypatch.setattr(jev_decide.urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(jev_decide.JevDecideError) as failure:
+        jev_decide.decide(STATE, QUESTIONS)
+
+    assert len(attempts) == 2
+    assert failure.value.status == 401
+    message = str(failure.value)
+    assert "retry" in message.lower()
+    assert "shell" in message.lower()
+    assert "stale-shell-key" not in message
+    assert "other-bad-key" not in message
+    log_text = (tmp_path / "usage.jsonl").read_text(encoding="utf-8")
+    assert "stale-shell-key" not in log_text
+    assert "other-bad-key" not in log_text
+
+
+def test_decide_carries_second_attempt_status_when_retry_fails_with_other_code(
+    monkeypatch, tmp_path
+):
+    _setup_retry_env(
+        monkeypatch,
+        tmp_path,
+        shell_key="stale-shell-key",
+        env_text="COMMANDCODE_API_KEY=other-key\n",
+    )
+
+    def fake_urlopen(request, timeout=None):
+        auth = dict(request.header_items()).get("Authorization")
+        if auth == "Bearer stale-shell-key":
+            raise _http_error(request.full_url, 401, b'{"error": "unauthorized"}')
+        raise _http_error(request.full_url, 502, b'{"error": "bad_gateway"}')
+
+    monkeypatch.setattr(jev_decide.urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(jev_decide.JevDecideError) as failure:
+        jev_decide.decide(STATE, QUESTIONS)
+
+    assert failure.value.status == 502
+    assert "HTTP 401" in str(failure.value)
+    assert "HTTP 502" in str(failure.value)
+
+
+@pytest.mark.parametrize(
+    "env_text",
+    [
+        None,
+        "OTHER_VAR=value\n",
+        "COMMANDCODE_API_KEY=\n",
+        "COMMANDCODE_API_KEY=stale-shell-key\n",
+    ],
+)
+def test_decide_does_not_retry_401_without_different_env_key(
+    monkeypatch, tmp_path, env_text
+):
+    _setup_retry_env(
+        monkeypatch,
+        tmp_path,
+        shell_key="stale-shell-key",
+        env_text=env_text,
+    )
+    attempts = 0
+
+    def fake_urlopen(request, timeout=None):
+        nonlocal attempts
+        attempts += 1
+        raise _http_error(request.full_url, 401, b'{"error": "unauthorized"}')
+
+    monkeypatch.setattr(jev_decide.urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(jev_decide.JevDecideError) as failure:
+        jev_decide.decide(STATE, QUESTIONS)
+
+    assert attempts == 1
+    assert failure.value.status == 401
+
+
+def test_decide_does_not_retry_on_500(monkeypatch, tmp_path):
+    _setup_retry_env(
+        monkeypatch,
+        tmp_path,
+        shell_key="stale-shell-key",
+        env_text="COMMANDCODE_API_KEY=good-env-key\n",
+    )
+    attempts = 0
+
+    def fake_urlopen(request, timeout=None):
+        nonlocal attempts
+        attempts += 1
+        raise _http_error(request.full_url, 500, b'{"error": "server_error"}')
+
+    monkeypatch.setattr(jev_decide.urllib.request, "urlopen", fake_urlopen)
+
+    with pytest.raises(jev_decide.JevDecideError) as failure:
+        jev_decide.decide(STATE, QUESTIONS)
+
+    assert attempts == 1
+    assert failure.value.status == 500
