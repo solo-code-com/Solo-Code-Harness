@@ -87,7 +87,10 @@ def test_coverage_ratchet_runs_when_budget_present(tmp_path, monkeypatch) -> Non
     assert captured["command"][0] == sys.executable
     assert captured["command"][1].endswith("coverage_gate.py")
     # The ratchet runs the whole suite under coverage; the default 120s is too tight.
-    assert captured["timeout"] == 900
+    # Asserted through the constant, and against the gate's own inner budget: the
+    # outer wait has to exceed it, or the inner limit can never be reached.
+    assert captured["timeout"] == module.COVERAGE_GATE_TIMEOUT
+    assert captured["timeout"] > 1800
 
 
 def test_boundary_audit_runs_in_strict_mode(tmp_path, monkeypatch) -> None:

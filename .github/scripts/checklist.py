@@ -64,6 +64,12 @@ def print_error(text: str):
     print(f"{Colors.RED}[{SYM_BAD}] {text}{Colors.ENDC}")
 
 
+# The coverage gate allows its inner coverage run 1800 seconds and then compares.
+# The outer wait must sit above that, or the inner limit can never be reached on
+# a slow machine and the gate fails on a timeout that says nothing about the code.
+COVERAGE_GATE_TIMEOUT = 2100
+
+
 def coverage_ratchet_check(project_path: Path) -> dict | None:
     """Run the coverage ratchet when the project has opted into one.
 
@@ -82,7 +88,7 @@ def coverage_ratchet_check(project_path: Path) -> dict | None:
         [sys.executable, str(gate)],
         # The gate allows its inner coverage run 1800s; the outer wait has to sit
         # above that, or the inner limit can never be reached on a slow machine.
-        timeout=2100,
+        timeout=COVERAGE_GATE_TIMEOUT,
     )
 
 
