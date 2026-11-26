@@ -71,6 +71,9 @@ except ImportError:  # pragma: no cover - script-dir import path
     )
 
 DEFAULT_SERVER = "http://127.0.0.1:14096"
+_CREATE_NO_WINDOW = (
+    getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+)
 DEFAULT_MODEL = "opencode-go/beam-free"
 
 #: Prompts at or below this length go on the command line; longer ones are written to a brief
@@ -475,6 +478,7 @@ def run_kilo_cli(
             text=True,
             encoding="utf-8",
             errors="replace",
+            creationflags=_CREATE_NO_WINDOW,
         )
     except Exception as exc:  # no pid exists yet, so there is no session to record
         _stderr(f"kilo CLI failed: {exc}")

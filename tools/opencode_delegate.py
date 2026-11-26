@@ -51,6 +51,9 @@ from typing import Any
 # ── Constants ────────────────────────────────────────────────────────────────
 
 DEFAULT_MODEL = "opencode-go/beam-free"
+_CREATE_NO_WINDOW = (
+    getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+)
 SCOPE_ERROR_EXIT_CODE = 4
 WORKTREE_ERROR_EXIT_CODE = 7
 #: The command line is the transport, and Windows caps it at 32767 characters.
@@ -906,6 +909,7 @@ def run_opencode_cli(
             errors="replace",
             cwd=cwd,
             env=env,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except Exception as exc:  # no pid exists yet, so there is no session to record
         _stderr(f"opencode CLI failed: {exc}")
@@ -1173,6 +1177,7 @@ def _run_kilo_fallback(
             capture_output=True,
             check=False,
             timeout=effective + 10,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except subprocess.TimeoutExpired:
         _stderr("[cascade] kilo arm timed out")

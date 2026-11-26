@@ -30,6 +30,10 @@ from tools.antigravity_delegate import (  # noqa: E402
     find_agy_binary,
 )
 
+_CREATE_NO_WINDOW = (
+    getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+)
+
 EXPECTED_MODELS = (
     # Measured 2026-11-25: agy also serves a second family with four tiers,
     # including xhigh. Kept here so a catalogue change is reported by this probe
@@ -63,6 +67,7 @@ def list_models(agy_binary: str) -> list[str]:
             errors="replace",
             timeout=90,
             check=False,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except (OSError, subprocess.TimeoutExpired):
         return []

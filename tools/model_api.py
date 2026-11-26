@@ -47,6 +47,9 @@ import env_file  # noqa: E402
 ROOT = TOOLS_DIR.parent
 #: provider/model for the direct DeepSeek provider declared in tools/env_file.py.
 DEFAULT_MODEL = "deepseek/deepseek-flash"
+_CREATE_NO_WINDOW = (
+    getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+)
 USAGE_LOG = ROOT / ".solocode" / "model-api-usage.jsonl"
 MAX_TOOL_OUTPUT = 4000
 
@@ -322,6 +325,7 @@ def run_tool(
                 text=True,
                 timeout=900 if sandbox == "wsl" else 300,
                 check=False,
+                creationflags=_CREATE_NO_WINDOW,
             )
         except subprocess.TimeoutExpired:
             return "error: the command timed out after 300s"
