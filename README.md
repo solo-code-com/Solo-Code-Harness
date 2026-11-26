@@ -17,8 +17,8 @@ AI coding agent harness — rules, skills, hooks, and verification gates for dis
 ./antigravity-env.sh   # Antigravity CLI environment
 ./opencode-env.sh      # OpenCode CLI worker environment
 
-# Regenerate the Claude engine from .kilo/ source
-python tools/generate_harness.py --harness claude
+# Regenerate every engine from .kilo/ source
+python tools/generate_harness.py --harness all
 
 # Run all quality gates
 make check
@@ -94,7 +94,7 @@ python tools/deploy.py
 |---|---|
 | `.kilo/` | **Generation root** — every generated engine is produced from this directory. Kilo Code: agents (16), skills (54), commands (15, incl. `ship`), hooks, memory, instruction. Edit here first. The Kilo runtime hooks still live here, but the repository targets OpenCode v2, not the Kilo application. |
 | `.gemini/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
-| `.github/` | Shared scripts: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py`, `security-allowlist.txt` + `copilot-instructions.md`, `prompts/` |
+| `.github/` | Shared scripts: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py`, `security-allowlist.txt` |
 | `tools/` | Generator (`generate_harness.py`, `skills_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` |
 
 ## Model Providers & the 3-Role Pipeline
@@ -106,8 +106,6 @@ not generated: those ids come from OpenCode's global config (`~/.config/opencode
 `deepseek` and `commandcode` take their base URLs from `.env` (`DEEPSEEK_BASE_URL`,
 `COMMANDCODE_BASE_URL`) and are interpolated verbatim, so nothing may strip a trailing `/v1` or
 `/provider/v1` from them; `openrouter` and `silkcompute` use fixed public constants.
-FreeModel was removed on 2026-11-23: Claude Code now runs on DeepSeek's `/anthropic` endpoint, and
-Codex on CommandCode's `/responses` route.
 `tools/check_model_catalog.py` checks the declared ids against `GET /models` (plus `--probe`) and
 resolves each `opencode-go/...` role id against `_PROVIDER_MODELS`. Ids are never taken
 from memory.
@@ -199,7 +197,7 @@ harness change required.
 Hai file SQLite local-only, đều nằm trong `.solocode/` (đã bị `.gitignore` chặn):
 
 - **`.solocode/shared-state.db`** — nhật ký sự kiện đa engine + khoá file:
-  - **`session_log`** — mỗi session được ghi lại: engine, model, files changed, verification (giữ tối đa 1000 dòng gần nhất); ghi tự động bởi `pre_compact.py` (Claude).
+  - **`session_log`** — mỗi session được ghi lại: engine, model, files changed, verification (giữ tối đa 1000 dòng gần nhất); ghi tự động bởi `pre_compact.py` (Kilo).
   - **`active_locks`** — ngăn 2 engine sửa cùng 1 file cùng lúc (tự hết hạn sau 2 giờ); do worker lấy/trả qua `acquire_lock`/`release_lock`.
   - **`features`**, **`shared_memory_*`** — schema còn để tương thích ngược nhưng **không dùng** (không hook/engine nào gọi `set_feature_status()`). Task tracking dùng `git log` + `.kilo/memory/MEMORY.md`.
 
@@ -219,7 +217,7 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | Lint budget | `python tools/check_lint_budget.py` | Findings that `.ruff.toml` does not enable stay at their recorded budget |
 | Schema | `make validate` | `.kilo/` agent + skill frontmatter validity |
 | Coverage ratchet | `python tools/coverage_gate.py` | Per-file coverage may not fall below `tools/config/coverage-budget.json` |
-| Drift | `make garden` | `.kilo` ↔ `.claude` (generated) / `.copilot` / `.gemini` parity, with documented command exceptions |
+| Drift | `make garden` | `.kilo` ↔ `.opencode` / `.gemini` / `.agents` parity, with documented command exceptions |
 | Document truth | `make garden` | Counts, cited paths, documented CLI flags, enforcement claims and skill references must match reality — see [SPEC.md §7.2.1](SPEC.md) |
 | Harness Tests | `make test` | Generator + shared-state (`tools/test_*.py`) |
 | Integration | `python tools/test_integration.py` | shared state schema |
@@ -237,7 +235,7 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | Circuit breaker | `python tools/circuit_breaker.py status --task <id>` | Loop budget protection: trips on 3 consecutive identical errors, emitting TASK_FAILURE_REPORT.md without destructive rollback |
 | Routing benchmark | `python tools/run_routing_eval.py` | REPORT, never blocks: 26 reviewed cases score route(); exits 0 on a mismatch and --strict exits 1. Labels record desired behaviour and are never copied from current output. |
 
-## Slash Commands (Kilo + Claude Code)
+## Slash Commands (Kilo + OpenCode)
 
 | Command | Purpose |
 |---|---|
@@ -247,41 +245,6 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 | `/ship` | Pre-launch checklist |
 | `/commit` | Create conventional commit |
 | `/debug` | Systematic debugging workflow |
-
-## Claude Code Setup
-
-Claude Code loads the harness natively from generated artifacts:
-
-```bash
-# Regenerate the Claude engine from .kilo/ source
-python tools/generate_harness.py --harness claude
-```
-
-| Artifact | Path | Purpose |
-|---|---|---|
-
-The guard hook is a stdlib-only Python port of the Kilo `gate-guard.js`/`secret-scan.js`
-lifecycle hooks (44 destructive patterns + 23 secret patterns + protected config
-files). It blocks a tool call by returning a `PreToolUse` deny decision and exit
-code 2. The memory-gate hook can also hard-block (exit code 2) when a memory
-file exceeds 8,000 chars. The remaining PostToolUse/Session hooks are advisory
-(always exit 0, never block) — together bringing Claude Code to enforcement
-parity with the Kilo engine. `garden.py`'s memory-drift check also diffs
-not just filenames, so a silently out-of-sync mirror is always caught.
-
-```bash
-# Test the guard + lifecycle hook suites
-python -m pytest tools/test_claude_guard.py tools/test_claude_hooks.py -q
-```
-
-### Claude Code was removed
-
-The Claude Code engine (launcher, .claude/, hooks, guard hook) was decommissioned on 2026-11-24.
-Its rule tables and guard logic live on in tools/guard_rules.py and tools/guard_hook.py, the
-wrappers enforce them for every engine, and the skill library publishes to .agents/skills/.
-
-If the CLI is reinstalled, .env.template still carries the commented block that points
-ANTHROPIC_BASE_URL at the DeepSeek /anthropic endpoint, and the 401 trap is recorded in memory.
 
 ## Gemini/Antigravity workers (headless CLI + GUI fallback)
 
@@ -297,13 +260,13 @@ Pick the model by task complexity — `gemini-3.8-flash-low|medium|high`. Inspec
 the binary and its models with `python tools/antigravity_probe.py`.
 
 The GUI inbox/outbox protocol in `.gemini/antigravity/handoff/` stays as a
-fallback when a *rendered* UI needs human verification: Claude writes a plan to
+fallback when a *rendered* UI needs human verification: The orchestrator writes a plan to
 `handoff/inbox/<slug>-plan.md`, you relay one line to Antigravity, and
 start. Full protocol: `.gemini/antigravity/handoff/README.md`.
 
 ### Which worker gets which job
 
-Claude Code proposes a worker on its own when the shape fits — you should
+The orchestrator proposes a worker on its own when the shape fits — you should
 not have to remember these exist. `session_start.py` announces each
 engine's availability at session start.
 
@@ -318,7 +281,7 @@ engine's availability at session start.
 | Architecture / product / security decisions | **Neither** | Judgment is not delegable |
 | Anything needing the session's history | **Neither** | Workers are context-blind |
 
-OpenCode CLI, Kilo CLI, and Antigravity CLI are all headless, so Claude delegates
+OpenCode CLI, Kilo CLI, and Antigravity CLI are all headless, so the orchestrator delegates
 directly. Antigravity CLI handles read-heavy and broad scopes; OpenCode CLI is
 the narrow executor (reasoning depth + cache tracking); Kilo CLI is fallback. The
 GUI handoff remains only for rendered-UI work. This routing cannot be
@@ -350,14 +313,13 @@ Bộ harness (dây cương) cho AI coding agent — rules, skills, hooks và ver
 ## Bắt đầu nhanh
 
 ```bash
-# Mở Claude Code (điều phối) — xem claude-env.ps1
 
 # Bộ launcher môi trường POSIX (Linux/WSL)
 ./antigravity-env.sh   # Môi trường Antigravity CLI
 ./opencode-env.sh      # Môi trường OpenCode CLI worker
 
-# Sinh lại engine Claude từ nguồn .kilo/
-python tools/generate_harness.py --harness claude
+# Sinh lại mọi engine từ nguồn .kilo/
+python tools/generate_harness.py --harness all
 
 # Chạy tất cả quality gates
 make check
@@ -368,7 +330,7 @@ make security-scan     # Phát hiện secret trong code
 make validate          # Schema validation (.kilo/ agents + skills)
 make garden            # Drift detection (.kilo <-> .agents / .opencode / .gemini)
 
-# Integration tests (cấu trúc Copilot + shared state)
+# Integration tests (shared state)
 python tools/test_integration.py
 
 # No-skips test policy
@@ -396,10 +358,9 @@ python tools/deploy.py scaffold /path/to/new-project --name my-app --description
 # Chỉ engine Kilo
 python tools/deploy.py scaffold /path/to/new-project --engine kilo
 
-# Chỉ engine Copilot
 ```
 
-Scaffold tạo thư mục, copy config engine (Kilo + Claude Code + Copilot + Gemini, chỉ phần runtime), sinh `.gitignore` và `README.md`, chạy `git init`, và in hướng dẫn post-setup.
+Scaffold tạo thư mục, copy config engine (Kilo + OpenCode + Gemini, chỉ phần runtime), sinh `.gitignore` và `README.md`, chạy `git init`, và in hướng dẫn post-setup.
 
 ### Deploy — copy harness vào dự án có sẵn
 
@@ -431,10 +392,10 @@ python tools/deploy.py
 
 | Thư mục | Mục đích |
 |---|---|
-| `.kilo/` | **Gốc sinh mã** — các engine được sinh tự động từ thư mục này. Kilo Code: agents (16), skills (54), commands (15, gồm `ship`), hooks, memory, instruction. Sửa ở đây trước tiên. Kilo runtime hooks vẫn nằm ở đây, nhưng repository nhắm tới OpenCode v2 và Claude Code, không phải ứng dụng Kilo. |
+| `.kilo/` | **Gốc sinh mã** — các engine được sinh tự động từ thư mục này. Kilo Code: agents (16), skills (54), commands (15, gồm `ship`), hooks, memory, instruction. Sửa ở đây trước tiên. Kilo runtime hooks vẫn nằm ở đây, nhưng repository nhắm tới OpenCode v2, không phải ứng dụng Kilo. |
 | `.gemini/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge. Manually kept in parity with `.kilo/`; checked by `tools/garden.py`. |
-| `.github/` | Script dùng chung: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py` + `copilot-instructions.md`, `prompts/` |
-| `tools/` | Generator (`generate_harness.py`, `skills_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` (runtime dep của Claude session hooks) |
+| `.github/` | Script dùng chung: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py` |
+| `tools/` | Generator (`generate_harness.py`, `skills_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` (runtime dep của session hooks) |
 
 > **Kho chính thức:** <https://github.com/solo-code-com/Solo-Code-Harness> (MIT). Version engine
 > `4.3.1` đóng dấu ở `.harness.lock`, `agent.yaml`, `pyproject.toml`; SPEC giữ version tài liệu
@@ -448,8 +409,6 @@ Bốn provider được sinh vào `.opencode/opencode.json` — `deepseek`, `ope
 global của OpenCode (`~/.config/opencode/opencode.json`). `deepseek` và `commandcode` lấy base URL từ `.env`
 (`DEEPSEEK_BASE_URL`, `COMMANDCODE_BASE_URL`) và dùng nguyên văn, nên không được cắt `/v1` hay `/provider/v1`
 của chúng; `openrouter` và `silkcompute` dùng hằng số công khai cố định.
-FreeModel đã bị gỡ ngày 2026-11-23: Claude Code nay chạy trên endpoint `/anthropic` của DeepSeek, Codex
-chạy trên route `/responses` của CommandCode.
 `tools/check_model_catalog.py` đối chiếu id đã khai với `GET /models` (kèm `--probe`),
 và resolve mọi role id `opencode-go/...` với `_PROVIDER_MODELS`. Id không bao giờ lấy từ trí nhớ.
 
@@ -524,10 +483,10 @@ cần đổi harness.
 |---|---|---|
 | Lint | `ruff check .` | Python code style |
 | Schema | `make validate` | Frontmatter agent + skill trong `.kilo/` |
-| Drift | `make garden` | `.kilo` ↔ `.claude` (sinh tự động) / `.copilot` / `.gemini` (song song, có ngoại lệ command đã ghi) |
+| Drift | `make garden` | `.kilo` ↔ `.opencode` / `.gemini` / `.agents` (song song, có ngoại lệ command đã ghi) |
 | Document truth | `make garden` | Số đếm, path trích dẫn, flag CLI, tuyên bố "chặn" và tên skill phải khớp thực tế — xem [SPEC.md §7.2.1](SPEC.md) |
 | Harness Tests | `make test` | Generator + shared-state (`tools/test_*.py`) |
-| Integration | `python tools/test_integration.py` | Cấu trúc Copilot + schema shared state |
+| Integration | `python tools/test_integration.py` | schema shared state |
 | Security | `make security-scan` | Secret hardcode |
 | Boundary | `python .github/scripts/boundary_audit.py .` | Không có file dự án lẫn vào thư mục harness |
 | No-Skips | `python .github/scripts/check_skips.py tools/` | Skip/skipif không lý do |
@@ -539,7 +498,7 @@ cần đổi harness.
 | Review receipt | `python tools/review_receipt.py verify` | Thay đổi đã stage vượt 5 file và 120 dòng cần receipt ghi sau /review; cổng này chặn, còn hook advisory bên trên chỉ đo |
 | Benchmark routing | `python tools/run_routing_eval.py` | BÁO CÁO, không chặn: 26 ca đã rà soát chấm route(); exit 0 khi có lệch, --strict thì exit 1. Nhãn là hành vi mong muốn, không chép từ output hiện tại. |
 
-## Slash Commands (Kilo + Claude Code)
+## Slash Commands (Kilo + OpenCode)
 
 | Lệnh | Chức năng |
 |---|---|
@@ -549,35 +508,6 @@ cần đổi harness.
 | `/ship` | Pre-launch checklist |
 | `/commit` | Tạo conventional commit |
 | `/debug` | Quy trình debug có hệ thống |
-
-## Claude Code Setup
-
-```bash
-# Sinh lại engine Claude từ nguồn .kilo/
-python tools/generate_harness.py --harness claude
-```
-
-Guard hook là bản port stdlib-only Python từ `gate-guard.js`/`secret-scan.js` của
-Kilo (33 mẫu lệnh nguy hiểm + 15 mẫu secret + danh sách file config được bảo vệ).
-Hook mới `memory_gate.py` (`PostToolUse`, bản port của `memory-manager.js`)
-phình to âm thầm và tốn context mỗi phiên. Các PostToolUse/Session hook còn
-lại chỉ mang tính khuyến nghị (luôn exit 0) — đưa Claude Code lên ngang hàng
-enforcement với Kilo. `PreCompact` hook (`pre_compact.py`) ghi checkpoint
-git-state vào shared-state và nhắc lưu quyết định đã chốt vào
-`.kilo/memory/MEMORY.md` trước khi context bị nén/tóm tắt. `garden.py` nay
-`.kilo/memory/` (nguồn gốc sự thật) để bắt drift âm thầm.
-
-```bash
-# Test bộ guard + lifecycle hook
-python -m pytest tools/test_claude_guard.py tools/test_claude_hooks.py -q
-```
-
-### Chạy Claude Code qua một provider có tên
-
-```powershell
-Copy-Item .env.template .env
-#    rồi sửa .env → ANTHROPIC_API_KEY=<key-của-bạn>
-```
 
 ## Worker Gemini/Antigravity (CLI headless + GUI dự phòng)
 
@@ -592,13 +522,13 @@ Chọn model theo độ phức tạp — `gemini-3.8-flash-low|medium|high`. Ki�
 và model bằng `python tools/antigravity_probe.py`.
 
 Giao thức GUI inbox/outbox trong `.gemini/antigravity/handoff/` vẫn là dự phòng
-khi cần người xác minh UI đã render: Claude ghi plan vào
+khi cần người xác minh UI đã render: orchestrator ghi plan vào
 `handoff/inbox/<slug>-plan.md`, bạn chuyển 1 dòng cho Antigravity, và
 Chi tiết: `.gemini/antigravity/handoff/README.md`.
 
 ### Giao việc cho ai
 
-Claude Code tự đề xuất worker khi gặp việc phù hợp — bạn không cần nhớ là
+Orchestrator tự đề xuất worker khi gặp việc phù hợp — bạn không cần nhớ là
 chúng tồn tại. `session_start.py` thông báo engine nào đang sẵn sàng ở đầu
 mỗi phiên.
 
@@ -613,7 +543,7 @@ mỗi phiên.
 | Quyết định kiến trúc / sản phẩm / bảo mật | **Không giao** | Phán đoán không ủy quyền được |
 | Việc cần lịch sử hội thoại của phiên | **Không giao** | Worker đều mù ngữ cảnh |
 
-OpenCode CLI, Kilo CLI và Antigravity CLI đều chạy headless nên Claude ủy quyền
+OpenCode CLI, Kilo CLI và Antigravity CLI đều chạy headless nên orchestrator ủy quyền
 trực tiếp. Antigravity CLI lo việc đọc nhiều/bề rộng; OpenCode CLI là executor
 hẹp (chiều sâu suy luận + cache tracking); Kilo CLI là dự phòng. GUI handoff chỉ
 còn cho việc UI đã render. Routing này **không ép cứng được** — không hook nào
