@@ -6,8 +6,8 @@ Single source of truth at .solocode/shared-state.db (LOCAL ONLY — not committe
 directory already excluded via .gitignore). The database keeps the delegation lock table
 and the session log; project knowledge lives in .kilo/memory/MEMORY.md and in the git
 log, not here.
-("opencode" remains a VALID_ENGINES value: OpenCode was reintroduced as a
-primary engine in v4.2.0, and historical rows still name it that way.)
+(Retired engine names are refused for new writes, while historical rows
+carrying them still read.)
 
 Why SQLite instead of JSON + manual file locking:
   - Each mutation (acquire_lock, add_session_entry, ...) runs inside its own
@@ -20,9 +20,9 @@ Usage:
     from tools.shared_state import SharedState
 
     with SharedState() as state:
-        if state.acquire_lock("src/auth.py", engine="copilot", model="deepseek-chat"):
-            state.add_session_entry(engine="copilot", model="deepseek-chat", summary="Fixed bug in auth")
-            state.release_lock("src/auth.py", engine="copilot")
+        if state.acquire_lock("src/auth.py", engine="opencode", model="deepseek-chat"):
+            state.add_session_entry(engine="opencode", model="deepseek-chat", summary="Fixed bug in auth")
+            state.release_lock("src/auth.py", engine="opencode")
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / ".solocode" / "shared-state.db"
 LOCK_TIMEOUT_HOURS = 2
 MAX_SESSION_LOG_ROWS = 1000
-VALID_ENGINES = ("kilo", "opencode", "claude", "copilot", "gemini", "codex")
+VALID_ENGINES = ("kilo", "opencode", "gemini")
 
 
 # Windows resolves paths case-insensitively, so two workers that spell the same

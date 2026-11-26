@@ -9,6 +9,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+import pytest
+
 from tools import shared_state
 from tools.shared_state import SharedState
 
@@ -201,7 +203,7 @@ def test_add_session_entry():
         path = Path(tmpdir) / "shared-state.db"
         with SharedState(path) as state:
             state.add_session_entry(
-                engine="copilot",
+                engine="opencode",
                 model="deepseek-chat",
                 summary="Fixed auth bug",
                 files_changed=["src/auth.py"],
@@ -216,7 +218,44 @@ def test_add_session_entry():
             sessions = state.get_recent_sessions(limit=5)
             assert len(sessions) == 2
             assert sessions[0]["engine"] == "kilo"
-            assert sessions[1]["engine"] == "copilot"
+            assert sessions[1]["engine"] == "opencode"
+
+
+def test_a_retired_engine_name_is_refused_on_write():
+    """Retired engine names raise ValueError when writing a new session entry."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "shared-state.db"
+        with (
+            SharedState(path) as state,
+            pytest.raises(ValueError, match="Invalid engine"),
+        ):
+            state.add_session_entry(
+                engine="claude",
+                model="claude-sonnet",
+                summary="Should be refused",
+            )
+
+
+def test_a_historical_retired_row_still_reads():
+    """Historical rows carrying retired engine names still read via get_recent_sessions."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "shared-state.db"
+        SharedState(path).close()
+        conn = sqlite3.connect(path)
+        conn.execute(
+            "INSERT INTO session_log "
+            "(timestamp, engine, model, session_id, summary, files_changed, commits, verification) "
+            "VALUES ('2026-01-01T00:00:00+00:00', 'claude', 'claude-sonnet', 's1', "
+            "'Historical session', '[]', '[]', '{}')"
+        )
+        conn.commit()
+        conn.close()
+
+        with SharedState(path) as state:
+            sessions = state.get_recent_sessions(limit=5)
+            assert len(sessions) == 1
+            assert sessions[0]["engine"] == "claude"
+            assert sessions[0]["summary"] == "Historical session"
 
 
 def test_integrity_check():
