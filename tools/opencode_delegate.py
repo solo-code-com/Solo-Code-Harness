@@ -303,6 +303,7 @@ def _git_porcelain(root: Path) -> str:
             text=True,
             timeout=30,
             check=False,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError, TypeError):
         return ""
@@ -324,6 +325,7 @@ def _porcelain_or_none(root: Path) -> str | None:
             text=True,
             timeout=30,
             check=False,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError, TypeError):
         return None
@@ -650,6 +652,7 @@ def _wsl_query(cmd: list[str]) -> str | None:
             encoding="utf-8",
             errors="replace",
             timeout=60,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         _stderr(f"WSL unavailable: {exc}")
@@ -675,6 +678,7 @@ def _wsl_ready_once(timeout: float) -> bool:
             [wsl_bin, "-e", "sh", "-c", "command -v unshare >/dev/null 2>&1"],
             capture_output=True,
             timeout=timeout,
+            creationflags=_CREATE_NO_WINDOW,
         )
         if unshare.returncode != 0:
             return False
@@ -685,6 +689,7 @@ def _wsl_ready_once(timeout: float) -> bool:
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
+            creationflags=_CREATE_NO_WINDOW,
         )
         if home.returncode != 0 or not home.stdout.strip():
             return False
@@ -693,6 +698,7 @@ def _wsl_ready_once(timeout: float) -> bool:
             [wsl_bin, "-e", "test", "-x", binary],
             capture_output=True,
             timeout=timeout,
+            creationflags=_CREATE_NO_WINDOW,
         )
         return probe.returncode == 0
     except (OSError, subprocess.SubprocessError, TypeError):

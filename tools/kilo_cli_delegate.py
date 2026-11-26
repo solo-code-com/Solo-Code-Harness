@@ -242,6 +242,7 @@ def _git_porcelain(directory: str) -> str | None:
             text=True,
             timeout=30,
             check=False,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError, TypeError):
         return None
@@ -769,7 +770,7 @@ def main(argv: list[str] | None = None) -> int:
             port = _server_port(args.server)
             if port is not None and port != _server_port(DEFAULT_SERVER):
                 ensure_cmd += ["--port", str(port)]
-            subprocess.run(ensure_cmd, check=False)  # noqa: S603 - fixed argv, no shell
+            subprocess.run(ensure_cmd, check=False, creationflags=_CREATE_NO_WINDOW)  # noqa: S603 - fixed argv, no shell
         if not _server_healthy(args.server):
             _stderr(
                 f"Kilo server is not running at {args.server} - "
