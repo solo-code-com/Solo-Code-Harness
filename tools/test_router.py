@@ -316,3 +316,645 @@ def test_route_never_touches_the_network(monkeypatch):
 def test_an_empty_task_is_rejected():
     with pytest.raises(ValueError, match="non-empty"):
         router.route("   ")
+
+
+def _stub_jev(monkeypatch, fn, error_cls=None):
+    mod = ModuleType("jev_decide")
+    mod.JevDecideError = error_cls or type("JevDecideError", (Exception,), {})
+    mod.decide = fn
+    monkeypatch.setitem(sys.modules, "jev_decide", mod)
+    return mod
+
+
+def test_jev_route_destructive_never_calls_jev(monkeypatch):
+    called = False
+
+    def fail_if_called(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("Jev should not be called for destructive tasks")
+
+    _stub_jev(monkeypatch, fail_if_called)
+
+    decision = router.jev_route("delete the users table")
+
+    assert called is False
+    assert decision["task_type"] == "destructive"
+    assert decision["worker"] == "none"
+    assert decision["jev"] is None
+    assert "hard deny list" in decision["jev_note"]
+
+
+def test_jev_route_confident_safe_answer_replaces_worker(monkeypatch):
+    seen = {}
+
+    def fake_decide(state, questions, *, model, timeout):
+        seen["state"] = state
+        seen["questions"] = questions
+        seen["model"] = model
+        seen["timeout"] = timeout
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "cli:antigravity",
+                    "confidence": 0.88,
+                },
+                "safe": {"type": "noul", "noul": 0.12},
+            }
+        }
+
+    _stub_jev(monkeypatch, fake_decide)
+
+    decision = router.jev_route(CASES["simple_edit"])
+
+    assert set(seen["questions"]) == {"worker", "safe"}
+    assert set(seen["questions"]["worker"]["criteria"]) == router.DECLARED_WORKERS
+    assert (
+        seen["questions"]["worker"]["criteria"]["none"]
+        == "no delegation; the orchestrator answers or decides in place"
+    )
+    assert seen["model"] == "typesafe/jev-1.14.0"
+    assert seen["timeout"] == 20
+    assert decision["worker"] == "cli:antigravity"
+    assert decision["brain"] == "jev"
+    assert "0.88" in decision["reason"]
+    assert "0.12" in decision["reason"]
+    assert decision["jev_note"] == "accepted"
+    assert decision["jev"]["worker"]["choice"] == "cli:antigravity"
+
+
+def test_jev_route_low_confidence_keeps_rule_worker(monkeypatch):
+    def fake_decide(*_args, **_kwargs):
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "subagent:explore",
+                    "confidence": 0.42,
+                },
+                "safe": {"type": "noul", "noul": 0.10},
+            }
+        }
+
+    _stub_jev(monkeypatch, fake_decide)
+    expected = router.route(CASES["simple_edit"])
+
+    decision = router.jev_route(CASES["simple_edit"])
+
+    assert decision["worker"] == expected["worker"]
+    assert decision["brain"] == "rules"
+    assert "confidence" in decision["jev_note"]
+    assert decision["jev"]["worker"]["confidence"] == 0.42
+
+
+def test_jev_route_unsafe_noul_keeps_rule_worker(monkeypatch):
+    def fake_decide(*_args, **_kwargs):
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "subagent:explore",
+                    "confidence": 0.91,
+                },
+                "safe": {"type": "noul", "noul": 0.75},
+            }
+        }
+
+    _stub_jev(monkeypatch, fake_decide)
+    expected = router.route(CASES["simple_edit"])
+
+    decision = router.jev_route(CASES["simple_edit"])
+
+    assert decision["worker"] == expected["worker"]
+    assert decision["brain"] == "rules"
+    assert "0.5" in decision["jev_note"] or "noul" in decision["jev_note"]
+
+
+def test_jev_route_undeclared_worker_keeps_rule_worker(monkeypatch):
+    def fake_decide(*_args, **_kwargs):
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "cli:invented",
+                    "confidence": 0.95,
+                },
+                "safe": {"type": "noul", "noul": 0.05},
+            }
+        }
+
+    _stub_jev(monkeypatch, fake_decide)
+    expected = router.route(CASES["simple_edit"])
+
+    decision = router.jev_route(CASES["simple_edit"])
+
+    assert decision["worker"] == expected["worker"]
+    assert decision["brain"] == "rules"
+    assert "undeclared" in decision["jev_note"]
+
+
+def test_jev_route_error_falls_back_without_raising(monkeypatch):
+    from jev_decide import JevDecideError
+
+    def fake_decide(*_args, **_kwargs):
+        raise JevDecideError("HTTP 503: provider unavailable")
+
+    _stub_jev(monkeypatch, fake_decide, error_cls=JevDecideError)
+    expected = router.route(CASES["complex"])
+
+    decision = router.jev_route(CASES["complex"])
+
+    assert decision["worker"] == expected["worker"]
+    assert decision["brain"] == "rules"
+    assert decision["jev"] is None
+    assert "HTTP 503: provider unavailable" in decision["jev_note"]
+
+
+def test_jev_route_oserror_truncates_note_to_120_chars(monkeypatch):
+    long_msg = "connection failed: " + ("x" * 200)
+
+    def fake_decide(*_args, **_kwargs):
+        raise OSError(long_msg)
+
+    _stub_jev(monkeypatch, fake_decide)
+
+    decision = router.jev_route(CASES["complex"])
+
+    assert decision["brain"] == "rules"
+    assert decision["jev"] is None
+    assert len(decision["jev_note"]) == 120
+    assert decision["jev_note"] == long_msg[:120]
+
+
+def test_cli_jev_prints_jev_block(monkeypatch, capsys):
+    def fake_decide(*_args, **_kwargs):
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "subagent:explore",
+                    "confidence": 0.85,
+                },
+                "safe": {"type": "noul", "noul": 0.15},
+            }
+        }
+
+    _stub_jev(monkeypatch, fake_decide)
+
+    assert router.main([CASES["question"], "--jev"]) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["brain"] == "jev"
+    assert printed["worker"] == "subagent:explore"
+    assert printed["jev_note"] == "accepted"
+    assert "jev" not in printed
+    assert "worker" in printed["advisor"]
+
+
+def test_jev_route_split_within_group_is_accepted(monkeypatch):
+    def fake_decide(*_args, **_kwargs):
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "cli:antigravity",
+                    "confidence": 0.55,
+                    "probabilities": {
+                        "cli:antigravity": 0.55,
+                        "subagent:explore": 0.30,
+                    },
+                },
+                "safe": {"type": "noul", "noul": 0.10},
+            }
+        }
+
+    _stub_jev(monkeypatch, fake_decide)
+
+    decision = router.jev_route(CASES["simple_edit"])
+
+    assert decision["worker"] == "cli:antigravity"
+    assert decision["brain"] == "jev"
+    assert decision["jev_note"] == "accepted"
+    assert "0.55" in decision["reason"]
+    assert "0.85" in decision["reason"]
+
+
+def test_jev_route_split_within_group_below_threshold_is_rejected(monkeypatch):
+    def fake_decide(*_args, **_kwargs):
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "cli:antigravity",
+                    "confidence": 0.30,
+                    "probabilities": {
+                        "cli:antigravity": 0.30,
+                        "subagent:explore": 0.20,
+                    },
+                },
+                "safe": {"type": "noul", "noul": 0.10},
+            }
+        }
+
+    _stub_jev(monkeypatch, fake_decide)
+    expected = router.route(CASES["simple_edit"])
+
+    decision = router.jev_route(CASES["simple_edit"])
+
+    assert decision["worker"] == expected["worker"]
+    assert decision["brain"] == "rules"
+    assert "0.50" in decision["jev_note"]
+    assert "0.30" in decision["jev_note"]
+    assert "0.65" in decision["jev_note"]
+
+
+def test_jev_route_single_worker_group_none_threshold(monkeypatch):
+    def accept_none(*_args, **_kwargs):
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "none",
+                    "confidence": 0.70,
+                    "probabilities": {"none": 0.70, "cli:opencode": 0.20},
+                },
+                "safe": {"type": "noul", "noul": 0.10},
+            }
+        }
+
+    _stub_jev(monkeypatch, accept_none)
+    accepted = router.jev_route(CASES["simple_edit"])
+    assert accepted["worker"] == "none"
+    assert accepted["brain"] == "jev"
+    assert accepted["jev_note"] == "accepted"
+
+    def reject_none(*_args, **_kwargs):
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "none",
+                    "confidence": 0.60,
+                    "probabilities": {"none": 0.60, "cli:opencode": 0.25},
+                },
+                "safe": {"type": "noul", "noul": 0.10},
+            }
+        }
+
+    _stub_jev(monkeypatch, reject_none)
+    expected = router.route(CASES["simple_edit"])
+    rejected = router.jev_route(CASES["simple_edit"])
+    assert rejected["worker"] == expected["worker"]
+    assert rejected["brain"] == "rules"
+    assert "0.60" in rejected["jev_note"]
+
+
+def test_group_confidence_ignores_undeclared_keys_and_non_numeric_values():
+    assert (
+        router._group_confidence(
+            "cli:antigravity",
+            {"cli:antigravity": 0.40, "cli:invented": 0.90},
+        )
+        == 0.40
+    )
+    assert router._group_confidence("cli:invented", {"cli:invented": 0.90}) == 0.0
+    assert (
+        router._group_confidence(
+            "cli:antigravity",
+            {"cli:antigravity": 0.40, "subagent:explore": "bad"},
+        )
+        == 0.40
+    )
+    assert (
+        router._group_confidence(
+            "cli:antigravity",
+            {"cli:antigravity": 0.40, "subagent:explore": True},
+        )
+        == 0.40
+    )
+
+
+def _stub_gemini_http(monkeypatch, handler, *, api_key="test-secret-key"):
+    """Stub env_file and urllib.request.urlopen so _gemini_decide never hits the network."""
+    env_mod = ModuleType("env_file")
+    env_mod.load_project_env = lambda *_args, **_kwargs: {}
+    monkeypatch.setitem(sys.modules, "env_file", env_mod)
+    if api_key is None:
+        monkeypatch.delenv("GOOGLE_GEMINI_KEY", raising=False)
+    else:
+        monkeypatch.setenv("GOOGLE_GEMINI_KEY", api_key)
+
+    class _FakeResponse:
+        def __init__(self, payload: bytes) -> None:
+            self._payload = payload
+
+        def read(self) -> bytes:
+            return self._payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc) -> None:
+            return None
+
+    def fake_urlopen(request, timeout=20):
+        result = handler(request, timeout)
+        if isinstance(result, bytes):
+            return _FakeResponse(result)
+        return _FakeResponse(json.dumps(result).encode("utf-8"))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+
+def test_decide_route_confident_gemini_replaces_worker(monkeypatch):
+    seen = {}
+
+    def handle(request, timeout):
+        seen["url"] = request.full_url
+        seen["method"] = request.get_method()
+        seen["headers"] = {k.lower(): v for k, v in request.header_items()}
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        seen["timeout"] = timeout
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "cli:antigravity",
+                    "confidence": 0.92,
+                    "probabilities": {"cli:antigravity": 0.92, "none": 0.08},
+                },
+                "safe": {"type": "noul", "noul": 0.14},
+            }
+        }
+
+    _stub_gemini_http(monkeypatch, handle)
+
+    decision = router.decide_route(CASES["simple_edit"])
+
+    assert seen["url"] == router._GEMINI_URL
+    assert seen["method"] == "POST"
+    assert seen["headers"]["x-goog-api-key"] == "test-secret-key"
+    assert seen["body"]["model"] == "gemini-decision-1"
+    assert seen["body"]["input"] == [{"type": "text", "text": CASES["simple_edit"]}]
+    assert set(seen["body"]["questions"]) == {"worker", "safe"}
+    assert seen["timeout"] == 20
+    assert decision["worker"] == "cli:antigravity"
+    assert decision["brain"] == "gemini"
+    assert "cli:antigravity" in decision["reason"]
+    assert "0.92" in decision["reason"]
+    assert "0.14" in decision["reason"]
+    assert decision["advisor"]["worker"]["choice"] == "cli:antigravity"
+    assert "jev" not in decision
+    assert decision["jev_note"] == "accepted"
+
+
+def test_decide_route_gemini_failure_falls_through_to_jev(monkeypatch):
+    def fail_gemini(*_args, **_kwargs):
+        raise router.DecisionError("HTTP 503: service unavailable")
+
+    def fake_jev(*_args, **_kwargs):
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "subagent:explore",
+                    "confidence": 0.88,
+                },
+                "safe": {"type": "noul", "noul": 0.10},
+            }
+        }
+
+    monkeypatch.setattr(router, "_gemini_decide", fail_gemini)
+    _stub_jev(monkeypatch, fake_jev)
+
+    decision = router.decide_route(CASES["simple_edit"])
+
+    assert decision["brain"] == "jev"
+    assert decision["worker"] == "subagent:explore"
+    assert decision["advisor"]["worker"]["choice"] == "subagent:explore"
+    assert "HTTP 503: service unavailable" in decision["jev_note"]
+
+
+def test_decide_route_both_backends_fail_returns_none_and_both_errors(monkeypatch):
+    from jev_decide import JevDecideError
+
+    def fail_gemini(*_args, **_kwargs):
+        raise router.DecisionError("gemini timeout")
+
+    def fail_jev(*_args, **_kwargs):
+        raise JevDecideError("jev gateway 502")
+
+    monkeypatch.setattr(router, "_gemini_decide", fail_gemini)
+    _stub_jev(monkeypatch, fail_jev, error_cls=JevDecideError)
+
+    decision = router.decide_route(CASES["complex"])
+
+    assert decision["worker"] == "none"
+    assert decision["brain"] == "none"
+    assert decision["advisor"] is None
+    assert "jev" not in decision
+    assert "gemini timeout" in decision["jev_note"]
+    assert "jev gateway 502" in decision["jev_note"]
+
+
+def test_decide_route_low_confidence_stops_with_none(monkeypatch):
+    monkeypatch.setattr(
+        router,
+        "_gemini_decide",
+        lambda *_args, **_kwargs: {
+            "worker": {
+                "type": "choice",
+                "choice": "cli:opencode",
+                "confidence": 0.35,
+            },
+            "safe": {"type": "noul", "noul": 0.10},
+        },
+    )
+
+    decision = router.decide_route(CASES["simple_edit"])
+
+    assert decision["worker"] == "none"
+    assert decision["brain"] == "none"
+    assert "jev" not in decision
+    assert "confidence" in decision["jev_note"]
+
+
+def test_decide_route_safety_noul_gate_is_085(monkeypatch):
+    monkeypatch.setattr(
+        router,
+        "_gemini_decide",
+        lambda *_args, **_kwargs: {
+            "worker": {
+                "type": "choice",
+                "choice": "cli:antigravity",
+                "confidence": 0.90,
+            },
+            "safe": {"type": "noul", "noul": 0.57},
+        },
+    )
+    accepted = router.decide_route(CASES["survey"])
+    assert accepted["worker"] == "cli:antigravity"
+    assert accepted["brain"] == "gemini"
+    assert "jev" not in accepted
+
+    monkeypatch.setattr(
+        router,
+        "_gemini_decide",
+        lambda *_args, **_kwargs: {
+            "worker": {
+                "type": "choice",
+                "choice": "cli:antigravity",
+                "confidence": 0.90,
+            },
+            "safe": {"type": "noul", "noul": 0.86},
+        },
+    )
+    blocked = router.decide_route(CASES["simple_edit"])
+    assert blocked["worker"] == "none"
+    assert blocked["brain"] == "none"
+    assert "jev" not in blocked
+    assert "0.85" in blocked["jev_note"]
+
+
+def test_decide_route_destructive_calls_neither_backend(monkeypatch):
+    called = []
+
+    def fail_gemini(*_args, **_kwargs):
+        called.append("gemini")
+        raise AssertionError("gemini should not be called")
+
+    def fail_jev(*_args, **_kwargs):
+        called.append("jev")
+        raise AssertionError("jev should not be called")
+
+    monkeypatch.setattr(router, "_gemini_decide", fail_gemini)
+    _stub_jev(monkeypatch, fail_jev)
+
+    decision = router.decide_route("delete the users table")
+
+    assert called == []
+    assert decision["task_type"] == "destructive"
+    assert decision["brain"] == "rules"
+    assert decision["worker"] == "none"
+    assert decision["advisor"] is None
+    assert "jev" not in decision
+    assert "hard deny list" in decision["jev_note"]
+
+
+def test_decide_route_split_within_group_is_accepted(monkeypatch):
+    monkeypatch.setattr(
+        router,
+        "_gemini_decide",
+        lambda *_args, **_kwargs: {
+            "worker": {
+                "type": "choice",
+                "choice": "cli:antigravity",
+                "confidence": 0.40,
+                "probabilities": {
+                    "cli:antigravity": 0.40,
+                    "subagent:explore": 0.25,
+                },
+            },
+            "safe": {"type": "noul", "noul": 0.10},
+        },
+    )
+
+    decision = router.decide_route(CASES["simple_edit"])
+
+    assert decision["worker"] == "cli:antigravity"
+    assert decision["brain"] == "gemini"
+    assert decision["jev_note"] == "accepted"
+    assert "jev" not in decision
+    assert "0.65" in decision["reason"]
+
+
+def test_decide_route_undeclared_worker_stops_with_none(monkeypatch):
+    monkeypatch.setattr(
+        router,
+        "_gemini_decide",
+        lambda *_args, **_kwargs: {
+            "worker": {
+                "type": "choice",
+                "choice": "cli:invented",
+                "confidence": 0.95,
+            },
+            "safe": {"type": "noul", "noul": 0.05},
+        },
+    )
+
+    decision = router.decide_route(CASES["simple_edit"])
+
+    assert decision["worker"] == "none"
+    assert decision["brain"] == "none"
+    assert "jev" not in decision
+    assert "undeclared" in decision["jev_note"]
+
+
+def test_gemini_decide_translates_failures_and_scrubs_key(monkeypatch):
+    import io
+    import urllib.error
+
+    leak_canary = "placeholder-key-should-not-leak"
+
+    _stub_gemini_http(monkeypatch, lambda *_args: {}, api_key=None)
+    with pytest.raises(router.DecisionError, match="GOOGLE_GEMINI_KEY"):
+        router._gemini_decide(CASES["question"])
+
+    def raise_http(*_args):
+        raise urllib.error.HTTPError(
+            router._GEMINI_URL,
+            403,
+            "Forbidden",
+            {},
+            io.BytesIO(f"bad key {leak_canary}".encode()),
+        )
+
+    _stub_gemini_http(monkeypatch, raise_http, api_key=leak_canary)
+    with pytest.raises(router.DecisionError, match="HTTP 403") as http_exc:
+        router._gemini_decide(CASES["question"])
+    assert leak_canary not in str(http_exc.value)
+
+    def raise_oserror(*_args):
+        raise OSError(f"proxy rejected key {leak_canary}")
+
+    _stub_gemini_http(monkeypatch, raise_oserror, api_key=leak_canary)
+    with pytest.raises(router.DecisionError) as exc_info:
+        router._gemini_decide(CASES["question"])
+    assert leak_canary not in str(exc_info.value)
+
+    _stub_gemini_http(monkeypatch, lambda *_args: b"{not json", api_key=leak_canary)
+    with pytest.raises(router.DecisionError, match="invalid JSON"):
+        router._gemini_decide(CASES["question"])
+
+
+def test_cli_decide_and_backend_flags(monkeypatch, capsys):
+    monkeypatch.setattr(
+        router,
+        "_gemini_decide",
+        lambda *_args, **_kwargs: {
+            "worker": {
+                "type": "choice",
+                "choice": "subagent:explore",
+                "confidence": 0.90,
+            },
+            "safe": {"type": "noul", "noul": 0.10},
+        },
+    )
+    assert router.main([CASES["question"], "--decide", "--backend", "gemini"]) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["brain"] == "gemini"
+    assert printed["worker"] == "subagent:explore"
+    assert "jev" not in printed
+    assert printed["advisor"]["worker"]["choice"] == "subagent:explore"
+
+    assert router.main([CASES["question"], "--decide", "--probe"]) == 2
+    assert "not wired" in capsys.readouterr().err
+
+
+def test_worker_descriptions_pin_explore_and_antigravity_wording():
+    criteria = router._routing_questions()["worker"]["criteria"]
+
+    assert set(criteria) == router.DECLARED_WORKERS
+    assert "locates" in criteria["subagent:explore"]
+    assert "summarize" not in criteria["subagent:explore"]
+    assert "summarizes" in criteria["cli:antigravity"]

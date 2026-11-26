@@ -38,6 +38,7 @@ import argparse
 import contextlib
 import hashlib
 import json
+import math
 import re
 import sys
 import time
@@ -135,6 +136,50 @@ _BUDGETS: dict[str, tuple[int, int]] = {
 
 #: Evidence string used when model-roles.json cannot be read.
 EVIDENCE_UNREADABLE = "model-roles:unreadable"
+
+#: Workers that answer the same kind of question, so a split between them is not
+#: uncertainty. Order matters only within a group and is not otherwise significant.
+_WORKER_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("cli:antigravity", "subagent:explore"),
+    ("cli:opencode", "cli:kilo", "in_process:solo-code-engineer"),
+    ("subagent:code-reviewer",),
+    ("none",),
+)
+
+
+def _group_confidence(choice: str, probabilities: dict) -> float:
+    """Return the summed probability of every worker in the same group as choice."""
+    if not isinstance(choice, str) or not isinstance(probabilities, dict):
+        return 0.0
+    group: tuple[str, ...] = (choice,)
+    for candidate in _WORKER_GROUPS:
+        if choice in candidate:
+            group = candidate
+            break
+    total = 0.0
+    for worker in group:
+        if worker not in DECLARED_WORKERS:
+            continue
+        value = probabilities.get(worker, 0.0)
+        if (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+        ):
+            total += float(value)
+    return round(total, 12)
+
+
+#: Descriptions for each declared worker, used to build routing criteria.
+_WORKER_DESCRIPTIONS: dict[str, str] = {
+    "subagent:explore": "locates files and symbols only",
+    "subagent:code-reviewer": "reviews a diff, design or plan and returns findings",
+    "cli:opencode": "edits one file or a small scoped change",
+    "cli:antigravity": "reads many files at once and summarizes or audits across them",
+    "cli:kilo": "runs a single scoped task headless",
+    "in_process:solo-code-engineer": "implements a change across several files",
+    "none": "no delegation; the orchestrator answers or decides in place",
+}
 
 #: Bumped whenever SHADOW_QUESTIONS changes, so a shadow row can be traced.
 SHADOW_QUESTIONS_VERSION = "v1"
@@ -247,6 +292,308 @@ def probe(decision: dict) -> None:
     )
 
 
+class DecisionError(Exception):
+    """Raised when a decision backend cannot answer."""
+
+
+_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/decisions"
+_GEMINI_MODEL = "gemini-decision-1"
+_DECIDE_MAX_NOUL = 0.85
+_DECIDE_BACKENDS = ("auto", "gemini", "jev")
+
+
+def _routing_questions() -> dict:
+    """Build the shared choice + safety question set for decision backends."""
+    criteria = {
+        worker: _WORKER_DESCRIPTIONS.get(worker, f"delegate to {worker}")
+        for worker in sorted(DECLARED_WORKERS)
+    }
+    return {
+        "worker": {
+            "type": "choice",
+            "instructions": "Which worker should handle this task?",
+            "criteria": criteria,
+        },
+        "safe": {
+            "type": "noul",
+            "instructions": "Is it safe to proceed without asking the operator first?",
+        },
+    }
+
+
+def _as_finite_float(value: object, default: float) -> float:
+    """Return value as a finite float, or default for booleans, NaN, or non-numbers."""
+    if isinstance(value, bool):
+        return default
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return parsed if math.isfinite(parsed) else default
+
+
+def _parse_routing_answers(answers: dict) -> tuple[object, float, float, float]:
+    """Extract (choice, confidence, group_confidence, safety_noul) from backend answers."""
+    worker_ans = answers.get("worker")
+    if not isinstance(worker_ans, dict):
+        worker_ans = {}
+    safe_ans = answers.get("safe")
+    if not isinstance(safe_ans, dict):
+        safe_ans = {}
+    choice = worker_ans.get("choice")
+    confidence = _as_finite_float(worker_ans.get("confidence"), 0.0)
+    raw_probs = worker_ans.get("probabilities")
+    probabilities = raw_probs if isinstance(raw_probs, dict) else {}
+    noul = _as_finite_float(safe_ans.get("noul"), 1.0)
+    group_confidence = (
+        _group_confidence(choice, probabilities)
+        if probabilities and isinstance(choice, str)
+        else confidence
+    )
+    return choice, confidence, group_confidence, noul
+
+
+def _scrub_secret(text: str, secret: str) -> str:
+    """Remove a secret key from an error message before raising or logging."""
+    if secret and secret in text:
+        return text.replace(secret, "[REDACTED]")
+    return text
+
+
+def _gemini_decide(task: str, *, timeout: int = 20) -> dict:
+    """Ask Gemini Decision for routing answers; translate every failure to DecisionError."""
+    import os
+    import urllib.error
+    import urllib.request
+
+    tools_dir = str(Path(__file__).resolve().parent)
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    import env_file
+
+    env_file.load_project_env()
+    key = (os.environ.get("GOOGLE_GEMINI_KEY") or "").strip()
+    if not key:
+        raise DecisionError("missing GOOGLE_GEMINI_KEY")
+
+    payload = {
+        "model": _GEMINI_MODEL,
+        "input": [{"type": "text", "text": task}],
+        "questions": _routing_questions(),
+    }
+    request = urllib.request.Request(  # noqa: S310 - fixed https endpoint
+        _GEMINI_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "x-goog-api-key": key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            raw_bytes = response.read()
+        raw = (
+            raw_bytes.decode("utf-8")
+            if isinstance(raw_bytes, bytes | bytearray)
+            else str(raw_bytes)
+        )
+        body = json.loads(raw)
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        with contextlib.suppress(Exception):
+            raw_err = exc.read()
+            detail = (
+                raw_err.decode("utf-8", errors="replace")
+                if isinstance(raw_err, bytes | bytearray)
+                else str(raw_err or "")
+            )
+            detail = detail[:120].replace("\n", " ").strip()
+        msg = f"HTTP {exc.code}: {detail}" if detail else f"HTTP {exc.code}"
+        raise DecisionError(_scrub_secret(msg, key)[:120]) from exc
+    except OSError as exc:
+        msg = f"{type(exc).__name__}: {exc}"
+        raise DecisionError(_scrub_secret(msg, key)[:120]) from exc
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError, ValueError) as exc:
+        msg = f"invalid JSON: {exc}"
+        raise DecisionError(_scrub_secret(msg, key)[:120]) from exc
+
+    if not isinstance(body, dict) or not isinstance(body.get("answers"), dict):
+        raise DecisionError("invalid response: missing answers")
+    return body["answers"]
+
+
+def _jev_decide(
+    task: str, *, model: str = "typesafe/jev-1.14.0", timeout: int = 20
+) -> dict:
+    """Ask Jev for routing answers; translate transport/provider failures to DecisionError."""
+    import jev_decide
+
+    jev_error = getattr(jev_decide, "JevDecideError", None)
+    caught: tuple[type[BaseException], ...] = (
+        (jev_error, OSError)
+        if isinstance(jev_error, type) and issubclass(jev_error, BaseException)
+        else (OSError,)
+    )
+    try:
+        response = jev_decide.decide(
+            task, _routing_questions(), model=model, timeout=timeout
+        )
+    except Exception as exc:
+        if not isinstance(exc, caught) and type(exc).__name__ != "JevDecideError":
+            raise
+        msg = (str(exc) or type(exc).__name__)[:120]
+        raise DecisionError(msg) from exc
+    if not isinstance(response, dict) or not isinstance(response.get("answers"), dict):
+        return {}
+    return response["answers"]
+
+
+def decide_route(
+    task: str,
+    *,
+    backend: str = "auto",
+    min_confidence: float = 0.5,
+    timeout: int = 20,
+) -> dict:
+    """Advise routing with Gemini Decision (primary) and Jev (backup).
+
+    Destructive tasks stop at the hard deny list without calling any backend.
+    Backend failures or uncertain/unsafe answers stop with worker='none' and
+    brain='none' rather than falling back to the rule table.
+    """
+    if backend not in _DECIDE_BACKENDS:
+        raise ValueError(
+            f"unknown backend {backend!r}; use one of {', '.join(_DECIDE_BACKENDS)}"
+        )
+    decision = route(task)
+    if decision["task_type"] == "destructive":
+        return {
+            **decision,
+            "jev_note": "hard deny list, not asked",
+            "advisor": None,
+        }
+
+    candidates = ("gemini", "jev") if backend == "auto" else (backend,)
+    failures: list[str] = []
+    answers: dict | None = None
+    used_backend: str | None = None
+
+    for candidate in candidates:
+        try:
+            if candidate == "gemini":
+                answers = _gemini_decide(task, timeout=timeout)
+            else:
+                answers = _jev_decide(task, timeout=timeout)
+            used_backend = candidate
+            break
+        except DecisionError as exc:
+            msg = (str(exc) or type(exc).__name__)[:120]
+            failures.append(f"{candidate}: {msg}")
+
+    if answers is None or used_backend is None:
+        return {
+            **decision,
+            "worker": "none",
+            "brain": "none",
+            "jev_note": "; ".join(failures),
+            "advisor": None,
+        }
+
+    choice, confidence, group_confidence, noul = _parse_routing_answers(answers)
+    suffix = f" ({'; '.join(failures)})" if failures else ""
+
+    if not isinstance(choice, str) or choice not in DECLARED_WORKERS:
+        return {
+            **decision,
+            "worker": "none",
+            "brain": "none",
+            "jev_note": f"undeclared worker {choice!r}{suffix}",
+            "advisor": answers,
+        }
+    if group_confidence < min_confidence:
+        return {
+            **decision,
+            "worker": "none",
+            "brain": "none",
+            "jev_note": (
+                f"low intent confidence {group_confidence:.2f} < "
+                f"{min_confidence:.2f} label {confidence:.2f}{suffix}"
+            ),
+            "advisor": answers,
+        }
+    if noul > _DECIDE_MAX_NOUL:
+        return {
+            **decision,
+            "worker": "none",
+            "brain": "none",
+            "jev_note": f"safety noul {noul:.2f} > {_DECIDE_MAX_NOUL:.2f}{suffix}",
+            "advisor": answers,
+        }
+
+    accepted_note = (
+        f"accepted; fallback after {'; '.join(failures)}" if failures else "accepted"
+    )
+    return {
+        **decision,
+        "worker": choice,
+        "brain": used_backend,
+        "reason": (
+            f"{used_backend}: choice={choice!r} label_confidence={confidence:.2f} "
+            f"group_confidence={group_confidence:.2f} safety={noul:.2f}"
+        ),
+        "jev_note": accepted_note,
+        "advisor": answers,
+    }
+
+
+def jev_route(
+    task: str,
+    *,
+    model: str = "typesafe/jev-1.14.0",
+    timeout: int = 20,
+    min_confidence: float = 0.65,
+) -> dict:
+    """Advise routing with Jev, keeping the rule table's destructive hard deny list."""
+    decision = route(task)
+    if decision["task_type"] == "destructive":
+        return {**decision, "jev": None, "jev_note": "hard deny list, not asked"}
+
+    try:
+        answers = _jev_decide(task, model=model, timeout=timeout)
+    except DecisionError as exc:
+        return {**decision, "jev": None, "jev_note": str(exc)}
+
+    choice, confidence, group_confidence, noul = _parse_routing_answers(answers)
+
+    if not isinstance(choice, str) or choice not in DECLARED_WORKERS:
+        return {**decision, "jev": answers, "jev_note": f"undeclared worker {choice!r}"}
+    if group_confidence < min_confidence:
+        return {
+            **decision,
+            "jev": answers,
+            "jev_note": (
+                f"low intent confidence {group_confidence:.2f} < "
+                f"{min_confidence:.2f} label {confidence:.2f}"
+            ),
+        }
+    if noul > 0.5:
+        return {**decision, "jev": answers, "jev_note": f"safety noul {noul:.2f} > 0.5"}
+
+    return {
+        **decision,
+        "worker": choice,
+        "brain": "jev",
+        "reason": (
+            f"jev: choice={choice!r} label_confidence={confidence:.2f} "
+            f"group_confidence={group_confidence:.2f} safety={noul:.2f}"
+        ),
+        "jev": answers,
+        "jev_note": "accepted",
+    }
+
+
 def shadow_decision(task: str, decision: dict) -> dict:
     """What the decision model would answer, recorded without changing the route.
 
@@ -337,10 +684,30 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also record what the decision model would answer, without routing by it",
     )
+    parser.add_argument(
+        "--decide",
+        action="store_true",
+        help="use Gemini Decision (primary) and Jev (backup) to advise routing",
+    )
+    parser.add_argument(
+        "--backend",
+        choices=_DECIDE_BACKENDS,
+        default=None,
+        help="decision backend for --decide: auto (default), gemini, or jev",
+    )
+    parser.add_argument(
+        "--jev",
+        action="store_true",
+        help="alias for --decide --backend jev",
+    )
     args = parser.parse_args(argv)
 
     try:
-        decision = route(args.task)
+        use_decide = args.decide or args.jev or args.backend is not None
+        backend = args.backend or ("jev" if args.jev else "auto")
+        decision = (
+            decide_route(args.task, backend=backend) if use_decide else route(args.task)
+        )
         if args.probe:
             probe(decision)
     except ValueError as exc:
