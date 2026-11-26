@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JEV Worker Console</title>
+<title>Solo-Code Orchestrator Console</title>
 <style>
   :root { --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --fg:#e6e8ee; --muted:#9aa3b2;
           --ok:#2ea043; --warn:#d29922; --bad:#f85149; --accent:#7c9cff; }
@@ -36,7 +36,7 @@
 </head>
 <body>
 <header>
-  <h1>JEV Worker Console</h1>
+  <h1>Solo-Code Orchestrator Console</h1>
   <span class="muted">localhost-only · token bảo vệ · chỉ gọi wrapper trong allowlist</span>
 </header>
 <main>
@@ -73,7 +73,7 @@
       <label class="chip"><input type="checkbox" id="allow_write" style="width:auto"> codex: --allow-write (mặc định read-only)</label>
       <label class="chip"><input type="checkbox" id="stream" checked style="width:auto"> stream output (SSE)</label>
       <div style="flex:1"></div>
-      <label for="session" class="muted">session (JEV)</label>
+      <label for="session" class="muted">session (orchestrator)</label>
       <input id="session" type="text" placeholder="(mới mỗi lần)" style="width:160px">
       <label for="timeout" class="muted">timeout (s)</label>
       <input id="timeout" type="number" min="10" max="1800" value="300" style="width:90px">

@@ -79,7 +79,7 @@ agents:
   - test-engineer
   - typescript-reviewer
   - web-performance-auditor
-  - jev
+  - solocode-orchestrator
   - data
 tags:
   - agent-harness

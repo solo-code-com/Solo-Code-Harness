@@ -144,21 +144,25 @@ class _FakeEngine:
 
     @staticmethod
     def _build_agent_models():
-        return {"jev": {"model": "openrouter/jev-router"}}
+        return {"solocode-orchestrator": {"model": "openrouter/jev-router"}}
 
 
 def test_resolve_model_gives_the_orchestrator_its_own_model(monkeypatch):
     monkeypatch.setattr(opencode_delegate, "_load_sibling", lambda name: _FakeEngine())
 
     assert (
-        opencode_delegate.resolve_model(free=False, model=None, agent="jev")
+        opencode_delegate.resolve_model(
+            free=False, model=None, agent="solocode-orchestrator"
+        )
         == "openrouter/jev-router"
     )
 
 
 def test_resolve_model_prefers_an_explicit_model():
     assert (
-        opencode_delegate.resolve_model(free=False, model="opencode-go/x", agent="jev")
+        opencode_delegate.resolve_model(
+            free=False, model="opencode-go/x", agent="solocode-orchestrator"
+        )
         == "opencode-go/x"
     )
 
@@ -174,7 +178,9 @@ def test_resolve_model_leaves_other_agents_alone():
 
 def test_resolve_model_free_wins_over_everything():
     assert (
-        opencode_delegate.resolve_model(free=True, model="m", agent="jev")
+        opencode_delegate.resolve_model(
+            free=True, model="m", agent="solocode-orchestrator"
+        )
         == opencode_delegate.FREE_MODEL
     )
 
@@ -190,8 +196,10 @@ def test_resolve_model_defaults_without_agent_or_override(monkeypatch):
 
 def test_orchestrator_model_matches_the_single_source_of_truth():
     assert (
-        opencode_delegate.resolve_model(free=False, model=None, agent="jev")
-        == opencode_engine._build_agent_models()["jev"]["model"]
+        opencode_delegate.resolve_model(
+            free=False, model=None, agent="solocode-orchestrator"
+        )
+        == opencode_engine._build_agent_models()["solocode-orchestrator"]["model"]
     )
 
 
@@ -292,11 +300,11 @@ def test_run_opencode_cli_passes_agent_and_session(monkeypatch, tmp_path):
         model="opencode-go/deepseek-v4.1-flash",
         directory=str(tmp_path),
         opencode_binary="opencode",
-        agent="jev",
+        agent="solocode-orchestrator",
         session="ses_1",
     )
     cmd = captured["cmd"]
-    assert cmd[cmd.index("--agent") + 1] == "jev"
+    assert cmd[cmd.index("--agent") + 1] == "solocode-orchestrator"
     assert cmd[cmd.index("--session") + 1] == "ses_1"
 
 
@@ -546,7 +554,7 @@ def test_default_agent_resolution_ignores_process_cwd(monkeypatch, tmp_path):
     empty.mkdir()
 
     monkeypatch.chdir(empty)
-    assert opencode_delegate._resolve_default_agent() == "jev"
+    assert opencode_delegate._resolve_default_agent() == "solocode-orchestrator"
 
 
 # ── post-run scope report ────────────────────────────────────────────────────
@@ -1106,7 +1114,12 @@ def test_sandbox_auto_resolves_to_wsl_when_ready(monkeypatch, tmp_path):
 
 
 def test_sandbox_wsl_refuses_the_orchestrator_agent(capsys):
-    assert opencode_delegate.main(["--sandbox", "wsl", "--agent", "jev", "x"]) == 2
+    assert (
+        opencode_delegate.main(
+            ["--sandbox", "wsl", "--agent", "solocode-orchestrator", "x"]
+        )
+        == 2
+    )
     err = capsys.readouterr().err
     assert "orchestrator" in err
     assert "Windows" in err
@@ -1662,7 +1675,7 @@ def test_the_run_log_never_claims_auto_for_the_orchestrator():
         None, "opencode-go/deepseek-v4.1-flash", "win"
     )
 
-    assert "--agent jev" in log
+    assert "--agent solocode-orchestrator" in log
     assert "--auto" not in log
 
 
@@ -2341,7 +2354,7 @@ def test_kilo_arm_refuses_the_orchestrator_agent(monkeypatch, capsys):
     monkeypatch.setattr(
         opencode_delegate, "_run_kilo_fallback", _REAL_RUN_KILO_FALLBACK
     )
-    args = SimpleNamespace(agent="jev", directory=".", timeout=900)
+    args = SimpleNamespace(agent="solocode-orchestrator", directory=".", timeout=900)
     result = opencode_delegate._run_kilo_fallback("prompt", args)
     assert result is None
     err = capsys.readouterr().err

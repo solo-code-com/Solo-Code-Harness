@@ -26,7 +26,7 @@
     "refactor-cleaner": "mechanical",
     "code-simplifier": "mechanical",
     "solo-code-engineer": "default-executor",
-    "jev": "orchestrator",
+    "solocode-orchestrator": "orchestrator",
     "data": "default-executor"
   },
   "routing_brains": ["openrouter/jev-router", "opencode-go/claude-haiku-5-5"]

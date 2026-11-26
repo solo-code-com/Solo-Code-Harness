@@ -230,7 +230,7 @@ Enforcement differs per engine:
 - **Kilo Code**: `.kilo/hooks/pre-tool-use/executor-mode.js` (same matcher, in every
   `hooks.json` profile except `minimal`).
 - **OpenCode**: no hook layer, so the state file does nothing. The split is
-  `.opencode/agents/jev.md` declaring `edit: deny`, and `tools/opencode_delegate.py`
+  `.opencode/agents/solocode-orchestrator.md` declaring `edit: deny`, and `tools/opencode_delegate.py`
   omitting `--auto` for that agent because `--auto` approves past the deny. A bare
   `opencode run --auto` bypasses the wrapper.
 
@@ -297,7 +297,7 @@ Full decision guide: `.kilo/skill/gemini-delegation/SKILL.md`.
 
 ### Antigravity as a CLI worker
 
-**Jev, running in OpenCode, is the orchestrator.** It holds the global context, splits
+**solocode-orchestrator, running in OpenCode, is the orchestrator.** It holds the global context, splits
 the task, dispatches, and verifies the diff. Gemini through `agy` is one of the workers
 it reaches, alongside the OpenCode and Kilo CLI lanes. An earlier version of this
 section called Antigravity the orchestrator; that described the retired Claude Code

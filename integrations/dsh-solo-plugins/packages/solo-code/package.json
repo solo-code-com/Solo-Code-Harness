@@ -40,7 +40,7 @@
         "./presets/agent-code-simplifier.patch.yml",
         "./presets/agent-code-skeptic.patch.yml",
         "./presets/agent-database-reviewer.patch.yml",
-        "./presets/agent-jev.patch.yml",
+        "./presets/agent-solocode-orchestrator.patch.yml",
         "./presets/agent-planner.patch.yml",
         "./presets/agent-python-reviewer.patch.yml",
         "./presets/agent-refactor-cleaner.patch.yml",

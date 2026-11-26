@@ -172,7 +172,7 @@ Persistent memory at `.gemini/antigravity/knowledge/`. The AI reads Knowledge It
 
 ## Delegating from Antigravity
 
-Jev, running in OpenCode, is the orchestrator of this harness. Antigravity is one of
+solocode-orchestrator, running in OpenCode, is the orchestrator of this harness. Antigravity is one of
 its workers, not a peer orchestrator. When a task handed to Antigravity is itself too
 broad for one pass, split it and hand the parts to the headless lanes below:
 
@@ -302,7 +302,7 @@ Available for domain-specific work. See `.gemini/antigravity/agents/`:
 | `code-simplifier` | Simplify code for clarity without changing behavior |
 | `code-skeptic` | Adversarial review — stress-test assumptions |
 | `database-reviewer` | DB query/schema/migration review |
-| `jev` | Multi-worker orchestrator — routes work to the cheapest capable worker, verifies every result |
+| `solocode-orchestrator` | Multi-worker orchestrator — routes work to the cheapest capable worker, verifies every result |
 | `planner` | Implementation planning for complex features |
 | `python-reviewer` | Python code review — PEP 8, type hints, Pythonic patterns |
 | `refactor-cleaner` | Dead code cleanup, logic simplification |

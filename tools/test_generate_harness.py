@@ -265,17 +265,19 @@ def test_generated_opencode_json_gates_disabled_skills(tmp_path):
     opencode_engine.generate_opencode_json(tmp_path / ".opencode", tmp_path, disabled)
 
     data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
-    # `jev` orchestrates and can spawn solo-code-engineer via its `task:` block, so
+    # the solocode-orchestrator agent orchestrates and can spawn solo-code-engineer via its `task:` block, so
     # the orchestrator is the default and the executor stays reachable.
-    assert data["default_agent"] == "jev"
-    # The jev agent runs on the model named Jev (TypeSafe's router, on OpenRouter)
+    assert data["default_agent"] == "solocode-orchestrator"
+    # The orchestrator agent runs on the model named Jev (TypeSafe's router, on OpenRouter)
     # when the catalog declares it; otherwise the harness's default executor.
-    expected_jev_model = (
+    expected_orchestrator_model = (
         "openrouter/jev-router"
         if "jev-router" in opencode_engine._OPENROUTER_MODELS
         else "opencode-go/deepseek-v4.1-flash"
     )
-    assert data["agents"]["jev"]["model"] == expected_jev_model
+    assert (
+        data["agents"]["solocode-orchestrator"]["model"] == expected_orchestrator_model
+    )
     # Legacy `permission` object (Kilo's bundled OpenCode v1 rejects `permissions`).
     assert "permissions" not in data
     # v2-only `providers` is split out of the root file into .opencode/.

@@ -112,11 +112,11 @@ Codex on CommandCode's `/responses` route.
 resolves each `opencode-go/...` role id against `_PROVIDER_MODELS`. Ids are never taken
 from memory.
 
-Work is routed through three roles, declared in `.kilo/agents/jev.md`:
+Work is routed through three roles, declared in `.kilo/agents/solocode-orchestrator.md`:
 
 | Role | Engine | Notes |
 |---|---|---|
-| **Jev** — routes only | agent on `openrouter/jev-router` | `edit: deny`; the wrapper launches it without `--auto` so the deny binds; it also resolves the project `default_agent` before granting `--auto`, and `tools/router.py` records the routing decision |
+| **solocode-orchestrator** — routes only | agent on `openrouter/jev-router` | `edit: deny`; the wrapper launches it without `--auto` so the deny binds; it also resolves the project `default_agent` before granting `--auto`, and `tools/router.py` records the routing decision |
 | **DeepSeek V4.1 Flash** — implementation | OpenCode CLI (`tools/opencode_delegate.py`) or the direct API arm (`tools/model_api.py`) | one-shot: 2.3 s trivial, 22 s one file; 503 above ~38 K-token prompts; `--sandbox wsl` runs the same brief inside the namespace fence (8.5 s warm); `--enforce-scope` strictly fails with exit 4 on out-of-scope edits |
 | **Gemini 3.8 Flash** — fast and broad work | Antigravity CLI, tiers `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | independent review, repo-wide survey |
 
@@ -453,11 +453,11 @@ chạy trên route `/responses` của CommandCode.
 `tools/check_model_catalog.py` đối chiếu id đã khai với `GET /models` (kèm `--probe`),
 và resolve mọi role id `opencode-go/...` với `_PROVIDER_MODELS`. Id không bao giờ lấy từ trí nhớ.
 
-Việc được định tuyến qua 3 vai trò, khai ở `.kilo/agents/jev.md`:
+Việc được định tuyến qua 3 vai trò, khai ở `.kilo/agents/solocode-orchestrator.md`:
 
 | Vai trò | Engine | Ghi chú |
 |---|---|---|
-| **Jev** — chỉ định tuyến | agent trên `openrouter/jev-router` | `edit: deny`; wrapper chạy không `--auto` để deny có hiệu lực |
+| **solocode-orchestrator** — chỉ định tuyến | agent trên `openrouter/jev-router` | `edit: deny`; wrapper chạy không `--auto` để deny có hiệu lực |
 | **DeepSeek V4.1 Flash** — code | OpenCode CLI (`tools/opencode_delegate.py`) hoặc arm API trực tiếp (`tools/model_api.py`) | one-shot: 2,3 s việc nhỏ, 22 s một file; 503 khi prompt trên ~38K token; `--sandbox wsl` chạy cùng brief trong fence namespace (8.5 s khi WSL ấm) |
 | **Gemini 3.8 Flash** — việc nhanh, rộng | Antigravity CLI, tier `low`/`medium`/`high` (`tools/antigravity_delegate.py`) | review độc lập, khảo sát toàn repo |
 

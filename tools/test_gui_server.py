@@ -180,7 +180,7 @@ def test_index_is_public_and_carries_the_token(server):
     _, port = server
     status, body = _call(port, "/")
     assert status == 200
-    assert "JEV Worker Console" in body
+    assert "Solo-Code Orchestrator Console" in body
     assert "tok123" in body  # injected so the page can call the API
 
 
@@ -370,24 +370,24 @@ def test_stop_endpoint_unknown_run(server):
     assert json.loads(body)["stopped"] == 0
 
 
-# ── JEV agent worker ─────────────────────────────────────────────────────────
+# ── orchestrator agent worker ────────────────────────────────────────────────
 
 
-def test_build_argv_jev_adds_agent_and_session():
+def test_build_argv_orchestrator_adds_agent_and_session():
     mod = _load()
-    assert mod.build_argv("jev", "b", None, {}) == [
+    assert mod.build_argv("solocode-orchestrator", "b", None, {}) == [
         sys.executable,
         "tools/opencode_delegate.py",
         "b",
         "--agent",
-        "jev",
+        "solocode-orchestrator",
     ]
-    assert mod.build_argv("jev", "b", "m", {"session": "ses_1"}) == [
+    assert mod.build_argv("solocode-orchestrator", "b", "m", {"session": "ses_1"}) == [
         sys.executable,
         "tools/opencode_delegate.py",
         "b",
         "--agent",
-        "jev",
+        "solocode-orchestrator",
         "--model",
         "m",
         "--session",
@@ -395,9 +395,9 @@ def test_build_argv_jev_adds_agent_and_session():
     ]
 
 
-def test_workers_includes_the_jev_agent(monkeypatch):
+def test_workers_includes_the_orchestrator_agent(monkeypatch):
     mod = _load()
     monkeypatch.setattr(mod.shutil, "which", lambda name: f"/usr/bin/{name}")
     by_id = {w["id"]: w for w in mod.workers()}
-    assert by_id["jev"]["ready"] is True
-    assert by_id["jev"]["cli"] == "opencode"
+    assert by_id["solocode-orchestrator"]["ready"] is True
+    assert by_id["solocode-orchestrator"]["cli"] == "opencode"

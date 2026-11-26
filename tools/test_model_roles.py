@@ -5,7 +5,7 @@ Model Role Tests
 Guards for tools/config/model-roles.json -- the single place where each agent's
 model is assigned (read by opencode_engine._build_agent_models).
 
-Background: only .kilo/agents/jev.md declared a model, so the other 14 agents
+Background: only .kilo/agents/solocode-orchestrator.md declared a model, so the other 14 agents
 inherited the session default. A reviewer then ran on the same model family as
 the author it reviewed, and missed what the author missed.
 
@@ -72,9 +72,9 @@ def test_build_agent_models_covers_most_agents():
 
     assert len(models) >= 10
     assert all(list(entry) == ["model"] for entry in models.values())
-    assert models["jev"]["model"] in (
-        opencode_engine._JEV_AGENT_MODEL,
-        opencode_engine._JEV_AGENT_FALLBACK,
+    assert models["solocode-orchestrator"]["model"] in (
+        opencode_engine._ORCHESTRATOR_AGENT_MODEL,
+        opencode_engine._ORCHESTRATOR_AGENT_FALLBACK,
     )
 
 
@@ -87,4 +87,7 @@ def test_a_missing_jev_router_falls_to_the_declared_brain(monkeypatch):
     assert brains[1] != config["roles"]["default-executor"]
 
     monkeypatch.delitem(opencode_engine._OPENROUTER_MODELS, "jev-router", raising=False)
-    assert opencode_engine._build_agent_models()["jev"]["model"] == brains[1]
+    assert (
+        opencode_engine._build_agent_models()["solocode-orchestrator"]["model"]
+        == brains[1]
+    )

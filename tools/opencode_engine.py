@@ -766,16 +766,16 @@ _SILK_MODELS: dict[str, dict[str, Any]] = {
     },
 }
 
-# The Jev agent runs on the model named Jev: TypeSafe's `typesafe/jev-router` on
+# The orchestrator agent runs on the model named Jev: TypeSafe's `typesafe/jev-router` on
 # OpenRouter, which picks a model and reasoning effort per request (verified live
 # 2026-10-15 -- it answered and reported routing to deepseek/deepseek-v4.1-flash).
 # Keeping it separate from _DEFAULT_MODEL matters: the default is what every other
 # run uses, while this one is the orchestrator's own brain.
-_JEV_AGENT_MODEL = "openrouter/jev-router"
+_ORCHESTRATOR_AGENT_MODEL = "openrouter/jev-router"
 # Operator rule (2026-10-15): when the Jev model cannot be loaded, the agent runs
 # on a reasoning model. Kept for callers that name it explicitly; the routing path
 # in `_build_agent_models` reads the declared `routing_brains` chain instead.
-_JEV_AGENT_FALLBACK = "opencode-go/deepseek-v4.1-flash"
+_ORCHESTRATOR_AGENT_FALLBACK = "opencode-go/deepseek-v4.1-flash"
 
 
 # The per-agent model assignment lives in one place: tools/config/model-roles.json
@@ -792,16 +792,16 @@ def _routing_brains() -> list[str]:
         brains = config.get("routing_brains")
         if isinstance(brains, list) and brains:
             return [b for b in brains if isinstance(b, str) and b.strip()]
-    return [_JEV_AGENT_MODEL]
+    return [_ORCHESTRATOR_AGENT_MODEL]
 
 
 def _build_agent_models() -> dict[str, dict[str, str]]:
     """Per-agent model overrides, read from tools/config/model-roles.json.
 
     Every agent the file maps gets an override. When the OpenRouter catalog does
-    not declare the Jev router, `jev` falls to the second declared routing brain,
+    not declare the Jev router, `solocode-orchestrator` falls to the second declared routing brain,
     so the orchestrator keeps a reasoning model. A missing or unreadable file
-    leaves `jev` on the Jev model itself.
+    leaves `solocode-orchestrator` on the Jev model itself.
     """
     models: dict[str, dict[str, str]] = {}
     with contextlib.suppress(OSError, json.JSONDecodeError):
@@ -811,13 +811,15 @@ def _build_agent_models() -> dict[str, dict[str, str]]:
             model = roles.get(role)
             if isinstance(model, str):
                 models[agent] = {"model": model}
-    if "jev" not in models:
-        models["jev"] = {"model": _JEV_AGENT_MODEL}
+    if "solocode-orchestrator" not in models:
+        models["solocode-orchestrator"] = {"model": _ORCHESTRATOR_AGENT_MODEL}
     # Invariant: the orchestrator never silently runs on the executor model, so a
     # missing Jev router falls to the declared reasoning brain, not to the executor.
     if "jev-router" not in _OPENROUTER_MODELS:
         brains = _routing_brains()
-        models["jev"] = {"model": brains[1] if len(brains) > 1 else _JEV_AGENT_MODEL}
+        models["solocode-orchestrator"] = {
+            "model": brains[1] if len(brains) > 1 else _ORCHESTRATOR_AGENT_MODEL
+        }
     return models
 
 
@@ -1215,7 +1217,7 @@ def generate_opencode_json(
         "$schema": "https://opencode.ai/config.json",
         "model": _DEFAULT_MODEL,
         "small_model": _SMALL_MODEL,
-        "default_agent": "jev",
+        "default_agent": "solocode-orchestrator",
         "agents": _build_agent_models(),
         "permission": permission,
     }

@@ -2,7 +2,7 @@
 """
 opencode_delegate.py — CLI-based delegation wrapper for OpenCode workers.
 
-ORCHESTRATION MODEL: Jev, running in OpenCode, is ALWAYS the orchestrator.
+ORCHESTRATION MODEL: The orchestrator agent, running in OpenCode, is ALWAYS the orchestrator.
 This script uses `opencode run` to send a single stateless prompt to OpenCode
 and parses the JSON events stream. The orchestrator must read and verify every result.
 
@@ -60,8 +60,8 @@ SPILL_CHARS = 20_000
 PREVIEW_CHARS = 2_000
 # The orchestrator runs WITHOUT --auto: that flag auto-approves past its
 # `edit: deny`, so the deny only holds once the flag is gone (measured 2026-10-16:
-# a write landed with the jev agent selected and --auto in play).
-ORCHESTRATOR_AGENT = "jev"
+# a write landed with the orchestrator agent selected and --auto in play).
+ORCHESTRATOR_AGENT = "solocode-orchestrator"
 # The free tier must be a model that answers: `opencode/mimo-v2.6-flash-free`
 # returned "Error: Unknown error" on 2026-10-24 while `opencode-go/beam-free`
 # answered the same prompt in 9.1s at cost 0.0000 in the usage log, and the
@@ -218,8 +218,9 @@ def resolve_model(*, free: bool, model: str | None, agent: str | None) -> str | 
     """The `--model` value to hand the CLI, or None to let OpenCode choose.
 
     OpenCode v2.0.32 ignores an agent's own `model` when `run --agent` gets no `--model`
-    (measured 2026-10-20: `--agent jev` ran opencode-go/deepseek-v4-pro while `debug agents`
-    resolved openrouter/jev-router), so the orchestrator's model is passed explicitly. Other
+    (measured 2026-10-20: `--agent jev`, later renamed to `solocode-orchestrator`, ran
+    opencode-go/deepseek-v4-pro while `debug agents` resolved openrouter/jev-router), so
+    the orchestrator's model is passed explicitly. Other
     agents keep None: their callers already name a model, and an agent with no model of its
     own should still fall back to its own config rather than to the project default.
     """
@@ -791,7 +792,7 @@ def _inner_argv(
         argv.append("--auto")
     if model:  # the orchestrator's model is passed explicitly; v2.0.32 ignores an agent's own model
         argv += ["--model", model]
-    if agent:  # e.g. the `jev` orchestrator agent
+    if agent:  # e.g. the `orchestrator` agent
         argv += ["--agent", agent]
     if session:  # continue (or create) a session, for a conversation
         argv += ["--session", session]
@@ -1212,7 +1213,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--model",
         default=None,
-        help=f"Model in provider/model format (default: {DEFAULT_MODEL}; the jev agent's "
+        help=f"Model in provider/model format (default: {DEFAULT_MODEL}; the orchestrator agent's "
         "own model is passed explicitly, other agents resolve it from their config)",
     )
     parser.add_argument(
@@ -1261,7 +1262,9 @@ def main(argv: list[str] | None = None) -> int:
         help=f"Use free model ({FREE_MODEL})",
     )
     parser.add_argument(
-        "--agent", default=None, help="OpenCode agent to run (e.g. 'jev')"
+        "--agent",
+        default=None,
+        help="OpenCode agent to run (e.g. 'solocode-orchestrator')",
     )
     parser.add_argument(
         "--session", default=None, help="Session id to continue or create"
@@ -1277,7 +1280,7 @@ def main(argv: list[str] | None = None) -> int:
         default="auto",
         help="Where the worker runs: auto (default) picks wsl when the fence is "
         "usable, else win; win runs the Windows CLI; wsl forces the WSL namespace "
-        "fence. The jev orchestrator cannot run under wsl: its auth lives in the "
+        "fence. The orchestrator agent cannot run under wsl: its auth lives in the "
         "Windows OpenCode service.",
     )
     parser.add_argument(

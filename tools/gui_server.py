@@ -60,8 +60,8 @@ _WORKER_SPEC: list[tuple[str, str, str, str, str | None]] = [
     ("kilo", "Kilo CLI", "kilo", "tools/kilo_cli_delegate.py", None),
     ("dsh", "DeepSeek Harness (dsh)", "dsh", "tools/dsh_delegate.py", None),
     (
-        "jev",
-        "JEV orchestrator (OpenCode agent)",
+        "solocode-orchestrator",
+        "Orchestrator (OpenCode agent)",
         "opencode",
         "tools/opencode_delegate.py",
         None,
@@ -146,8 +146,14 @@ def build_argv(
         if flags.get("free"):
             argv.append("--free")
         return argv
-    if worker == "jev":
-        argv = [py, "tools/opencode_delegate.py", brief, "--agent", "jev"]
+    if worker == "solocode-orchestrator":
+        argv = [
+            py,
+            "tools/opencode_delegate.py",
+            brief,
+            "--agent",
+            "solocode-orchestrator",
+        ]
         if model:
             argv += ["--model", model]
         if flags.get("session"):
