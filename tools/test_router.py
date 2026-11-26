@@ -417,7 +417,7 @@ def test_jev_route_unsafe_noul_keeps_rule_worker(monkeypatch):
                     "choice": "subagent:explore",
                     "confidence": 0.91,
                 },
-                "safe": {"type": "noul", "noul": 0.75},
+                "safe": {"type": "noul", "noul": 0.01},
             }
         }
 
@@ -428,7 +428,7 @@ def test_jev_route_unsafe_noul_keeps_rule_worker(monkeypatch):
 
     assert decision["worker"] == expected["worker"]
     assert decision["brain"] == "rules"
-    assert "0.5" in decision["jev_note"] or "noul" in decision["jev_note"]
+    assert "0.03" in decision["jev_note"] and "noul" in decision["jev_note"]
 
 
 def test_jev_route_undeclared_worker_keeps_rule_worker(monkeypatch):
@@ -779,7 +779,7 @@ def test_decide_route_low_confidence_stops_with_none(monkeypatch):
     assert "confidence" in decision["jev_note"]
 
 
-def test_decide_route_safety_noul_gate_is_085(monkeypatch):
+def test_decide_route_blocks_low_safety_noul_and_accepts_high_noul(monkeypatch):
     monkeypatch.setattr(
         router,
         "_gemini_decide",
@@ -789,13 +789,16 @@ def test_decide_route_safety_noul_gate_is_085(monkeypatch):
                 "choice": "cli:antigravity",
                 "confidence": 0.90,
             },
-            "safe": {"type": "noul", "noul": 0.57},
+            "safe": {"type": "noul", "noul": 0.01},
         },
     )
-    accepted = router.decide_route(CASES["survey"])
-    assert accepted["worker"] == "cli:antigravity"
-    assert accepted["brain"] == "gemini"
-    assert "jev" not in accepted
+    blocked = router.decide_route(CASES["simple_edit"])
+    assert blocked["worker"] == "none"
+    assert blocked["brain"] == "none"
+    assert "jev" not in blocked
+    assert "unsafe" in blocked["jev_note"]
+    assert "0.01" in blocked["jev_note"]
+    assert "0.03" in blocked["jev_note"]
 
     monkeypatch.setattr(
         router,
@@ -806,14 +809,53 @@ def test_decide_route_safety_noul_gate_is_085(monkeypatch):
                 "choice": "cli:antigravity",
                 "confidence": 0.90,
             },
-            "safe": {"type": "noul", "noul": 0.86},
+            "safe": {"type": "noul", "noul": 0.95},
         },
     )
-    blocked = router.decide_route(CASES["simple_edit"])
-    assert blocked["worker"] == "none"
-    assert blocked["brain"] == "none"
-    assert "jev" not in blocked
-    assert "0.85" in blocked["jev_note"]
+    accepted = router.decide_route(CASES["simple_edit"])
+    assert accepted["worker"] == "cli:antigravity"
+    assert accepted["brain"] == "gemini"
+    assert "jev" not in accepted
+    assert accepted["jev_note"] == "accepted"
+
+
+def test_high_safety_noul_does_not_block(monkeypatch):
+    # This shipped inverted once (blocking high noul instead of low); the test
+    # exists to stop it shipping again.
+    monkeypatch.setattr(
+        router,
+        "_gemini_decide",
+        lambda *_args, **_kwargs: {
+            "worker": {
+                "type": "choice",
+                "choice": "cli:antigravity",
+                "confidence": 0.95,
+            },
+            "safe": {"type": "noul", "noul": 0.95},
+        },
+    )
+    decision = router.decide_route(CASES["survey"])
+    assert decision["worker"] == "cli:antigravity"
+    assert decision["brain"] == "gemini"
+    assert decision["jev_note"] == "accepted"
+
+    def fake_jev(*_args, **_kwargs):
+        return {
+            "answers": {
+                "worker": {
+                    "type": "choice",
+                    "choice": "cli:antigravity",
+                    "confidence": 0.95,
+                },
+                "safe": {"type": "noul", "noul": 0.95},
+            }
+        }
+
+    _stub_jev(monkeypatch, fake_jev)
+    jev_decision = router.jev_route(CASES["survey"])
+    assert jev_decision["worker"] == "cli:antigravity"
+    assert jev_decision["brain"] == "jev"
+    assert jev_decision["jev_note"] == "accepted"
 
 
 def test_decide_route_destructive_calls_neither_backend(monkeypatch):

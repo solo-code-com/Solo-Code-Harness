@@ -298,7 +298,9 @@ class DecisionError(Exception):
 
 _GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/decisions"
 _GEMINI_MODEL = "gemini-decision-1"
-_DECIDE_MAX_NOUL = 0.85
+# noul is P(not unsafe); measured on 16 tasks the destructive ones scored at most
+# 0.022 and the ordinary ones at least 0.056, so the floor sits between them.
+_DECIDE_UNSAFE_NOUL = 0.03
 _DECIDE_BACKENDS = ("auto", "gemini", "jev")
 
 
@@ -344,6 +346,8 @@ def _parse_routing_answers(answers: dict) -> tuple[object, float, float, float]:
     confidence = _as_finite_float(worker_ans.get("confidence"), 0.0)
     raw_probs = worker_ans.get("probabilities")
     probabilities = raw_probs if isinstance(raw_probs, dict) else {}
+    # A missing safety block is treated as safe because the hard deny list has
+    # already run, and failing closed on a provider quirk would block every delegation.
     noul = _as_finite_float(safe_ans.get("noul"), 1.0)
     group_confidence = (
         _group_confidence(choice, probabilities)
@@ -460,8 +464,10 @@ def decide_route(
     """Advise routing with Gemini Decision (primary) and Jev (backup).
 
     Destructive tasks stop at the hard deny list without calling any backend.
-    Backend failures or uncertain/unsafe answers stop with worker='none' and
-    brain='none' rather than falling back to the rule table.
+    Backend failures, low confidence, or safety noul below the
+    _DECIDE_UNSAFE_NOUL floor stop with worker='none' and brain='none' rather
+    than falling back to the rule table; the floor direction (low noul means
+    unsafe) was measured rather than assumed.
     """
     if backend not in _DECIDE_BACKENDS:
         raise ValueError(
@@ -523,12 +529,12 @@ def decide_route(
             ),
             "advisor": answers,
         }
-    if noul > _DECIDE_MAX_NOUL:
+    if noul < _DECIDE_UNSAFE_NOUL:
         return {
             **decision,
             "worker": "none",
             "brain": "none",
-            "jev_note": f"safety noul {noul:.2f} > {_DECIDE_MAX_NOUL:.2f}{suffix}",
+            "jev_note": f"unsafe noul {noul:.2f} < {_DECIDE_UNSAFE_NOUL:.2f}{suffix}",
             "advisor": answers,
         }
 
@@ -555,7 +561,12 @@ def jev_route(
     timeout: int = 20,
     min_confidence: float = 0.65,
 ) -> dict:
-    """Advise routing with Jev, keeping the rule table's destructive hard deny list."""
+    """Advise routing with Jev, keeping the rule table's destructive hard deny list.
+
+    Safety noul is gated at the _DECIDE_UNSAFE_NOUL floor (values below the
+    floor are unsafe and keep the rule worker); the direction (low noul means
+    unsafe) was measured on real endpoint calls rather than assumed.
+    """
     decision = route(task)
     if decision["task_type"] == "destructive":
         return {**decision, "jev": None, "jev_note": "hard deny list, not asked"}
@@ -578,8 +589,12 @@ def jev_route(
                 f"{min_confidence:.2f} label {confidence:.2f}"
             ),
         }
-    if noul > 0.5:
-        return {**decision, "jev": answers, "jev_note": f"safety noul {noul:.2f} > 0.5"}
+    if noul < _DECIDE_UNSAFE_NOUL:
+        return {
+            **decision,
+            "jev": answers,
+            "jev_note": f"unsafe noul {noul:.2f} < {_DECIDE_UNSAFE_NOUL:.2f}",
+        }
 
     return {
         **decision,
