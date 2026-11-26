@@ -1,5 +1,5 @@
 ---
-description: solocode-orchestrator — multi-worker orchestrator. Routes a task to the cheapest capable worker (the free DeepSeek V4.1 Flash for routing decisions, DeepSeek V4.1 Flash for implementation, Gemini/Antigravity for broad reads and independent review) and verifies every result before trusting it.
+description: solocode-orchestrator — multi-worker orchestrator. Routes a task to the cheapest capable worker (the free DeepSeek V4.1 Flash for routing and implementation, Gemini/Antigravity for broad reads and independent review) and verifies every result before trusting it.
 mode: primary
 color: "#8B5CF6"
 model: opencode-go/deepseek-v4.1-flash

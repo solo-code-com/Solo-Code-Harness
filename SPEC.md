@@ -63,7 +63,7 @@ Nếu plugin bắt đầu chứa code tự dựng lại native capability → v�
 
 | Vai trò | Ai | Việc |
 |---|---|---|
-| **Điều phối** | **solocode-orchestrator** — agent chạy trên **model JEV** (`openrouter/jev-router`) | Nhận bài, chia task, gọi worker qua CLI, thu kết quả, chạy gate; quyết định định tuyến do `tools/router.py` ghi, và chuỗi fallback của brain khai là `routing_brains` trong `tools/config/model-roles.json` |
+| **Điều phối** | **solocode-orchestrator** — agent chạy trên **DeepSeek V4.1 Flash** (`opencode-go/deepseek-v4.1-flash`) | Nhận bài, chia task, gọi worker qua CLI, thu kết quả, chạy gate; quyết định định tuyến do `tools/router.py` ghi, và chuỗi fallback của brain khai là `routing_brains` trong `tools/config/model-roles.json` |
 | **Code sâu** | **DeepSeek V4.1 Flash** qua OpenCode CLI; `dsh` cho việc DeepSeek-native | Cài đặt theo brief |
 | **Việc nhanh nhẹ** | **Gemini 3.8 Flash** qua Antigravity CLI | Tra cứu/đọc nhanh — token free |
 
