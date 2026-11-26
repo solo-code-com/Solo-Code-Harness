@@ -44,6 +44,7 @@ except ImportError:  # pragma: no cover - script-dir import path
 # the answer must be trusted. The 3.8-flash ids are retired and are not a
 # fallback: a missing Hydrogen entitlement fails loudly instead.
 DEFAULT_MODEL = "gemini-4-hydrogen-medium"
+_CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
 DEFAULT_TIMEOUT_SECONDS = 600
 DIRECTORY_LOCK_ENGINE = "gemini"
 WORKTREE_ERROR_EXIT_CODE = 7
@@ -368,6 +369,7 @@ def run_agy_cli(
             text=True,
             encoding="utf-8",
             errors="replace",
+            creationflags=_CREATE_NO_WINDOW,
         )
     except OSError as exc:  # no pid exists yet, so there is no session to record
         return {"text": "", "error": str(exc)}, 1
@@ -499,6 +501,7 @@ def _git_porcelain(root: Path) -> str:
             text=True,
             timeout=30,
             check=False,
+            creationflags=_CREATE_NO_WINDOW,
         )
     except (OSError, subprocess.SubprocessError, TypeError):
         return ""
