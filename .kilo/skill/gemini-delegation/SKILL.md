@@ -153,11 +153,13 @@ the run expensive, so in this repository the orchestrator applies a root-file ed
 
 Gemini 4 Hydrogen exposes four reasoning levels as distinct model ids, all drawn from the
 same account quota. An operator directive of 2026-11-25 sets the family and the floor:
-`gemini-4-hydrogen-medium` for the default case, `gemini-4-hydrogen-high` when the answer
-gates a decision. `xhigh` exists and is not used here.
+`gemini-4-hydrogen-low` is allowed for read-only lookups only, `gemini-4-hydrogen-medium` is the
+default, and `gemini-4-hydrogen-high` is for answers that gate a decision. `xhigh` exists and
+is not used here.
 
 | Tier | Model id | Use for |
 |---|---|---|
+| Low (read-only) | `gemini-4-hydrogen-low` | greps, single-fact extraction, "what is X"; no writes, no multi-step synthesis |
 | Medium (floor) | `gemini-4-hydrogen-medium` | every default task: mechanical edits, multi-file summarize/compare, scoped refactor |
 | High (accuracy) | `gemini-4-hydrogen-high` | independent review, subtle bug hunt, any verdict that gates a merge |
 
@@ -167,6 +169,9 @@ clock, not answer quality, and a timeout is a budget failure. Local measurements
 showed the rest: three low-tier runs reported `thinking_tokens` 0, and a medium run reported
 6039. The budget that goes with a higher tier is 600s for generation-only runs and 900s when
 the run executes commands.
+A 2026-11-26 read-only check on this repo: low returned 4/4 facts in 26.7 s and 4/4 grep
+hits in 23.5 s, so low is trustworthy for lookups; the floor guards edits and synthesis, not
+comprehension.
 
 The retired `gemini-3.8-flash-*` ids are no longer expected or used. If Hydrogen is unavailable
 to the signed-in account, the run fails and says so; there is no silent downgrade to a model

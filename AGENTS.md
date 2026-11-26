@@ -315,13 +315,16 @@ explicit fence. Four facts the routing table does not carry:
 - A write into a control path (`tools/`, `.kilo/hooks/`, `.github/scripts/`, `AGENTS.md`)
   is refused with exit 3 unless `--allow-control-paths` is passed. Pass it only when the
   task is maintaining this harness.
-- Tier: `gemini-4-hydrogen-medium` is the floor and `-high` is for accuracy, by operator
+- Tier: `gemini-4-hydrogen-medium` is the default and `-high` is for accuracy, by operator
   directives of 2026-11-24 and 2026-11-25. The retired `gemini-3.8-flash-*` ids are gone from
   the expected catalogue: if Hydrogen is unavailable the run fails and says so, rather than
-  silently downgrading to a model that is about to disappear. Low is not a default: it finished
-  a 100-line module in 99s while medium hit that harness's 200s and 280s ceilings, which
-  measured wall clock, not answer quality. A timeout is a budget failure, so the fix is a larger
-  budget: 600s generation-only, 900s with commands.
+  silently downgrading to a model that is about to disappear. `-low` is allowed for read-only
+  lookups only (greps, single-fact extraction, "what is X"): it measured 4/4 facts in 26.7 s and
+  4/4 grep hits in 23.5 s on 2026-11-26. Do not use low for edits, command loops or multi-step
+  synthesis, and never behind `--auto-approve`; medium stays the floor there, because a 100-line
+  module finished in 99 s at low while medium hit 200 s/280 s ceilings - a wall-clock
+  difference, not quality. A timeout is a budget failure, so the fix is a larger budget: 600s
+  generation-only, 900s with commands.
 
 GUI handoff, for rendered UI only: write the plan to
 `.gemini/antigravity/handoff/inbox/<slug>-plan.md`. Full guide:
