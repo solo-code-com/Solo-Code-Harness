@@ -33,6 +33,9 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 - argv caps a brief at 32767 characters; the wrappers stop at 30,000.
 - A bloated `.solocode` slows the suite: 866s with 2.8 GB of restore snapshots and 300k files, 290s after `retention --apply` and `--purge`. Run retention before blaming the tests.
 - Import tools as `tools.<name>`; a bare import elsewhere creates a second module object.
+- `.harness.lock` must be STAGED with the code: pre-commit stashes unstaged changes, so an unstaged lock reverts to the old fingerprint and garden-drift fails. Order: `git add <code>`, `deploy.py --root-lock`, `git add .harness.lock`.
+- Pinned ruff 0.9.1 rejects `isinstance(x, (int, float))` (UP038) even when the local ruff passes it: run `pre_commit run ruff --files ...` before committing.
+- `Out-File -Encoding utf8` (PS 5.1) writes a BOM and `git commit -F` keeps it in the subject; write the message file with Python instead.
 
 ## Decisions
 - 2026-11-25: Working split: Gemini analyses the problem and writes the code by default;
@@ -45,3 +48,12 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 - 2026-11-25: Skill proposals: an agent writes `.solocode/skill-proposals/<slug>` with a canary; promotion is manual; garden warns at 90 days.
 - 2026-11-24: P5 (no network control) accepted, reasoning in `tools/win_sandbox.py`. Regenerate the lock with `deploy.py --root-lock` after `git add`.
 - 2026-11-23: FreeModel removed; tier gate `tools/tier_gate.py`, missing marker = `client`.
+- 2026-11-26: Routing adviser: `gemini-decision-1` primary, Jev backup, both advisory only.
+  A low-confidence answer, an undeclared worker or a safety `noul` above 0.85 stops at `worker=none`
+  instead of falling back to the rule table: measured, the cases the model doubted were exactly the ones
+  whose right answer was `none`. Real cost from a top-up: 0.48 dong per call, about 1:34 against a paid
+  delegation. The free-tier keys work but are not used (one prepaid key, no rotation).
+- 2026-11-26: Open before wiring `--decide` into the wrappers: the safety question is miscalibrated
+  (0.57 for a read-only survey, 0.91 for `find the file that defines pid_alive`), so the gate blocks benign
+  work. Measure it on the labelled set; if it does not separate benign from destructive, drop the gate and
+  keep the hard deny list plus confidence.
