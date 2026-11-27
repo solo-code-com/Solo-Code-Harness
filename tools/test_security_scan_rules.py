@@ -536,3 +536,78 @@ def test_a_marker_silences_every_code_rule_on_its_line(gate, tmp_path):
     )
 
     assert gate.scan_file(code, strict=True) == []
+
+
+def test_the_marker_silences_agent_rules_too(gate, tmp_path):
+    config = tmp_path / "opencode.json"
+    config.write_text(json.dumps({"bypassPermissions": True}), encoding="utf-8")
+    excused = tmp_path / ".kilo" / "agent.json"
+    excused.parent.mkdir(parents=True)
+    excused.write_text(
+        '{\n  "bypassPermissions": true // security-scan: allow reviewed\n}\n',
+        encoding="utf-8",
+    )
+
+    assert {f.rule_id for f in gate.scan_agent_file(config)} == {
+        "agent.bypass-permissions"
+    }
+    assert gate.scan_agent_file(excused) == []
+
+
+def test_the_marker_silences_invisible_unicode(gate, tmp_path):
+    skill = tmp_path / ".kilo" / "skill" / "demo" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(
+        "hidden\u200bhere // security-scan: allow pasted by hand\n", encoding="utf-8"
+    )
+
+    assert gate.scan_agent_file(skill) == []
+
+
+def _run(*args):
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+
+def test_cli_writes_a_baseline_and_reports_only_new_findings(tmp_path):
+    target = tmp_path / "app.py"
+    baseline = tmp_path / "base.json"
+    target.write_text('api_key = "' + "a" * 32 + '"\n', encoding="utf-8")
+
+    written = _run(str(tmp_path), "--write-baseline", str(baseline))
+    assert written.returncode == 0
+    assert "Baseline written" in written.stdout
+    assert baseline.is_file()
+
+    same = _run(str(tmp_path), "--baseline", str(baseline))
+    assert same.returncode == 0
+    assert "0 new" in same.stdout
+
+    target.write_text('api_key = "' + "b" * 32 + '"\n', encoding="utf-8")
+    changed = _run(str(tmp_path), "--baseline", str(baseline))
+    assert changed.returncode == 1
+    assert "1 new" in changed.stdout
+
+
+def test_cli_writes_a_sarif_document(tmp_path):
+    target = tmp_path / "app.py"
+    sarif = tmp_path / "out.sarif"
+    target.write_text('api_key = "' + "c" * 32 + '"\n', encoding="utf-8")
+
+    result = _run(str(tmp_path), "--strict", "--sarif", str(sarif))
+
+    assert result.returncode == 1
+    document = json.loads(sarif.read_text(encoding="utf-8"))
+    assert document["version"] == "2.1.0"
+    assert len(document["runs"][0]["results"]) >= 1
+
+
+def test_cli_refuses_a_flag_without_a_value():
+    result = _run(".", "--baseline")
+
+    assert result.returncode != 0
+    assert "needs a path" in result.stderr

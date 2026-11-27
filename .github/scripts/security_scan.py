@@ -331,11 +331,12 @@ def _mcp_servers(text: str) -> dict | None:
     return None
 
 
-def _server_line(text: str, name: str) -> tuple[int, str]:
+def _server_line(text: str, name: str) -> int:
+    """The line that names a server in an MCP manifest, or 1 when it cannot be found."""
     for index, line in enumerate(text.splitlines(), 1):
         if f'"{name}"' in line:
-            return index, line
-    return 1, ""
+            return index
+    return 1
 
 
 def _mcp_findings(file_path: Path, text: str, servers: dict) -> list["Finding"]:
@@ -345,7 +346,7 @@ def _mcp_findings(file_path: Path, text: str, servers: dict) -> list["Finding"]:
     for name, server in servers.items():
         if not isinstance(server, dict):
             continue
-        line_no, _source = _server_line(text, str(name))
+        line_no = _server_line(text, str(name))
 
         command = server.get("command")
         args = server.get("args")
