@@ -262,6 +262,67 @@ def scope_violations(before, after, allowed: Path) -> list[str] | None:
     return module.paths_outside_directory(changed, prefix)
 
 
+LOCK_EXIT_CODE = 5
+
+
+def _lock_key(directory: Path) -> str:
+    """The directory as the lock table keys it: repo-relative, "." at the root."""
+    try:
+        return directory.relative_to(ROOT).as_posix() or "."
+    except ValueError:
+        return str(directory)
+
+
+def acquire_lock(
+    directory: Path, platform: str, model: str, session_id: str = ""
+) -> bool:
+    """Take the shared-state directory lock so two writers cannot share a tree.
+
+    A missing module means this checkout has no lock service, and the run may
+    proceed. A module that exists but fails is different: the database may be
+    corrupt or contended, so the run is refused rather than allowed to write
+    unserialised. Without a session_id, two runs of the SAME arm match each other
+    as the same holder and the second silently overwrites the first lock.
+    """
+    try:
+        module = _load_sibling("shared_state")
+    except ImportError:
+        return True
+    try:
+        with module.SharedState() as state:
+            return bool(
+                state.acquire_directory_lock(
+                    _lock_key(directory),
+                    engine=f"free-{platform}",
+                    model=model,
+                    session_id=session_id,
+                    reason="FreeModel headless write delegation",
+                )
+            )
+    except Exception as exc:  # noqa: BLE001 - a broken lock service must deny
+        _stderr(
+            "free_delegate: lock service failed "
+            f"({type(exc).__name__}); refusing to write without a lock"
+        )
+        return False
+
+
+def release_lock(directory: Path, platform: str, session_id: str = "") -> None:
+    """Release the directory lock; a failure here must never mask the run result."""
+    try:
+        module = _load_sibling("shared_state")
+        with module.SharedState() as state:
+            state.release_directory_lock(
+                _lock_key(directory), engine=f"free-{platform}", session_id=session_id
+            )
+    except Exception as exc:  # noqa: BLE001 - must never mask the run result
+        # A stuck lock is worth reporting; raising here would replace the worker's
+        # exit code with a lock error, which is the worse failure.
+        _stderr(
+            f"free_delegate: could not release the directory lock ({type(exc).__name__})"
+        )
+
+
 def capture(directory: Path) -> str | None:
     """Copy the directory into the restore store so --restore-on-failure can undo."""
     try:
@@ -407,127 +468,155 @@ def delegate(args: argparse.Namespace) -> int:
             f"free_delegate: snapshot {run_id} (restore with tools/restore.py apply {run_id} --yes)"
         )
 
-    attempts: list[dict] = []
-    text = ""
-    rc = PROVIDER_EXIT_CODE
-    for model in model_chain(args.model, args.fallback):
-        for attempt in range(1, args.retries + 2):
-            last_msg = directory / ".solocode-free-last-message.txt"
-            if args.platform == "claude":
-                argv = build_claude_argv(prefix, prompt, model, args.effort, write)
-            else:
-                with contextlib.suppress(OSError):
-                    last_msg.unlink()
-                argv = build_codex_argv(
-                    prefix, prompt, model, args.effort, directory, write, last_msg
+    # A writing run holds the shared-state directory lock until it finishes, so two
+    # arms cannot edit one tree at once. The lock is released in the finally.
+    # The token is the lock's session_id: without it, two runs of the same arm match
+    # each other as the same holder and the second overwrites the first lock.
+    run_token = f"free-{args.platform}-{os.getpid()}-{os.urandom(3).hex()}"
+    locked = False
+    if write:
+        if not acquire_lock(directory, args.platform, args.model, run_token):
+            _stderr(
+                f"free_delegate: {args.directory} is locked by another writer "
+                f"(exit {LOCK_EXIT_CODE}); run again when it is free"
+            )
+            return LOCK_EXIT_CODE
+        locked = True
+    try:
+        attempts: list[dict] = []
+        text = ""
+        rc = PROVIDER_EXIT_CODE
+        started = time.time()
+        for model in model_chain(args.model, args.fallback):
+            for attempt in range(1, args.retries + 2):
+                last_msg = directory / ".solocode-free-last-message.txt"
+                if args.platform == "claude":
+                    argv = build_claude_argv(prefix, prompt, model, args.effort, write)
+                else:
+                    with contextlib.suppress(OSError):
+                        last_msg.unlink()
+                    argv = build_codex_argv(
+                        prefix, prompt, model, args.effort, directory, write, last_msg
+                    )
+                run_cwd = ROOT if args.platform == "claude" else directory
+                code, out, err = run_argv(argv, run_cwd, args.timeout, child_env)
+                if args.platform == "claude":
+                    parsed = parse_claude_output(out)
+                else:
+                    parsed = ""
+                    with contextlib.suppress(OSError):
+                        parsed = strip_zw(last_msg.read_text(encoding="utf-8")).strip()
+                    if not parsed:
+                        parsed = parse_codex_output(out)
+                    with contextlib.suppress(OSError):
+                        last_msg.unlink()
+                ok = code == 0 and bool(parsed.strip())
+                attempts.append(
+                    {
+                        "model": model,
+                        "attempt": attempt,
+                        "exit": code,
+                        "chars": len(parsed),
+                        "ok": ok,
+                    }
                 )
-            run_cwd = ROOT if args.platform == "claude" else directory
-            code, out, err = run_argv(argv, run_cwd, args.timeout, child_env)
-            if args.platform == "claude":
-                parsed = parse_claude_output(out)
-            else:
-                parsed = ""
-                with contextlib.suppress(OSError):
-                    parsed = strip_zw(last_msg.read_text(encoding="utf-8")).strip()
-                if not parsed:
-                    parsed = parse_codex_output(out)
-                with contextlib.suppress(OSError):
-                    last_msg.unlink()
-            ok = code == 0 and bool(parsed.strip())
-            attempts.append(
-                {
-                    "model": model,
-                    "attempt": attempt,
-                    "exit": code,
-                    "chars": len(parsed),
-                    "ok": ok,
-                }
-            )
-            if ok:
-                text, rc = parsed, 0
+                if ok:
+                    text, rc = parsed, 0
+                    break
+                failure = classify_failure(out + "\n" + err)
+                _stderr(
+                    f"free_delegate: {model} attempt {attempt} failed ({failure}, exit {code})"
+                )
+                if failure in ("denied", "error") and attempt >= 2:
+                    break
+                time.sleep(min(2.0 * attempt, 6.0))
+            if rc == 0:
                 break
-            failure = classify_failure(out + "\n" + err)
-            _stderr(
-                f"free_delegate: {model} attempt {attempt} failed ({failure}, exit {code})"
-            )
-            if failure in ("denied", "error") and attempt >= 2:
-                break
-            time.sleep(min(2.0 * attempt, 6.0))
-        if rc == 0:
-            break
 
-    after = snapshot_root() if (write or args.enforce_scope) else None
-    outside = scope_violations(before, after, directory)
-    scope_note = ""
-    if args.enforce_scope and outside is None:
-        scope_note = "snapshot unavailable (fails closed)"
-    elif outside:
-        scope_note = (
-            f"{len(outside)} path(s) changed outside {args.directory}: "
-            + ", ".join(outside[:10])
+        after = snapshot_root() if (write or args.enforce_scope) else None
+        outside = scope_violations(before, after, directory)
+        scope_note = ""
+        if args.enforce_scope and outside is None:
+            scope_note = "snapshot unavailable (fails closed)"
+        elif outside:
+            scope_note = (
+                f"{len(outside)} path(s) changed outside {args.directory}: "
+                + ", ".join(outside[:10])
+            )
+
+        scope_failed = args.enforce_scope and outside is None
+        scope_violated = bool(outside) and args.enforce_scope
+        final_rc = SCOPE_EXIT_CODE if (scope_failed or scope_violated) else rc
+        elapsed = round(time.time() - started, 1)
+        log_run(
+            {
+                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "run_id": run_token,
+                "arm": args.platform,
+                "platform": args.platform,
+                "model": args.model,
+                "effort": args.effort,
+                "directory": str(directory),
+                "write": write,
+                "exit": final_rc,
+                "chars": len(text),
+                "prompt_chars": len(prompt),
+                "elapsed_s": elapsed,
+                "error": "" if final_rc == 0 else scope_note or f"exit {final_rc}",
+                "scope": scope_note,
+                "attempts": attempts,
+            }
         )
 
-    log_run(
-        {
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "platform": args.platform,
-            "model": args.model,
-            "effort": args.effort,
-            "directory": str(directory),
-            "write": write,
-            "exit": rc,
-            "chars": len(text),
-            "scope": scope_note,
-            "attempts": attempts,
-        }
-    )
+        if scope_failed:
+            _stderr(f"scope: {scope_note}")
+            return SCOPE_EXIT_CODE
+        if scope_violated:
+            _stderr(f"scope: {scope_note}")
+            if run_id and args.restore_on_failure:
+                # restore.capture covers --directory only, so an out-of-fence write is
+                # by definition outside what it can put back. Say so instead of
+                # printing a bare "restored" that does not cover the violation.
+                _stderr(
+                    f"restored inside {args.directory}: {restore(directory, run_id)}; "
+                    "the out-of-fence paths above are NOT covered - revert them by hand "
+                    f"({', '.join(outside[:5])})"
+                )
+            return SCOPE_EXIT_CODE
+        if outside:
+            _stderr(f"scope: {scope_note}")
+        if rc == 0 and write and before is not None and after is not None:
+            changed = _load_sibling("workspace_snapshot").changed_workspace_paths(
+                before, after
+            )
+            if not changed:
+                _stderr(
+                    "free_delegate: warning - the run reported success but changed no file "
+                    f"under {args.directory}"
+                )
+        if rc != 0:
+            if run_id and args.restore_on_failure:
+                _stderr(f"restored: {restore(directory, run_id)}")
+            _stderr("free_delegate: provider failed on every model in the chain")
+            return rc
 
-    if args.enforce_scope and outside is None:
-        _stderr(f"scope: {scope_note}")
-        return SCOPE_EXIT_CODE
-    if outside and args.enforce_scope:
-        _stderr(f"scope: {scope_note}")
-        if run_id and args.restore_on_failure:
-            # restore.capture covers --directory only, so an out-of-fence write is
-            # by definition outside what it can put back. Say so instead of
-            # printing a bare "restored" that does not cover the violation.
-            _stderr(
-                f"restored inside {args.directory}: {restore(directory, run_id)}; "
-                "the out-of-fence paths above are NOT covered - revert them by hand "
-                f"({', '.join(outside[:5])})"
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "text": text,
+                        "model": args.model,
+                        "platform": args.platform,
+                        "scope": scope_note,
+                    }
+                )
             )
-        return SCOPE_EXIT_CODE
-    if outside:
-        _stderr(f"scope: {scope_note}")
-    if rc == 0 and write and before is not None and after is not None:
-        changed = _load_sibling("workspace_snapshot").changed_workspace_paths(
-            before, after
-        )
-        if not changed:
-            _stderr(
-                "free_delegate: warning - the run reported success but changed no file "
-                f"under {args.directory}"
-            )
-    if rc != 0:
-        if run_id and args.restore_on_failure:
-            _stderr(f"restored: {restore(directory, run_id)}")
-        _stderr("free_delegate: provider failed on every model in the chain")
-        return rc
-
-    if args.json:
-        print(
-            json.dumps(
-                {
-                    "text": text,
-                    "model": args.model,
-                    "platform": args.platform,
-                    "scope": scope_note,
-                }
-            )
-        )
-    else:
-        print(text)
-    return 0
+        else:
+            print(text)
+        return 0
+    finally:
+        if locked:
+            release_lock(directory, args.platform, run_token)
 
 
 def build_parser() -> argparse.ArgumentParser:

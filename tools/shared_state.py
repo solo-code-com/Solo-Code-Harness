@@ -39,7 +39,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / ".solocode" / "shared-state.db"
 LOCK_TIMEOUT_HOURS = 2
 MAX_SESSION_LOG_ROWS = 1000
-VALID_ENGINES = ("kilo", "opencode", "gemini")
+VALID_ENGINES = ("kilo", "opencode", "gemini", "free-claude", "free-chatgpt")
 
 
 # Windows resolves paths case-insensitively, so two workers that spell the same

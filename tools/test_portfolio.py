@@ -41,6 +41,41 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
     )
 
 
+def test_shared_free_log_indexes_each_entry_once(tmp_path):
+    """Claude and ChatGPT share one log; an entry must not be indexed as both.
+
+    The earlier code iterated the file once per arm, so an unlabelled entry fell
+    back to the source arm and produced two rows for one run.
+    """
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "agent.yaml").write_text("version: 4.0.0\n", encoding="utf-8")
+    (proj / "proj.lock").write_text("", encoding="utf-8")
+    lock = proj / ".harness.lock"
+    lock.write_text(
+        'version = "4.0.0"\ncontent_fingerprint = "sha256:abc"\ngenerated_at = "x"\n',
+        encoding="utf-8",
+    )
+    log = proj / ".solocode" / "free_arm" / "runs.jsonl"
+    log.parent.mkdir(parents=True)
+    log.write_text(
+        json.dumps({"run_id": "a", "arm": "claude", "model": "m"})
+        + "\n"
+        + json.dumps({"run_id": "b", "arm": "chatgpt", "model": "m"})
+        + "\n"
+        + json.dumps({"run_id": "unlabelled", "model": "m"})
+        + "\n",
+        encoding="utf-8",
+    )
+    db = tmp_path / "p.db"
+    portfolio.sync([tmp_path], db_path=db)
+    with closing(sqlite3.connect(db)) as conn:
+        rows = conn.execute("select arm, run_id from runs order by run_id").fetchall()
+        total = conn.execute("select count(*) from runs").fetchone()[0]
+    assert total == 2, rows
+    assert ("claude", "a") in rows and ("chatgpt", "b") in rows
+
+
 def test_sync_reads_a_fake_project(tmp_path: Path) -> None:
     scan_root = tmp_path / "portfolio"
     alpha = scan_root / "alpha"

@@ -184,6 +184,86 @@ def test_enforce_scope_fails_closed_without_snapshot(monkeypatch, tmp_path, caps
     assert "refusing to start" in capsys.readouterr().err
 
 
+def test_lock_key_is_repo_relative(monkeypatch, tmp_path):
+    monkeypatch.setattr(fd, "ROOT", tmp_path)
+    monkeypatch.setattr(fd, "_lock_key", fd._lock_key)
+    sub = tmp_path / "src"
+    sub.mkdir()
+    assert fd._lock_key(sub) == "src"
+    assert fd._lock_key(tmp_path) == "."
+
+
+def _isolated_state(monkeypatch, tmp_path):
+    db = tmp_path / "state.db"
+    monkeypatch.setattr(fd, "ROOT", tmp_path)
+    import shared_state
+
+    monkeypatch.setattr(shared_state, "DB_PATH", db, raising=False)
+    return db
+
+
+def test_acquire_lock_refuses_a_second_writer(tmp_path, monkeypatch):
+    """Two write arms must not hold the same directory."""
+    _isolated_state(monkeypatch, tmp_path)
+    (tmp_path / "work").mkdir()
+
+    assert fd.acquire_lock(tmp_path / "work", "claude", "m", "s1") is True
+    assert fd.acquire_lock(tmp_path / "work", "chatgpt", "m", "s2") is False
+    fd.release_lock(tmp_path / "work", "claude", "s1")
+    assert fd.acquire_lock(tmp_path / "work", "chatgpt", "m", "s2") is True
+
+
+def test_same_arm_second_session_is_refused(tmp_path, monkeypatch):
+    """Without a distinct session_id, one Claude run overwrote another's lock.
+
+    The conflict test is (owner != engine or owner_session != session_id), so two
+    runs of the same arm with the empty default matched each other as the holder.
+    """
+    _isolated_state(monkeypatch, tmp_path)
+    (tmp_path / "work").mkdir()
+
+    assert fd.acquire_lock(tmp_path / "work", "claude", "m", "run-a") is True
+    assert fd.acquire_lock(tmp_path / "work", "claude", "m", "run-b") is False
+
+
+def test_lock_service_failure_denies_the_write(tmp_path, monkeypatch):
+    """A broken lock service must refuse, not approve, a writing run.
+
+    Reverting this to fail-open let a run write unserialised whenever SQLite was
+    locked or the database was corrupt.
+    """
+    import sqlite3
+
+    class Boom:
+        def __init__(self, *_a, **_k):
+            raise sqlite3.OperationalError("database is locked")
+
+    fake = type("M", (), {"SharedState": Boom})
+    monkeypatch.setattr(fd, "_load_sibling", lambda name: fake)
+    assert fd.acquire_lock(tmp_path, "claude", "m", "s1") is False
+
+
+def test_missing_lock_module_allows_the_run(tmp_path, monkeypatch):
+    """No shared-state module means no lock service, which is not a denial."""
+
+    def missing(_name):
+        raise ImportError("no shared_state")
+
+    monkeypatch.setattr(fd, "_load_sibling", missing)
+    assert fd.acquire_lock(tmp_path, "claude", "m", "s1") is True
+
+
+def test_release_uses_the_same_session(tmp_path, monkeypatch):
+    """A release that forgets the session_id leaves the row until it expires."""
+    _isolated_state(monkeypatch, tmp_path)
+    (tmp_path / "work").mkdir()
+    fd.acquire_lock(tmp_path / "work", "claude", "m", "run-a")
+    fd.release_lock(tmp_path / "work", "claude", "wrong-session")
+    assert fd.acquire_lock(tmp_path / "work", "chatgpt", "m", "b") is False
+    fd.release_lock(tmp_path / "work", "claude", "run-a")
+    assert fd.acquire_lock(tmp_path / "work", "chatgpt", "m", "b") is True
+
+
 def test_ignored_fence_is_refused(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(fd, "ROOT", tmp_path)
     ignored = tmp_path / ".solocode" / "fence"

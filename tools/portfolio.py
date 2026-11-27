@@ -16,6 +16,13 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / ".solocode" / "portfolio.db"
 LOCK_NAME = ".harness.lock"
+#: Arms whose log lives under a subdirectory of .solocode: arm -> (subdir, file).
+#: Claude and ChatGPT share one writer (free_delegate), so both map to it.
+USAGE_SUBDIR_FILES = {
+    "claude": ("free_arm", "runs.jsonl"),
+    "chatgpt": ("free_arm", "runs.jsonl"),
+}
+
 USAGE_FILES = {
     "opencode": "opencode-usage.jsonl",
     "kilo": "kilo-usage.jsonl",
@@ -209,6 +216,32 @@ def _open_db(db_path: Path, *, create: bool = True) -> sqlite3.Connection:
     return conn
 
 
+def _usage_sources(proj_dir: Path) -> list[tuple[str | None, str]]:
+    """Every (default arm, relative log path) this project may carry.
+
+    A file is read ONCE. ``default_arm`` is None for a shared log, where the arm
+    comes from the entry itself; otherwise one Claude run would be indexed again as
+    a ChatGPT run. An entry with no label in a shared log is skipped, not guessed.
+    """
+    sources: dict[str, str | None] = {}
+    for arm, filename in USAGE_FILES.items():
+        sources.setdefault(filename, arm)
+    for subdir, filename in USAGE_SUBDIR_FILES.values():
+        sources.setdefault(f"{subdir}/{filename}", None)
+    return [(arm, rel) for rel, arm in sources.items()]
+
+
+def _entry_arm(entry: dict[str, object], default_arm: str | None) -> str:
+    """The arm an entry belongs to: its own label, else the source's default.
+
+    Returns "" for an unlabelled entry in a shared log, which the caller skips.
+    """
+    label = entry.get("arm") or entry.get("platform")
+    if isinstance(label, str) and label:
+        return label
+    return default_arm or ""
+
+
 def sync(
     roots: list[Path],
     db_path: Path = DB_PATH,
@@ -240,11 +273,15 @@ def sync(
                         scanned_at,
                     ),
                 )
-                for arm, filename in USAGE_FILES.items():
+                for default_arm, filename in _usage_sources(proj_dir):
                     usage_path = proj_dir / ".solocode" / filename
                     if not usage_path.is_file():
                         continue
                     for entry in parse_usage(usage_path):
+                        entry_arm = _entry_arm(entry, default_arm)
+                        if not entry_arm:
+                            skipped += 1
+                            continue
                         raw_run_id = entry.get("run_id")
                         if raw_run_id is None or raw_run_id == "":
                             raw_run_id = entry.get("session_id")
@@ -266,7 +303,7 @@ def sync(
                             _UPSERT_RUN_SQL,
                             (
                                 proj_dir.name,
-                                arm,
+                                entry_arm,
                                 run_id,
                                 ts,
                                 _opt_str(entry.get("model")),
