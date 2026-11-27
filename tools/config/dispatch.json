@@ -1,0 +1,89 @@
+{
+  "_comment": "Fleet for tools/dispatch.py. Swap any model/provider/command here, or per project in .solocode/dispatch.json (models/effort/arms overrides), no code change. effort_fmt uses {e}; {effort} in command is the formatted effort or empty.",
+  "preference": {
+    "review": [
+      "gemini",
+      "claude",
+      "chatgpt",
+      "deepseek"
+    ],
+    "discuss": [
+      "claude",
+      "chatgpt",
+      "gemini",
+      "deepseek"
+    ],
+    "code": [
+      "deepseek",
+      "chatgpt",
+      "claude",
+      "gemini"
+    ],
+    "fast": [
+      "deepseek",
+      "claude",
+      "chatgpt",
+      "gemini"
+    ]
+  },
+  "families": {
+    "deepseek": {
+      "kind": "core",
+      "models": {
+        "code": "opencode-go/deepseek-v4.1-flash",
+        "fast": "opencode-go/deepseek-v4.1-flash",
+        "review": "opencode-go/deepseek-v4-pro",
+        "discuss": "opencode-go/deepseek-v4-pro"
+      },
+      "writes_on": [
+        "code"
+      ],
+      "command": "python tools/opencode_delegate.py \"{task}\" --model {model}{effort}",
+      "command_write": "python tools/opencode_delegate.py \"{task}\" --agent solo-code-engineer --model {model}{effort}"
+    },
+    "gemini": {
+      "kind": "core",
+      "models": {
+        "code": "gemini-4-hydrogen-medium",
+        "fast": "gemini-4-hydrogen-medium",
+        "review": "gemini-4-hydrogen-high",
+        "discuss": "gemini-4-hydrogen-high"
+      },
+      "command": "python tools/antigravity_delegate.py \"{task}\" --allow-tools --model {model}{effort}"
+    },
+    "claude": {
+      "kind": "freemodel",
+      "models": {
+        "code": "claude-sonnet-4-6",
+        "fast": "claude-haiku-5-5",
+        "review": "claude-opus-5-5",
+        "discuss": "claude-opus-5-5"
+      },
+      "effort": {
+        "review": "high",
+        "discuss": "high",
+        "code": "medium",
+        "fast": "medium"
+      },
+      "effort_fmt": " --effort {e}",
+      "command": ".\\tools\\claude-code-env.ps1 --model {model}{effort} -p \"{task}\""
+    },
+    "chatgpt": {
+      "kind": "freemodel",
+      "models": {
+        "code": "gpt-6.2-sol",
+        "fast": "gpt-6-luna",
+        "review": "gpt-6.2-sol",
+        "discuss": "gpt-6.2-sol"
+      },
+      "effort": {
+        "review": "high",
+        "code": "medium",
+        "discuss": "medium",
+        "fast": "medium"
+      },
+      "effort_fmt": " -c model_reasoning_effort=\"{e}\"",
+      "command": ".\\tools\\codex-env.ps1 -m {model}{effort} exec \"{task}\""
+    }
+  }
+}
