@@ -1,5 +1,5 @@
 {
-  "_comment": "Fleet for tools/dispatch.py. Swap any model/provider/command here, or per project in .solocode/dispatch.json (models/effort/arms overrides), no code change. effort_fmt uses {e}; {effort} in command is the formatted effort or empty. Each family may carry a cost map {cheap,strong} for --cost cheap|strong.",
+  "_comment": "Fleet for tools/dispatch.py. Swap any model/provider/command here, or per project in .solocode/dispatch.json (models/effort/arms overrides), no code change. effort_fmt uses {e}; {effort} in command is the formatted effort or empty. Each family may carry a cost map {cheap,strong} for --cost cheap|strong. claude/chatgpt route through free_delegate.py (fence, scope check, watermark strip, retry); a write command needs the {dir} placeholder.",
   "preference": {
     "review": [
       "gemini",
@@ -74,11 +74,12 @@
         "fast": "medium"
       },
       "effort_fmt": " --effort {e}",
-      "command": ".\\tools\\claude-code-env.ps1 --model {model}{effort} -p \"{task}\"",
+      "command": "python tools/free_delegate.py \"{task}\" --platform claude --model {model}{effort}",
       "cost": {
         "cheap": "claude-haiku-5-5",
         "strong": "claude-opus-5-5"
-      }
+      },
+      "command_write": "python tools/free_delegate.py \"{task}\" --platform claude --model {model}{effort} --directory {dir} --write --enforce-scope"
     },
     "chatgpt": {
       "kind": "freemodel",
@@ -95,11 +96,12 @@
         "fast": "medium"
       },
       "effort_fmt": " -c model_reasoning_effort=\"{e}\"",
-      "command": ".\\tools\\codex-env.ps1 -m {model}{effort} exec \"{task}\"",
+      "command": "python tools/free_delegate.py \"{task}\" --platform chatgpt --model {model}{effort}",
       "cost": {
         "cheap": "gpt-6-luna",
         "strong": "gpt-6.2-sol"
-      }
+      },
+      "command_write": "python tools/free_delegate.py \"{task}\" --platform chatgpt --model {model}{effort} --directory {dir} --write --enforce-scope"
     }
   }
 }

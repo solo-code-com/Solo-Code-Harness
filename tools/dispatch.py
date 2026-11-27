@@ -125,7 +125,23 @@ def pick_effort(family_key, role, fam_cfg, project):
     return fam_cfg.get("effort", {}).get(role)
 
 
-def build_command(fam_cfg, role, model, effort, task):
+def fence_is_enforceable(directory: str | None) -> bool:
+    """False when the target is the repo root, where no narrower scope exists.
+
+    opencode_delegate refuses to enforce a root fence for the same reason: a check
+    against "." can never report a path as outside it, so emitting --enforce-scope
+    there would look like a gate while checking nothing.
+    """
+    if directory in (None, "", "."):
+        return False
+    try:
+        return Path(directory).resolve() != ROOT.resolve()
+    except OSError:
+        return False
+
+
+def build_command(fam_cfg, role, model, effort, task, directory="."):
+    """Format the family command. {dir} is only present in a write template."""
     q = task.replace('"', "'")
     fmt = fam_cfg.get("effort_fmt", "")
     effort_str = fmt.format(e=effort) if (effort and fmt) else ""
@@ -134,7 +150,14 @@ def build_command(fam_cfg, role, model, effort, task):
         if (role == "code" and fam_cfg.get("command_write"))
         else fam_cfg.get("command")
     )
-    return template.format(task=q, model=model, effort=effort_str)
+    command = template.format(
+        task=q, model=model, effort=effort_str, dir=directory or "."
+    )
+    if "{dir}" in template and not fence_is_enforceable(directory):
+        # A root-level write has no enforceable fence: drop the flag rather than
+        # print a command that claims one.
+        command = command.replace(" --enforce-scope", "")
+    return command
 
 
 def order_preference(role, pref, last_write):
@@ -144,7 +167,7 @@ def order_preference(role, pref, last_write):
     return [f for f in pref if f != last_write] + [f for f in pref if f == last_write]
 
 
-def plan(task, enabled, fleet, project, probe, cost, last_write):
+def plan(task, enabled, fleet, project, probe, cost, last_write, directory="."):
     role = classify(task)
     pref = order_preference(
         role, list(fleet.get("preference", {}).get(role, list(enabled))), last_write
@@ -186,7 +209,12 @@ def plan(task, enabled, fleet, project, probe, cost, last_write):
         "effort": effort,
         "cost": cost,
         "last_writer": last_write,
-        "command": build_command(fam, role, model, effort, task),
+        "command": build_command(fam, role, model, effort, task, directory),
+        "fence": (
+            "repo-root (no enforceable fence)"
+            if role == "code" and not fence_is_enforceable(directory)
+            else ("enforced" if role == "code" else "read-only")
+        ),
         "enabled": enabled,
         "skipped": skipped,
         "reason": f"role={role}; picked {fam_key}; cost={cost}; last_writer={last_write}; enabled={enabled}; skipped={skipped}",
@@ -205,6 +233,11 @@ def main(argv=None) -> int:
         action="store_true",
         help="remember the family of a planned CODE task",
     )
+    ap.add_argument(
+        "--directory",
+        default=".",
+        help="target directory for a write task; a fence is only enforceable below the repo root",
+    )
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
     fleet = load_json(FLEET)
@@ -216,7 +249,14 @@ def main(argv=None) -> int:
     last_write = load_json(LAST_WRITE).get("family")
     enabled = enabled_arms(args.arms, project, env, fleet)
     decision = plan(
-        args.task, enabled, fleet, project, probe_status(), args.cost, last_write
+        args.task,
+        enabled,
+        fleet,
+        project,
+        probe_status(),
+        args.cost,
+        last_write,
+        args.directory,
     )
     if args.record and decision["role"] == "code":
         LAST_WRITE.parent.mkdir(parents=True, exist_ok=True)
