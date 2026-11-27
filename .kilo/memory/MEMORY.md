@@ -72,3 +72,9 @@ High-signal context for session start. History belongs in `decisions-archive.md`
   (0.57 for a read-only survey, 0.91 for `find the file that defines pid_alive`), so the gate blocks benign
   work. Measure it on the labelled set; if it does not separate benign from destructive, drop the gate and
   keep the hard deny list plus confidence.
+- 2026-11-27: Coverage ratchet paid with tests, never `--update`: 30 new tests lift `tools/router.py`,
+  `tools/task_receipt.py` and `.github/scripts/boundary_audit.py` over their baselines (+34.9 points for
+  boundary_audit). Root cause of 388 junk files in `.solocode/task-receipts/`: `receipt_dir: Path =
+  DEFAULT_RECEIPT_DIR` binds at import, so patching the constant changed nothing - both functions now take
+  `None` and resolve it at call time. `docs/README.md` carried 55 `](docs/x)` links that resolved to
+  `docs/docs/x`; rewritten to `](x)`.
