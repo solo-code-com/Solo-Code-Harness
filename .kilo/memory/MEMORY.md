@@ -63,6 +63,7 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 - 2026-11-25: Skill proposals: an agent writes `.solocode/skill-proposals/<slug>` with a canary; promotion is manual; garden warns at 90 days.
 - 2026-11-24: P5 (no network control) accepted, reasoning in `tools/win_sandbox.py`. Regenerate the lock with `deploy.py --root-lock` after `git add`.
 - 2026-11-23: FreeModel removed; tier gate `tools/tier_gate.py`, missing marker = `client`.
+- 2026-11-27: FreeModel re-allowed (operator-managed, less-sensitive projects); banned-host lists in `provider_audit.py` and `tier_gate.py` emptied, tier mechanism kept for a future retired gateway.
 - 2026-11-26: Routing adviser: `gemini-decision-1` primary, Jev backup, both advisory only.
   A low-confidence answer, an undeclared worker or a safety `noul` above 0.85 stops at `worker=none`
   instead of falling back to the rule table: measured, the cases the model doubted were exactly the ones

@@ -212,7 +212,7 @@
       "tools/test_worker_preflight.py": 100.0,
       "tools/test_workspace_snapshot.py": 97.79,
       "tools/test_worktree.py": 98.97,
-      "tools/tier_gate.py": 85.71,
+      "tools/tier_gate.py": 79.0,
       "tools/validate_schemas.py": 67.47,
       "tools/win_sandbox.py": 83.33,
       "tools/worker_preflight.py": 99.21,

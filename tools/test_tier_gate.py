@@ -63,23 +63,19 @@ def test_non_client_tier_never_refuses(tmp_path, monkeypatch):
         assert tier_gate.refusal_for_project(tmp_path, ("OPENAI_BASE_URL",)) is None
 
 
-def test_client_tier_refuses_banned_env_var(tmp_path, monkeypatch):
+def test_client_tier_allows_freemodel_env_var(tmp_path, monkeypatch):
     _write_marker(tmp_path, "client")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://api.freemodel.dev/v1")
-    reason = tier_gate.refusal_for_project(tmp_path, ("OPENAI_BASE_URL",))
-    assert reason is not None
-    assert "OPENAI_BASE_URL" in reason
+    assert tier_gate.refusal_for_project(tmp_path, ("OPENAI_BASE_URL",)) is None
 
 
-def test_client_tier_refuses_banned_project_provider(tmp_path):
+def test_client_tier_allows_freemodel_project_provider(tmp_path):
     _write_marker(tmp_path, "client")
     _write_opencode(
         tmp_path,
         '{"providers": {"freemodel": {"settings": {"baseURL": "https://cc.freemodel.dev"}}}}',
     )
-    reason = tier_gate.refusal_for_project(tmp_path)
-    assert reason is not None
-    assert "cc.freemodel.dev" in reason
+    assert tier_gate.refusal_for_project(tmp_path) is None
 
 
 def test_client_tier_allows_named_providers(tmp_path, monkeypatch):
@@ -101,10 +97,8 @@ def test_client_tier_ignores_unlisted_env_vars(tmp_path, monkeypatch):
     assert tier_gate.refusal_for_project(tmp_path, ("OPENAI_BASE_URL",)) is None
 
 
-def test_banned_host_reports_the_host():
-    assert (
-        tier_gate.banned_host("https://api-cc.freemodel.dev") == "api-cc.freemodel.dev"
-    )
+def test_banned_host_is_empty_when_nothing_is_banned():
+    assert tier_gate.banned_host("https://api-cc.freemodel.dev") is None
     assert tier_gate.banned_host("https://api.deepseek.com") is None
     assert tier_gate.banned_host(None) is None
 

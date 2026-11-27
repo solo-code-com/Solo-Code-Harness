@@ -25,18 +25,10 @@ MARKER = ".harness-tier"
 TIERS = ("client", "personal", "public")
 STRICTEST = "client"
 
-#: Hosts that may not receive client data. One list answers both "what is
-#: banned" and "who enforces it" -- tools/provider_audit.py imports it.
-BANNED_HOSTS = frozenset(
-    {
-        "api.freemodel.dev",
-        "cc.freemodel.dev",
-        "api-cc.freemodel.dev",
-        "cc-t2.freemodel.dev",
-        "work.freemodel.dev",
-        "api-t2-sg.freemodel.dev",
-    }
-)
+#: Hosts that may not receive client data. Operator directive 2026-11-27 re-allowed
+#: FreeModel (operator-managed, less-sensitive projects), so the list is empty. The
+#: mechanism stays: add a future retired gateway's host here to re-enable the refusal.
+BANNED_HOSTS: frozenset[str] = frozenset()
 
 #: Config files a project may use to declare its own providers.
 #: The OpenCode CLI also reads a user-level config, so a banned provider there is
