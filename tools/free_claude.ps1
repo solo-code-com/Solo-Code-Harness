@@ -19,8 +19,13 @@ if (-not $env:FREEMODEL_API) { Write-Error "free_claude: FREEMODEL_API not set i
 $env:ANTHROPIC_API_KEY = $env:FREEMODEL_API
 $env:ANTHROPIC_BASE_URL = if ($env:FREEMODE_BASE_URL_Anthropic) { $env:FREEMODE_BASE_URL_Anthropic } else { "https://cc.freemodel.dev" }
 $env:CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+# --bare (API-key auth instead of the OAuth login) is added only for an INTERACTIVE
+# session; a headless run (-p/--print) authenticates from the env already and is left
+# unchanged, so an arm calls the model exactly as it would on its own.
 $launchArgs = @($args)
-if (-not ($launchArgs -contains "--bare" -or $launchArgs -contains "-bare")) {
+$headless = $launchArgs -contains "-p" -or $launchArgs -contains "--print"
+$alreadyBare = $launchArgs -contains "--bare" -or $launchArgs -contains "-bare"
+if (-not $headless -and -not $alreadyBare) {
   $launchArgs = @("--bare") + $launchArgs
 }
 & claude @launchArgs

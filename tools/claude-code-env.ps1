@@ -37,11 +37,13 @@ if ($args -contains "-Models" -or $args -contains "--models") {
   } catch { [Console]::Error.WriteLine("claude-code-env: models query failed: $_") }
   exit 0
 }
-# --bare makes Claude Code authenticate with the environment API key (apiKeyHelper)
-# instead of the OAuth login that interactive mode otherwise requires; without it an
-# interactive session shows "not logged in" even though -p works.
+# --bare (API-key auth instead of the OAuth login) is added only for an INTERACTIVE
+# session; a headless run (-p/--print) authenticates from the env already and is left
+# unchanged, so an arm calls the model exactly as it would on its own.
 $launchArgs = @($args)
-if (-not ($launchArgs -contains "--bare" -or $launchArgs -contains "-bare")) {
+$headless = $launchArgs -contains "-p" -or $launchArgs -contains "--print"
+$alreadyBare = $launchArgs -contains "--bare" -or $launchArgs -contains "-bare"
+if (-not $headless -and -not $alreadyBare) {
   $launchArgs = @("--bare") + $launchArgs
 }
 & claude @launchArgs
