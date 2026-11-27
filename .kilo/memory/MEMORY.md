@@ -78,3 +78,10 @@ High-signal context for session start. History belongs in `decisions-archive.md`
   DEFAULT_RECEIPT_DIR` binds at import, so patching the constant changed nothing - both functions now take
   `None` and resolve it at call time. `docs/README.md` carried 55 `](docs/x)` links that resolved to
   `docs/docs/x`; rewritten to `](x)`.
+- 2026-11-27: Security gate rebuilt: 35 rules with ids and severities (18 secret, 8 code, 6 agent,
+  3 MCP), `--baseline` keyed on rule+line hash with a per-key count, `--sarif`, and a pruned
+  `os.walk` (78 s -> 4 s; `.solocode/restore/` held 360k snapshots). Id-based inline suppression was
+  removed after five review rounds showed it could not tell a rule id from a word in a reason and
+  failed open in six spellings - a marker now silences the code and agent rules on its line, never a
+  secret. Lesson: when one mechanism owns five of 21 review findings and no tracked file uses it,
+  delete it instead of patching it again.
