@@ -126,10 +126,16 @@ def record_task_receipt(
     allowed_directory: str | None = None,
     status: str = "PENDING",
     verifications: list[dict[str, Any]] | None = None,
-    receipt_dir: Path = DEFAULT_RECEIPT_DIR,
+    receipt_dir: Path | None = None,
     root: Path = ROOT,
 ) -> Path:
-    """Create and persist a task receipt file."""
+    """Create and persist a task receipt file.
+
+    `receipt_dir=None` resolves `DEFAULT_RECEIPT_DIR` at call time. A default
+    argument would bind the path at import, so a test that patches the module
+    constant would still write into the real `.solocode/task-receipts/`.
+    """
+    receipt_dir = receipt_dir or DEFAULT_RECEIPT_DIR
     run_id = run_id or uuid.uuid4().hex[:12]
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     receipt_dir.mkdir(parents=True, exist_ok=True)
@@ -164,8 +170,13 @@ def record_task_receipt(
     return target_path
 
 
-def list_receipts(receipt_dir: Path = DEFAULT_RECEIPT_DIR) -> list[dict[str, Any]]:
-    """List all receipts sorted newest first."""
+def list_receipts(receipt_dir: Path | None = None) -> list[dict[str, Any]]:
+    """List all receipts sorted newest first.
+
+    `receipt_dir=None` resolves `DEFAULT_RECEIPT_DIR` at call time, for the same
+    reason as `record_task_receipt`: a bound default defeats a patched constant.
+    """
+    receipt_dir = receipt_dir or DEFAULT_RECEIPT_DIR
     if not receipt_dir.is_dir():
         return []
     receipts = []

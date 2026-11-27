@@ -26,7 +26,7 @@ make check
 # Single gates
 make test              # Harness tests
 make security-scan     # Secret detection
-make validate          # Schema validation (.kilo/ agents + skills)
+make validate          # Schema validation (.kilo/ + .opencode/skills)
 make garden            # Drift detection (.kilo <-> .agents / .opencode / .gemini)
 
 # Integration tests (shared state)
@@ -96,6 +96,11 @@ python tools/deploy.py
 | `.gemini/antigravity/` | Gemini/Antigravity: agents (16), skills (54), commands (14), knowledge (2). Auto-synced from `.kilo/` by `tools/generate_harness.py`; checked by `tools/garden.py`. |
 | `.github/` | Shared scripts: `security_scan.py`, `checklist.py`, `check_skips.py`, `eval_harness.py`, `boundary_audit.py`, `security-allowlist.txt` |
 | `tools/` | Generator (`generate_harness.py`, `skills_engine.py`), validator, drift detector (`garden.py`), integration tests, `shared_state.py` |
+
+The machinery behind these directories is described in one page:
+[`docs/how-harness-works.md`](docs/how-harness-works.md) covers the three roles, the
+generated trees, the boundaries and their fingerprint, the two write gates, the worker
+fences, the verification stack, and which state survives a session.
 
 ## Model Providers & the 3-Role Pipeline
 
@@ -216,7 +221,7 @@ Bản đồ hai store và lý do tách vai trò: [`.kilo/instruction/shared-stat
 |---|---|---|
 | Lint | `ruff check .` | Python code style |
 | Lint budget | `python tools/check_lint_budget.py` | Findings that `.ruff.toml` does not enable stay at their recorded budget |
-| Schema | `make validate` | `.kilo/` agent + skill frontmatter validity |
+| Schema | `make validate` | `.kilo/` agent and skill frontmatter, plus the generated `.opencode/skills` copies, checked against the Agent Skills caps |
 | Coverage ratchet | `python tools/coverage_gate.py` | Per-file coverage may not fall below `tools/config/coverage-budget.json` |
 | Drift | `make garden` | `.kilo` ↔ `.opencode` / `.gemini` / `.agents` parity, with documented command exceptions |
 | Document truth | `make garden` | Counts, cited paths, documented CLI flags, enforcement claims and skill references must match reality — see [SPEC.md §7.2.1](SPEC.md) |
@@ -330,7 +335,7 @@ make check
 # Gates riêng lẻ
 make test              # Harness tests
 make security-scan     # Phát hiện secret trong code
-make validate          # Schema validation (.kilo/ agents + skills)
+make validate          # Schema validation (.kilo/ + .opencode/skills)
 make garden            # Drift detection (.kilo <-> .agents / .opencode / .gemini)
 
 # Integration tests (shared state)
@@ -485,7 +490,7 @@ cần đổi harness.
 | Gate | Lệnh | Kiểm tra |
 |---|---|---|
 | Lint | `ruff check .` | Python code style |
-| Schema | `make validate` | Frontmatter agent + skill trong `.kilo/` |
+| Schema | `make validate` | Frontmatter agent + skill trong `.kilo/` và `.opencode/skills` đã sinh |
 | Drift | `make garden` | `.kilo` ↔ `.opencode` / `.gemini` / `.agents` (song song, có ngoại lệ command đã ghi) |
 | Document truth | `make garden` | Số đếm, path trích dẫn, flag CLI, tuyên bố "chặn" và tên skill phải khớp thực tế — xem [SPEC.md §7.2.1](SPEC.md) |
 | Harness Tests | `make test` | Generator + shared-state (`tools/test_*.py`) |

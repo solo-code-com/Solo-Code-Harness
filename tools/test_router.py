@@ -1000,3 +1000,105 @@ def test_worker_descriptions_pin_explore_and_antigravity_wording():
     assert "locates" in criteria["subagent:explore"]
     assert "summarize" not in criteria["subagent:explore"]
     assert "summarizes" in criteria["cli:antigravity"]
+
+
+def test_group_confidence_rejects_non_string_choice_and_non_dict_probabilities():
+    """A backend that answers with the wrong shapes scores zero, not a crash."""
+    assert router._group_confidence(None, {"none": 1.0}) == 0.0
+    assert router._group_confidence("none", ["none"]) == 0.0
+
+
+def test_as_finite_float_returns_the_default_for_bools_and_junk():
+    """bool is an int subclass, so True would otherwise score as 1.0."""
+    assert router._as_finite_float(True, 7.5) == 7.5
+    assert router._as_finite_float("not a number", 7.5) == 7.5
+    assert router._as_finite_float(None, 7.5) == 7.5
+
+
+def test_parse_routing_answers_survives_non_dict_blocks():
+    """A malformed worker or safety block must not raise; defaults stand in."""
+    choice, confidence, group_confidence, noul = router._parse_routing_answers(
+        {"worker": "cli:opencode", "safe": 5}
+    )
+
+    assert choice is None
+    assert confidence == 0.0
+    assert group_confidence == 0.0
+    assert noul == 1.0
+
+
+def test_gemini_decide_adds_its_own_directory_to_sys_path(monkeypatch):
+    """The module imports env_file as a sibling, so its directory must be importable."""
+    tools_dir = str(ROOT / "tools")
+    _stub_gemini_http(
+        monkeypatch,
+        lambda *_args: {"answers": {"worker": {"choice": "none"}}},
+        api_key="test-secret-key",
+    )
+    monkeypatch.setattr(sys, "path", [p for p in sys.path if p != tools_dir])
+    assert tools_dir not in sys.path
+
+    router._gemini_decide(CASES["question"])
+
+    assert tools_dir in sys.path
+
+
+def test_gemini_decide_rejects_a_body_without_answers(monkeypatch):
+    """A 200 carrying the wrong shape is a DecisionError, not a KeyError later."""
+    _stub_gemini_http(monkeypatch, lambda *_args: {"model": "x"}, api_key="k")
+
+    with pytest.raises(router.DecisionError, match="missing answers"):
+        router._gemini_decide(CASES["question"])
+
+
+def test_jev_decide_reraises_a_programming_error(monkeypatch):
+    """Only transport failures become DecisionError; a bug in the backend must surface."""
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    _stub_jev(monkeypatch, boom)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        router._jev_decide(CASES["question"])
+
+
+def test_jev_decide_returns_empty_when_the_response_has_no_answers(monkeypatch):
+    _stub_jev(monkeypatch, lambda *_args, **_kwargs: {"model": "jev"})
+
+    assert router._jev_decide(CASES["question"]) == {}
+
+
+def test_decide_route_rejects_an_unknown_backend():
+    with pytest.raises(ValueError, match="unknown backend"):
+        router.decide_route(CASES["question"], backend="invented")
+
+
+def test_append_decision_survives_an_unwritable_ledger(tmp_path):
+    """A full disk must not lose the decision that was already printed."""
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory", encoding="utf-8")
+
+    router.append_decision(
+        CASES["question"], router.route(CASES["question"]), blocker / "ledger.jsonl"
+    )
+
+    assert blocker.is_file()
+
+
+def test_cli_reports_a_value_error_and_exits_2(capsys):
+    """A bad task becomes a message and exit 2, not a traceback."""
+    assert router.main(["   "]) == 2
+    assert "non-empty" in capsys.readouterr().err
+
+
+def test_module_entry_point_exits_through_main(monkeypatch):
+    """`python tools/router.py` must exit with main()'s code."""
+    import runpy
+
+    monkeypatch.setattr(sys, "argv", ["router.py", CASES["question"]])
+
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(ROOT / "tools" / "router.py"), run_name="__main__")
+
+    assert exc_info.value.code == 0

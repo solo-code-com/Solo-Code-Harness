@@ -15,7 +15,7 @@ help:
 	@echo "Development:"
 	@echo "  make generate           Regenerate the Claude Code engine from .kilo/ source"
 	@echo "  make generate-claude    Same as 'make generate' (alias)"
-	@echo "  make validate           Validate agent/skill frontmatter schemas (.kilo/)"
+	@echo "  make validate           Validate agent/skill frontmatter (.kilo/ + .opencode/skills)"
 	@echo "  make garden             Drift detection (.kilo/ <-> generated engines)"
 	@echo "  make lint-budget        Ratchet for S/BLE rules absent from .ruff.toml"
 	@echo "  make stdlib-only        Enforce SPEC section 4: tools/ and .github/scripts/ are stdlib-only"

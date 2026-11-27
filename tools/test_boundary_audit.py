@@ -10,6 +10,7 @@ that noise with a global ".xml" entry would have blinded the audit everywhere.
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 import pytest
@@ -198,3 +199,113 @@ def test_file_outside_root_is_reported(audit, tmp_path):
     report, _reason = audit.should_report(f, tmp_path / "root")
 
     assert report is True
+
+
+def _write(root: Path, rel: str, content: bytes) -> Path:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    return path
+
+
+def test_a_lock_file_is_allowed(audit, tmp_path):
+    f = _write(tmp_path, ".kilo/package-lock.lock", b"{}")
+
+    assert audit.should_report(f, tmp_path) == (False, "lock file")
+
+
+def test_a_python_file_with_web_framework_imports_is_app_code(audit, tmp_path):
+    body = b"from django.db import models\n" + b"# padding\n" * 200
+    f = _write(tmp_path, ".kilo/app.py", body)
+
+    report, reason = audit.should_report(f, tmp_path, strict=True)
+
+    assert report is True
+    assert "web framework" in reason
+
+
+def test_a_js_file_with_framework_imports_is_app_code(audit, tmp_path):
+    body = b"const x = require('react');\n" + b"// padding\n" * 200
+    f = _write(tmp_path, ".kilo/app.js", body)
+
+    report, reason = audit.should_report(f, tmp_path, strict=True)
+
+    assert report is True
+    assert "framework imports" in reason
+
+
+def test_an_undecodable_script_is_not_judged(audit, tmp_path):
+    """A binary blob with a .py name must not raise; the size heuristic is skipped."""
+    f = _write(tmp_path, ".kilo/blob.py", b"\xff\xfe" + b"x" * 1200)
+
+    assert audit.should_report(f, tmp_path, strict=True) == (False, "")
+
+
+def test_an_empty_file_with_an_odd_extension_is_a_marker(audit, tmp_path):
+    f = _write(tmp_path, ".kilo/.keepme.xyz", b"")
+
+    assert audit.should_report(f, tmp_path) == (False, "empty file (marker)")
+
+
+def test_warn_only_mode_collects_warnings_not_errors(audit, tmp_path):
+    _write(tmp_path, ".kilo/leak.exe", b"MZ")
+
+    warnings, errors, _info = audit.audit(tmp_path, strict=False)
+
+    assert any("leak.exe" in w for w in warnings)
+    assert errors == []
+
+
+def test_a_root_level_odd_file_is_a_warning(audit, tmp_path):
+    _write(tmp_path, "stray.xyz", b"data")
+
+    warnings, _errors, _info = audit.audit(tmp_path)
+
+    assert any(w.startswith("[ROOT]") and "stray.xyz" in w for w in warnings)
+
+
+def test_main_rejects_a_missing_directory(audit, monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(sys, "argv", ["boundary_audit.py", str(tmp_path / "absent")])
+
+    assert audit.main() == 1
+    assert "Not a directory" in capsys.readouterr().out
+
+
+def test_main_reports_a_clean_tree(audit, monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(sys, "argv", ["boundary_audit.py", str(tmp_path)])
+
+    assert audit.main() == 0
+    out = capsys.readouterr().out
+    assert "Boundary clean" in out
+    assert "Mode: WARN-ONLY" in out
+
+
+def test_main_warn_only_exits_zero_on_a_leak(audit, monkeypatch, capsys, tmp_path):
+    _write(tmp_path, ".kilo/leak.exe", b"MZ")
+    monkeypatch.setattr(sys, "argv", ["boundary_audit.py", str(tmp_path)])
+
+    assert audit.main() == 0
+    out = capsys.readouterr().out
+    assert "WARNINGS" in out
+    assert "leak.exe" in out
+
+
+def test_main_strict_exits_one_on_a_leak(audit, monkeypatch, capsys, tmp_path):
+    _write(tmp_path, ".kilo/leak.exe", b"MZ")
+    monkeypatch.setattr(sys, "argv", ["boundary_audit.py", str(tmp_path), "--strict"])
+
+    assert audit.main() == 1
+    out = capsys.readouterr().out
+    assert "Mode: STRICT" in out
+    assert "ERRORS" in out
+
+
+def test_module_entry_point_exits_through_main(audit, monkeypatch, tmp_path):
+    import runpy
+
+    monkeypatch.setattr(sys, "argv", ["boundary_audit.py", str(tmp_path)])
+
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(SCRIPT), run_name="__main__")
+
+    assert exc_info.value.code == 0
