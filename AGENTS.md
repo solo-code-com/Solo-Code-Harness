@@ -286,23 +286,19 @@ post-run workspace scope. Antigravity GUI handoff remains a fallback for UI work
 produced at least one error invisible in their own self-summary. Their
 evidence is reliable; their self-assessment is not. Re-run their commands,
 run the real gates, and mutation-test any new check they write.
-- When running an A/B drill, keep the verifier outside every worker's readable tree: a
-  worker rooted at the drill directory can read a sibling `verifier/` folder (measured:
-  a worker arm found and ran the external suite itself, so only the arm fenced to its own
-  subdirectory stayed blind).
-- Re-count the numbers in a worker's evidence table, not just its verdict. A review that
-  returned PASS with a real command per row still reported 10 tests for a 5-test file and
-  35 for three files holding 46 (measured 2026-11-19).
+- In an A/B drill, keep the verifier outside every worker's readable tree: a worker rooted
+  at the drill directory reads a sibling `verifier/` folder and runs the external suite
+  itself, so only an arm fenced to its own subdirectory stays blind.
+- Re-count the numbers in a worker's evidence table, not just its verdict: one PASS review
+  with a real command per row still reported 10 tests for a 5-test file.
 
 Full decision guide: `.kilo/skill/gemini-delegation/SKILL.md`.
 
 ### Antigravity as a CLI worker
 
-**solocode-orchestrator, running in OpenCode, is the orchestrator.** It holds the global context, splits
-the task, dispatches, and verifies the diff. Gemini through `agy` is one of the workers
-it reaches, alongside the OpenCode and Kilo CLI lanes. An earlier version of this
-section called Antigravity the orchestrator; that described the retired Claude Code
-engine and is wrong now.
+**solocode-orchestrator, running in OpenCode, is the orchestrator.** It holds the global
+context, splits the task, dispatches, and verifies the diff. Gemini through `agy` is one
+of the workers it reaches, alongside the OpenCode and Kilo CLI lanes.
 
 Gemini earns its relay on breadth: it reads many files cheaply, so it takes repo-wide
 surveys, independent review, and UI verification. It also writes, but only inside an
@@ -316,16 +312,11 @@ explicit fence. Four facts the routing table does not carry:
 - A write into a control path (`tools/`, `.kilo/hooks/`, `.github/scripts/`, `AGENTS.md`)
   is refused with exit 3 unless `--allow-control-paths` is passed. Pass it only when the
   task is maintaining this harness.
-- Tier: `gemini-4-hydrogen-medium` is the default and `-high` is for accuracy, by operator
-  directives of 2026-11-24 and 2026-11-25. The retired `gemini-3.8-flash-*` ids are gone from
-  the expected catalogue: if Hydrogen is unavailable the run fails and says so, rather than
-  silently downgrading to a model that is about to disappear. `-low` is allowed for read-only
-  lookups only (greps, single-fact extraction, "what is X"): it measured 4/4 facts in 26.7 s and
-  4/4 grep hits in 23.5 s on 2026-11-26. Do not use low for edits, command loops or multi-step
-  synthesis, and never behind `--auto-approve`; medium stays the floor there, because a 100-line
-  module finished in 99 s at low while medium hit 200 s/280 s ceilings - a wall-clock
-  difference, not quality. A timeout is a budget failure, so the fix is a larger budget: 600s
-  generation-only, 900s with commands.
+- Tier: `gemini-4-hydrogen-medium` is the floor; `-high` for review and for any verdict that
+  gates a merge. `-low` is for read-only lookups only, never for edits or behind
+  `--auto-approve`. If Hydrogen is unavailable the run fails and says so rather than
+  downgrading to a retired id. A timeout is a budget failure, not a quality one: 600 s
+  generation-only, 900 s with commands.
 
 GUI handoff, for rendered UI only: write the plan to
 `.gemini/antigravity/handoff/inbox/<slug>-plan.md`. Full guide:
@@ -343,17 +334,6 @@ See `.kilo/skill/git-workflow-master/SKILL.md` for full commit format, types, an
 ## Memory System
 
 Persistent memory at `.kilo/memory/`. The AI reads `MEMORY.md` at session start. Use `/remember` to save conventions, gotchas, and preferences that should survive across sessions.
-
----
-
-## Automation Scripts
-
-| Script                             | Purpose                                           |
-| ---------------------------------- | ------------------------------------------------- |
-| `.github/scripts/checklist.py`     | Master validation: security → lint → test → build |
-| `.github/scripts/security_scan.py` | Scan for hardcoded secrets and unsafe patterns    |
-
-Run: `python .github/scripts/checklist.py .`
 
 ---
 
