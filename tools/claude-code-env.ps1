@@ -6,7 +6,7 @@
 # pass-through arguments. No global setup needed; each project uses its own .env key.
 #
 # Usage:
-#   .\claude-code-env.ps1                 # interactive Claude Code
+#   .\claude-code-env.ps1                 # interactive Claude Code (adds --bare, API-key auth)
 #   .\claude-code-env.ps1 -Models         # list the FreeModel Claude model ids and exit
 #   .\claude-code-env.ps1 -p "do X"       # one-shot prompt (pass-through)
 #   .\claude-code-env.ps1 --help          # pass-through flags
@@ -37,4 +37,11 @@ if ($args -contains "-Models" -or $args -contains "--models") {
   } catch { [Console]::Error.WriteLine("claude-code-env: models query failed: $_") }
   exit 0
 }
-& claude @args
+# --bare makes Claude Code authenticate with the environment API key (apiKeyHelper)
+# instead of the OAuth login that interactive mode otherwise requires; without it an
+# interactive session shows "not logged in" even though -p works.
+$launchArgs = @($args)
+if (-not ($launchArgs -contains "--bare" -or $launchArgs -contains "-bare")) {
+  $launchArgs = @("--bare") + $launchArgs
+}
+& claude @launchArgs

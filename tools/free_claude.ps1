@@ -19,4 +19,8 @@ if (-not $env:FREEMODEL_API) { Write-Error "free_claude: FREEMODEL_API not set i
 $env:ANTHROPIC_API_KEY = $env:FREEMODEL_API
 $env:ANTHROPIC_BASE_URL = if ($env:FREEMODE_BASE_URL_Anthropic) { $env:FREEMODE_BASE_URL_Anthropic } else { "https://cc.freemodel.dev" }
 $env:CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-& claude @args
+$launchArgs = @($args)
+if (-not ($launchArgs -contains "--bare" -or $launchArgs -contains "-bare")) {
+  $launchArgs = @("--bare") + $launchArgs
+}
+& claude @launchArgs

@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-27T16:47:09Z"
+generated_at = "2026-11-27T16:57:43Z"
 mode = "root"
-content_fingerprint = "sha256:1d1a4b500f2fae996f05db143109481b5cdb3dcacc05d56c9d76f0bcca0c0bf5"
+content_fingerprint = "sha256:0089c15a7a2685b1bb3657c6793748affd63feb640eab5ac399bc5cf60911cc3"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -87,6 +87,8 @@ paths = [
     "tools/check_stdlib_only.py",
     "tools/check_text_hygiene.py",
     "tools/circuit_breaker.py",
+    "tools/claude-code-env.ps1",
+    "tools/codex-env.ps1",
     "tools/compaction.py",
     "tools/config/coverage-budget.json",
     "tools/config/historical-docs.txt",

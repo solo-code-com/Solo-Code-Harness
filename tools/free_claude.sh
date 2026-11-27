@@ -12,4 +12,4 @@ set +a
 export ANTHROPIC_API_KEY="$FREEMODEL_API"
 export ANTHROPIC_BASE_URL="${FREEMODE_BASE_URL_Anthropic:-https://cc.freemodel.dev}"
 export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
-exec claude "$@"
+exec claude --bare "$@"
