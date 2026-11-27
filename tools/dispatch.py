@@ -5,6 +5,7 @@ The fleet (model/provider/effort/command per family, and the role preference) li
 tools/config/dispatch.json and can be overridden per project in .solocode/dispatch.json:
 
   { "arms": ["deepseek","gemini"],
+    "off": ["gemini"],   # an arm that is down now (account expired, provider swap, quota out)
     "models": { "claude": {"discuss": "claude-sonnet-4-6"} },
     "effort": { "chatgpt": {"review": "high"} } }
 
@@ -29,6 +30,11 @@ PROJECT = ROOT / ".solocode" / "dispatch.json"
 LEGACY_ARMS = ROOT / ".solocode" / "dispatch-arms.json"
 PROBE = ROOT / ".solocode" / "free_arm" / "models.json"
 ALL = ("deepseek", "gemini", "claude", "chatgpt")
+#: A core arm is "up" when its delegate file exists; a missing one means the arm is gone.
+TOOL_FOR = {
+    "deepseek": "tools/opencode_delegate.py",
+    "gemini": "tools/antigravity_delegate.py",
+}
 
 
 def load_json(path: Path) -> dict:
@@ -130,11 +136,21 @@ def plan(task, enabled, fleet, project, probe):
     pref = fleet.get("preference", {}).get(role, list(enabled))
     skipped = []
     chosen = None
+    off = set(project.get("off", []))
     for cand in pref:
         if cand not in enabled or cand not in fleet["families"]:
-            skipped.append(cand + (":off" if cand not in enabled else ":unknown"))
+            skipped.append(
+                cand + (":not-enabled" if cand not in enabled else ":unknown")
+            )
             continue
         fam = fleet["families"][cand]
+        if cand in off or fam.get("enabled", True) is False:
+            skipped.append(cand + ":off")
+            continue
+        tool = TOOL_FOR.get(cand)
+        if tool and not (ROOT / tool).exists():
+            skipped.append(cand + ":tool-missing")
+            continue
         model = pick_model(cand, role, fam, project)
         if fam.get("kind") == "freemodel" and probe.get(model) not in (None, "ok"):
             skipped.append(f"{cand}:{model}={probe.get(model)}")

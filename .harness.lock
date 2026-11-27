@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-27T17:43:18Z"
+generated_at = "2026-11-27T17:47:14Z"
 mode = "root"
-content_fingerprint = "sha256:1d95c9059e11f197325f93c13f70d7330ecc76a407e1cc2695120502dc309d86"
+content_fingerprint = "sha256:fd8d1a88cae95ecd2aff18156794542f080b83bb2922f90b4e40b5f4540c203f"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -91,6 +91,7 @@ paths = [
     "tools/codex-env.ps1",
     "tools/compaction.py",
     "tools/config/coverage-budget.json",
+    "tools/config/dispatch.json",
     "tools/config/historical-docs.txt",
     "tools/config/lint-budget.json",
     "tools/config/model-roles.json",
