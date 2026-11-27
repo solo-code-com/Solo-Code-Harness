@@ -3,22 +3,22 @@
   "mcpServers": {
     "sequential-thinking": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking@2.2.0"],
       "description": "Chain-of-thought reasoning for complex problem solving. Free, no API key needed."
     },
     "memory": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "args": ["-y", "@modelcontextprotocol/server-memory@2.2.1"],
       "description": "Persistent knowledge graph memory across sessions. Free, local storage."
     },
     "context7": {
       "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "args": ["-y", "@upstash/context7-mcp@4.9.0"],
       "description": "Live documentation lookup for libraries and frameworks. Free, no API key needed."
     },
     "playwright": {
       "command": "npx",
-      "args": ["-y", "@playwright/mcp"],
+      "args": ["-y", "@playwright/mcp@0.0.86"],
       "description": "Browser automation for E2E testing and web scraping. Free, no API key required. Requires: npx playwright install chromium"
     }
   },

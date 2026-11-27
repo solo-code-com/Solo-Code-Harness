@@ -94,7 +94,9 @@ MUST_NOT_DETECT: list[tuple[str, str]] = [
 def _ci_scan(line: str) -> list[str]:
     """Run the CI scanner's patterns exactly as scan_file() does."""
     return [
-        desc for pattern, desc in CI_PATTERNS if re.search(pattern, line, re.IGNORECASE)
+        desc
+        for _rule_id, pattern, desc in CI_PATTERNS
+        if re.search(pattern, line, re.IGNORECASE)
     ]
 
 
@@ -238,7 +240,7 @@ def test_strict_flags_injection_patterns_in_code(tmp_path):
     code = tmp_path / "app.py"
     code.write_text("os.system(user_input)\n", encoding="utf-8")
     findings = ci_scan_file(code, strict=True)
-    assert any("UNSAFE" in desc for _path, desc, _line in findings)
+    assert any("UNSAFE" in finding.message for finding in findings)
 
 
 def test_non_strict_ignores_injection_patterns(tmp_path):
@@ -267,13 +269,21 @@ EXEC_ARGV_FORMS = [
 
 @pytest.mark.parametrize("line", EXEC_INJECTION_FORMS)
 def test_exec_pattern_flags_injection_forms(line):
-    hits = [desc for pattern, desc in CI_UNSAFE_PATTERNS if re.search(pattern, line)]
+    hits = [
+        desc
+        for _rule_id, pattern, desc in CI_UNSAFE_PATTERNS
+        if re.search(pattern, line)
+    ]
     assert any("exec(" in desc for desc in hits), f"missed: {line}"
 
 
 @pytest.mark.parametrize("line", EXEC_ARGV_FORMS)
 def test_exec_pattern_allows_argv_forms(line):
-    hits = [desc for pattern, desc in CI_UNSAFE_PATTERNS if re.search(pattern, line)]
+    hits = [
+        desc
+        for _rule_id, pattern, desc in CI_UNSAFE_PATTERNS
+        if re.search(pattern, line)
+    ]
     assert not any("exec(" in desc for desc in hits), f"false positive: {line}"
 
 
@@ -298,7 +308,7 @@ def test_strict_mode_skips_vendored_code_and_data_files(tmp_path):
     )
 
     app_findings = ci_scan_file(app, strict=True)
-    assert any("UNSAFE" in finding[1] for finding in app_findings), (
+    assert any("UNSAFE" in finding.message for finding in app_findings), (
         "a real finding was lost"
     )
 
@@ -327,7 +337,7 @@ def test_secrets_are_still_scanned_in_json_and_vendored_code(tmp_path):
 
     for path in (secret_file, data_file):
         findings = ci_scan_file(path, strict=True)
-        assert any("SECRET" in finding[1] for finding in findings), (
+        assert any("SECRET" in finding.message for finding in findings), (
             f"secret missed in {path.name}"
         )
 
@@ -350,7 +360,7 @@ def test_inline_allow_marker_skips_unsafe_but_never_secrets(tmp_path):
     unaffected = tmp_path / "unaffected.js"
     unaffected.write_text("el.innerHTML = userInput;\n", encoding="utf-8")
     assert any(
-        "UNSAFE" in finding[1] for finding in ci_scan_file(unaffected, strict=True)
+        "UNSAFE" in finding.message for finding in ci_scan_file(unaffected, strict=True)
     )
 
     token = "sk-ant-api03-" + "b" * 40
@@ -360,6 +370,6 @@ def test_inline_allow_marker_skips_unsafe_but_never_secrets(tmp_path):
         encoding="utf-8",
     )
     findings = ci_scan_file(secret, strict=True)
-    assert any("SECRET" in finding[1] for finding in findings), (
+    assert any("SECRET" in finding.message for finding in findings), (
         "the marker excused a secret"
     )
