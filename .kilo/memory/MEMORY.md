@@ -38,6 +38,13 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 - `Out-File -Encoding utf8` (PS 5.1) writes a BOM and `git commit -F` keeps it in the subject; write the message file with Python instead.
 
 ## Decisions
+- 2026-11-28: Claude and ChatGPT are first-class arms through `tools/free_delegate.py`.
+  Measured: Claude Code resolves paths from the git root and ignores cwd, so the fence is
+  stated repo-relative in the brief; `codex exec` has no `-a` (approval is `approval_policy`);
+  both CLIs must bypass the Windows `.cmd` shim or a multi-line brief truncates (exit 127).
+  The wrapper snapshots ROOT, exits 4 out of fence, fails closed without a snapshot, and
+  strips the zero-width watermark. `dispatch.py` emits `--enforce-scope` only below the repo
+  root. Claude obeys the brief's fence, ChatGPT does not: enforce for ChatGPT writes.
 - 2026-11-26: Work item 3 (add `$ARGUMENTS`/`argument-hint` to the 15 `.kilo/command/`
   files) is DROPPED, decision C. Kilo is barely used here, and churn in a file no engine reads
   buys nothing: OpenCode V2 already appends non-empty arguments after a blank line when a
@@ -57,12 +64,6 @@ High-signal context for session start. History belongs in `decisions-archive.md`
   DeepSeek takes the hard code and the adversarial review. A review covers features
   (reachable, wired, tested, documented) as well as code. SQLite stays: it is the only
   engine that supports concurrent writers for the lock table, and the index is 370 rows.
-- 2026-11-25: Hydrogen only (`medium` floor, `high` for accuracy); 3.8-flash retired, no downgrade. Kilo arm model is `opencode-go/deepseek-v4.1-flash`.
-- 2026-11-25: Cascade opencode-go -> commandcode -> kilo, 1800s budget, never on a changed tree or a policy refusal.
-- 2026-11-25: `--worktree` on all wrappers (exit 7 if dirty); byte-exact restore; protected-state fingerprint; credential-path brief filter; retention archives `.solocode` and never touches receipts.
-- 2026-11-25: Skill proposals: an agent writes `.solocode/skill-proposals/<slug>` with a canary; promotion is manual; garden warns at 90 days.
-- 2026-11-24: P5 (no network control) accepted, reasoning in `tools/win_sandbox.py`. Regenerate the lock with `deploy.py --root-lock` after `git add`.
-- 2026-11-23: FreeModel removed; tier gate `tools/tier_gate.py`, missing marker = `client`.
 - 2026-11-27: FreeModel re-allowed (operator-managed, less-sensitive projects); banned-host lists in `provider_audit.py` and `tier_gate.py` emptied, tier mechanism kept for a future retired gateway.
 - 2026-11-26: Routing adviser: `gemini-decision-1` primary, Jev backup, both advisory only.
   A low-confidence answer, an undeclared worker or a safety `noul` above 0.85 stops at `worker=none`

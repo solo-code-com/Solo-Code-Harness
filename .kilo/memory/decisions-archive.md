@@ -1476,3 +1476,10 @@ Moved verbatim out of `MEMORY.md`; the tooling these bullets name no longer exis
 - 2026-11-23: bo FreeModel; Claude Code->DeepSeek /anthropic, Codex->CommandCode /responses (deepseek-v4.1-flash); tier gate tools/tier_gate.py (thieu marker => client); Codex sandbox=workspace-write (da do chay duoc tren Windows).
 - 2026-11-24: go Codex roi Claude Code engine. guard -> tools/guard_hook.py + guard_rules.py (2 wrapper dung); skills -> .agents/skills (tools/skills_engine.py); 5 workflow giu o .agents/workflows (tro, chua co engine chay); 6 hook trong phien thay bang tools/post_run_checks.py (2 wrapper goi) + .opencode/plugins/harness (session_start + pre_compact). agy KHONG co hook/plugin API (kiem 2026-11-24, agy 1.5.15). Lock phai sinh SAU git add.
 - 2026-11-24: P5 (sandbox khong chan mang) chap nhan bo qua - ly do ghi trong tools/win_sandbox.py. Khong xay egress proxy.
+
+- 2026-11-25: Hydrogen only (`medium` floor, `high` for accuracy); 3.8-flash retired, no downgrade. Kilo arm model is `opencode-go/deepseek-v4.1-flash`.
+- 2026-11-25: Cascade opencode-go -> commandcode -> kilo, 1800s budget, never on a changed tree or a policy refusal.
+- 2026-11-25: `--worktree` on all wrappers (exit 7 if dirty); byte-exact restore; protected-state fingerprint; credential-path brief filter; retention archives `.solocode` and never touches receipts.
+- 2026-11-25: Skill proposals: an agent writes `.solocode/skill-proposals/<slug>` with a canary; promotion is manual; garden warns at 90 days.
+- 2026-11-24: P5 (no network control) accepted, reasoning in `tools/win_sandbox.py`. Regenerate the lock with `deploy.py --root-lock` after `git add`.
+- 2026-11-23: FreeModel removed; tier gate `tools/tier_gate.py`, missing marker = `client`.
