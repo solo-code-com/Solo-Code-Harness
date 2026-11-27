@@ -206,6 +206,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def schema_validation_check(project_path: Path) -> dict | None:
+    """Run the Agent Skills frontmatter validator as a required check.
+
+    `make validate` ran it, but the checklist is what CI calls, so an agent without a
+    description or a skill whose description exceeds the cap shipped green. No exists()
+    guard: `run_check` treats a missing required tool as a failure, and a validator that
+    quietly disappeared must not leave the gate green.
+    """
+    return run_check(
+        "Validate Schemas",
+        [sys.executable, str(project_path / "tools" / "validate_schemas.py")],
+        timeout=120,
+    )
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -278,6 +293,10 @@ def main():
     else:
         print_warning("eval_harness.py not found, skipping Harness Eval")
 
+    schema_result = schema_validation_check(project_path)
+    if schema_result is not None:
+        results.append(schema_result)
+
     # Guard hook syntax check (Claude Code -- .opencode/tests/test-guard.mjs
     # was removed in v4.0.0 along with the OpenCode engine)
     guard_hook = project_path / ".claude" / "hooks" / "guard.py"
@@ -299,13 +318,13 @@ def main():
     # Python pytest suite under tools/
     tools_dir = project_path / "tools"
     if tools_dir.is_dir() and any(tools_dir.rglob("test_*.py")):
-        # timeout=600: the suite now takes about 345 seconds for 1758 tests, so
-        # 600 seconds leaves headroom rather than sitting on the boundary.
+        # 1200 seconds, measured: five full runs of 2015 tests took 568 to 618 seconds,
+        # so the previous 600 sat below the observed time and reported a false TIMEOUT.
         results.append(
             run_check(
                 "Pytest",
                 [sys.executable, "-m", "pytest", str(tools_dir)],
-                timeout=600,
+                timeout=1200,
             )
         )
     else:

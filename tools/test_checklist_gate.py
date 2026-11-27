@@ -155,3 +155,55 @@ def test_passing_command_passes() -> None:
     result = module.run_check("Passing", [sys.executable, "-c", "raise SystemExit(0)"])
     assert result["passed"] is True
     assert result["skipped"] is False
+
+
+def test_schema_validation_runs_as_a_required_check(tmp_path, monkeypatch) -> None:
+    """The validator enforces the Agent Skills caps, and `make check` is not what CI
+    calls, so a checklist that skipped it left the caps unenforced in CI."""
+    module = _load_checklist()
+    (tmp_path / "tools").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "tools" / "validate_schemas.py").write_text("", encoding="utf-8")
+    captured: dict = {}
+
+    def fake_run_check(name, command, timeout=120, required=True):
+        captured.update(name=name, command=command, timeout=timeout, required=required)
+        return {"name": name, "passed": True, "skipped": False}
+
+    monkeypatch.setattr(module, "run_check", fake_run_check)
+    result = module.schema_validation_check(tmp_path)
+
+    assert result is not None and result["passed"] is True
+    assert captured["name"] == "Validate Schemas"
+    assert captured["command"][1].endswith("validate_schemas.py")
+    assert captured["timeout"] == 120
+    assert captured["required"] is True
+
+
+def test_schema_validation_is_not_guarded_by_exists(tmp_path, monkeypatch) -> None:
+    """A deleted validator must reach `run_check`, which fails a missing required tool.
+    An `if path.exists()` guard turned that failure into a warning and a green gate."""
+    module = _load_checklist()
+    captured: dict = {}
+
+    def fake_run_check(name, command, timeout=120, required=True):
+        captured.update(command=command)
+        return {"name": name, "passed": True, "skipped": False}
+
+    monkeypatch.setattr(module, "run_check", fake_run_check)
+    module.schema_validation_check(tmp_path)
+
+    assert str(tmp_path / "tools" / "validate_schemas.py") in captured["command"]
+
+
+def test_missing_validator_exits_non_zero() -> None:
+    """What `run_check` sees when the script is absent: python fails to open it."""
+    module = _load_checklist()
+    missing = ROOT / "tools" / "definitely-not-here-xyz.py"
+    assert not missing.exists()
+
+    result = module.run_check(
+        "Validate Schemas", [sys.executable, str(missing)], timeout=60
+    )
+
+    assert result["passed"] is False
+    assert result["skipped"] is False
