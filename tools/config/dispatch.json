@@ -1,5 +1,5 @@
 {
-  "_comment": "Fleet for tools/dispatch.py. Swap any model/provider/command here, or per project in .solocode/dispatch.json (models/effort/arms overrides), no code change. effort_fmt uses {e}; {effort} in command is the formatted effort or empty.",
+  "_comment": "Fleet for tools/dispatch.py. Swap any model/provider/command here, or per project in .solocode/dispatch.json (models/effort/arms overrides), no code change. effort_fmt uses {e}; {effort} in command is the formatted effort or empty. Each family may carry a cost map {cheap,strong} for --cost cheap|strong.",
   "preference": {
     "review": [
       "gemini",
@@ -39,7 +39,11 @@
         "code"
       ],
       "command": "python tools/opencode_delegate.py \"{task}\" --model {model}{effort}",
-      "command_write": "python tools/opencode_delegate.py \"{task}\" --agent solo-code-engineer --model {model}{effort}"
+      "command_write": "python tools/opencode_delegate.py \"{task}\" --agent solo-code-engineer --model {model}{effort}",
+      "cost": {
+        "cheap": "opencode-go/deepseek-v4.1-flash",
+        "strong": "opencode-go/deepseek-v4-pro"
+      }
     },
     "gemini": {
       "kind": "core",
@@ -49,7 +53,11 @@
         "review": "gemini-4-hydrogen-high",
         "discuss": "gemini-4-hydrogen-high"
       },
-      "command": "python tools/antigravity_delegate.py \"{task}\" --allow-tools --model {model}{effort}"
+      "command": "python tools/antigravity_delegate.py \"{task}\" --allow-tools --model {model}{effort}",
+      "cost": {
+        "cheap": "gemini-4-hydrogen-medium",
+        "strong": "gemini-4-hydrogen-high"
+      }
     },
     "claude": {
       "kind": "freemodel",
@@ -66,7 +74,11 @@
         "fast": "medium"
       },
       "effort_fmt": " --effort {e}",
-      "command": ".\\tools\\claude-code-env.ps1 --model {model}{effort} -p \"{task}\""
+      "command": ".\\tools\\claude-code-env.ps1 --model {model}{effort} -p \"{task}\"",
+      "cost": {
+        "cheap": "claude-haiku-5-5",
+        "strong": "claude-opus-5-5"
+      }
     },
     "chatgpt": {
       "kind": "freemodel",
@@ -83,7 +95,11 @@
         "fast": "medium"
       },
       "effort_fmt": " -c model_reasoning_effort=\"{e}\"",
-      "command": ".\\tools\\codex-env.ps1 -m {model}{effort} exec \"{task}\""
+      "command": ".\\tools\\codex-env.ps1 -m {model}{effort} exec \"{task}\"",
+      "cost": {
+        "cheap": "gpt-6-luna",
+        "strong": "gpt-6.2-sol"
+      }
     }
   }
 }
