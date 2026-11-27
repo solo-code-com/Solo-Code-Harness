@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-27T10:52:50Z"
+generated_at = "2026-11-27T15:00:39Z"
 mode = "root"
-content_fingerprint = "sha256:81930dfcc620b9d087f712ef3d53fcd8464100be57ca8a815eebed94fecaa7d1"
+content_fingerprint = "sha256:f091e69dd0f08ed55765643b4a94439078067831bd6c74f8bccafcfa61a4429d"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -101,6 +101,11 @@ paths = [
     "tools/env_file.py",
     "tools/eval/routing_eval_v1.json",
     "tools/failure_ledger.py",
+    "tools/free_arm.py",
+    "tools/free_claude.ps1",
+    "tools/free_claude.sh",
+    "tools/free_codex.ps1",
+    "tools/free_codex.sh",
     "tools/garden.py",
     "tools/generate_harness.py",
     "tools/guard_hook.py",
