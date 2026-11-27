@@ -252,7 +252,7 @@ def cleanup(path):
 
 These patterns are particularly relevant to:
 
-1. **Hook Lifecycle** (`.claude/hooks/*.py`, `.kilo/hooks/*.js`)
+1. **Hook Lifecycle** (`.kilo/hooks/*.js`, `.opencode/plugins/harness/index.js`)
    - Hooks must report orthogonal outcomes (blocked, allowed, timeout, error)
    - Dispose must reach quiescence before returning
 
@@ -288,6 +288,8 @@ See `tools/test_guard.py` and `tools/test_e2e.py` for examples.
 
 ## References
 
-- Original source: `deepseek-harness-master/docs/defensive-patterns.md`
-- Testing patterns: `deepseek-harness-master/docs/testing.md`
-- Hook implementations: `.claude/hooks/guard.py`, `.claude/hooks/security_post.py`
+- Original source: the upstream `deepseek-harness` repository, `deepseek-harness/docs/defensive-patterns.md`;
+  that checkout is not vendored here
+- Testing patterns: `deepseek-harness/docs/testing.md`, same caveat
+- Hook implementations: `.kilo/hooks/pre-tool-use/executor-mode.js`,
+  `.kilo/hooks/session/session-start.js`

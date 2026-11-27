@@ -71,12 +71,14 @@ Two command gates:
 | Scope | Command |
 |---|---|
 | Local | `make check` |
-| CI | `.github/scripts/checklist.py` |
+| CI | the gates written out in `.github/workflows/ci.yml` |
 
 `make check` runs ruff, the lint budget, the stdlib-only gate, text hygiene, bypass
 claims, the prose budget, schema validation, garden, and the full pytest suite.
-`.github/scripts/checklist.py` runs a secret scan, ruff, the boundary audit, harness
-eval, schema validation, and pytest. `tools/coverage_gate.py` ratchets per-file coverage.
+`.github/scripts/checklist.py` bundles a secret scan, ruff, the boundary audit, harness
+eval, schema validation and pytest behind one command, but CI does not call it: the
+workflow runs those gates as separate steps. `tools/coverage_gate.py` ratchets per-file
+coverage.
 
 A change wider than five files or 120 lines requires a review receipt from
 `tools/review_receipt.py`. The receipt hashes the **staged index**, not the working tree:

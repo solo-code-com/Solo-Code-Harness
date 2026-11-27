@@ -43,6 +43,11 @@ Các tài liệu trong `docs/` được phân thành 3 nhóm trạng thái:
 | [`deepseek-harness-upgrade-final-review.md`](deepseek-harness-upgrade-final-review.md) | Cross-Review | 2026-09-27 | ChatGPT/Gemini | `Historical Archive` | Báo cáo thống nhất: hiệu chỉnh cuối và xác nhận gate. **Đã gộp 2026-10-16** vào [`archive-harness-upgrade-review-and-audit-reports-2026.md`](archive-harness-upgrade-review-and-audit-reports-2026.md) ở file này nay là con trỏ. |
 | [`work-report-2026-09-27.md`](work-report-2026-09-27.md) | Lịch sử nâng cấp | 2026-09-27 | Kilo | `Historical Archive` | Nhật ký phiên nâng cấp harness (6 bước, gate, dọn dẹp). |
 | [`archive-harness-upgrade-review-and-audit-reports-2026.md`](archive-harness-upgrade-review-and-audit-reports-2026.md) | Cross-Review | 2026-10-16 | Jev (điều phối) + Gemini | `Historical Archive` | Gộp 8 báo cáo review/audit 2026 (upgrade-summary, audit-08-15, audit-09-04, 5 file cross-review) ở nội dung verbatim. |
+| [`ARCHITECTURE_COMPARISON.md`](ARCHITECTURE_COMPARISON.md) | Cross-Review | 2024-11-03 | Claude Sonnet 5 | `Historical Archive` | So sánh hai hướng tiếp cận cho cùng bài toán: Integration và Plugin. |
+| [`INTEGRATION_DESIGN_SPEC.md`](INTEGRATION_DESIGN_SPEC.md) | Nghiệm thu | 2026-11-03 | Claude Sonnet 5 | `Historical Archive` | Đặc tả thiết kế tích hợp DeepSeek Harness với orchestration đa engine (bản nháp chờ duyệt Phase 0). |
+| [`INTEGRATION_PLAN.md`](INTEGRATION_PLAN.md) | Kế hoạch Porting | 2024-11-03 | Claude Sonnet 5 | `Historical Archive` | Kế hoạch tích hợp đa engine, phân kỳ Phase 0-3. |
+| [`PLUGINS_GUIDE.md`](PLUGINS_GUIDE.md) | Kế hoạch Porting | — | — | `Reference` | Danh mục package lõi của monorepo DeepSeek Harness. |
+| [`PLUGIN_LIMITATIONS.md`](PLUGIN_LIMITATIONS.md) | Kế hoạch Porting | — | — | `Reference` | Giới hạn và khả năng của Cordis Plugin System trong DeepSeek Harness. |
 
 ---
 
@@ -59,6 +64,8 @@ Nhóm tài liệu quy định phong cách lập trình, thiết kế mô-đun v�
 Tài liệu định hướng việc tiếp nhận và chuyển ngữ hệ thống harness từ nguồn DeepSeek (Node.js/npm) sang Python:
 - [`dsh-port-plan.md`](dsh-port-plan.md): Xác định chiến lược porting theo 3 tầng (Scope A chốt thực hiện, Scope B/C chặn vì khác biệt môi trường runtime).
 - [`dsh-port-map.md`](dsh-port-map.md): Bản đồ phân loại 49 nhóm gói thư viện (226 npm packages) kèm 8 bài học postmortem đắt giá về kiểm thử, snapshot refresh và phân loại lỗi.
+- [`PLUGINS_GUIDE.md`](PLUGINS_GUIDE.md): Danh mục package lõi của monorepo DeepSeek Harness kèm mô tả từng nhóm.
+- [`PLUGIN_LIMITATIONS.md`](PLUGIN_LIMITATIONS.md): Cordis Plugin System — phần nào port được sang Python, phần nào đặc thù TypeScript nên bỏ qua.
 
 ### Nhóm 3: Benchmark & Cấu Hình Môi Trường (`Reference`)
 - [`executor-benchmark-2026-09-04.md`](executor-benchmark-2026-09-04.md): Thử nghiệm thực tế chi phí, tốc độ và tỷ lệ thành công của các mô hình LLM làm executor (Qwen, GLM, DeepSeek V4).
@@ -68,6 +75,9 @@ Tài liệu định hướng việc tiếp nhận và chuyển ngữ hệ thốn
 - [`upgrade-summary.md`](upgrade-summary.md): Dấu mốc đại tu ngày 2026-08-14 với 12 commits hoàn thành mục tiêu tái cấu trúc.
 - [`evaluation-report.md`](evaluation-report.md): Báo cáo phản biện độc lập của Kilo đánh giá chất lượng 12 commit nói trên.
 - [`work-report-2026-09-16.md`](work-report-2026-09-16.md): Báo cáo triển khai Phase 1 tích hợp các khuyến nghị từ dự án `open-code-review`.
+- [`INTEGRATION_DESIGN_SPEC.md`](INTEGRATION_DESIGN_SPEC.md): Đặc tả thiết kế tích hợp DeepSeek Harness với orchestration đa engine (bản nháp Phase 0, 2026-11-03).
+- [`INTEGRATION_PLAN.md`](INTEGRATION_PLAN.md): Kế hoạch tích hợp đa engine, phân kỳ Phase 0-3.
+- [`ARCHITECTURE_COMPARISON.md`](ARCHITECTURE_COMPARISON.md): So sánh hướng Integration và hướng Plugin cho cùng bài toán.
 
 ### Nhóm 5: Chuỗi Nhật Ký Kiểm Định Sức Khỏe Dự Án (Audit Trail)
 Theo dõi tiến trình củng cố chất lượng và dọn dẹp drift cấu hình:

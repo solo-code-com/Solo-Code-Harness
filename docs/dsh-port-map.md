@@ -29,8 +29,8 @@ Bốn trạng thái:
 |---|---|---|
 | `core` | `tools/agent_scope.py` (scope), `tools/session_registry.py` (session), guard hooks | **Rút gọn** — scope thiếu parent-chain, event routing, runtime invariant |
 | `session` | `tools/session_registry.py` | Rút gọn — SQLite cơ bản, không projection/title/telemetry |
-| `guard` | `.claude/hooks/guard.py`, `.kilo/hooks/pre-tool-use/*` | Đầy đủ cho nhu cầu hiện tại |
-| `hooks` | `.claude/hooks/`, `.kilo/hooks/` | Đầy đủ (Claude Code/Kilo bridges) |
+| `guard` | `.kilo/hooks/pre-tool-use/*`, `edit: deny` trong agent OpenCode | Đầy đủ cho nhu cầu hiện tại |
+| `hooks` | `.kilo/hooks/`, `.opencode/plugins/harness/` | Đầy đủ (Kilo hooks + OpenCode plugin) |
 
 ### 1.2 Đáng port tiếp (5)
 

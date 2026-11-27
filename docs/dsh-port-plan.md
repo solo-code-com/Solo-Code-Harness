@@ -90,7 +90,7 @@ Claude Code nêu đúng lỗ hổng: injection point của pruner chưa rõ.
 **Quyết định đã chốt (Kilo đề xuất):** pruner là **standalone tool** đặt ở `tools/`, **không phải hook**.
 
 Lý do (nguyên tắc harness boundary):
-- Nếu là PostToolUse hook → phải đặt ở `.claude/hooks/` (harness config) → **vi phạm nguyên tắc không sửa file harness để làm việc project**.
+- Nếu là PostToolUse hook → phải đặt ở `.kilo/hooks/` (harness config) → **vi phạm nguyên tắc không sửa file harness để làm việc project**.
 - Pruner dùng chung cho nhiều engine (Kilo/Claude/OpenCode), không phải đặc thù một engine → tool trong `tools/` đúng chỗ.
 - Wire vào luồng thật (hook) chỉ khi nào có yêu cầu rõ ràng từ orchestrator, qua đúng file harness, không làm trong phạm vi này.
 
@@ -132,7 +132,7 @@ Tổng tầng A: **~4–5 ngày**.
 
 - Không port Cordis / effect system / typert / ACP / web UI / website / e2b / native(landlock).
 - Không đổi executor (OpenCode CLI) — Q2 trả lời "giữ nguyên", Q3/Q4 chặn B/C.
-- Không sửa file harness (`.kilo/`, `.claude/hooks/hooks.json`, `.github/scripts/`) — trừ commit dọn dẹp các fix đã nằm trong `tools/` (project code).
+- Không sửa file harness (`.kilo/`, `.opencode/`, `.github/scripts/`) — trừ commit dọn dẹp các fix đã nằm trong `tools/` (project code).
 - Không tạo tài liệu mới ngoài `dsh-port-map.md`.
 
 ---
