@@ -30,20 +30,13 @@ import re
 import sys
 from pathlib import Path
 
-#: Gateways the harness retired. A config that still points at one is misconfigured.
-BANNED_HOSTS = frozenset(
-    {
-        "api.freemodel.dev",
-        "cc.freemodel.dev",
-        "api-cc.freemodel.dev",
-        "cc-t2.freemodel.dev",
-        "work.freemodel.dev",
-        "api-t2-sg.freemodel.dev",
-    }
-)
+#: Operator directive 2026-11-27: FreeModel is allowed again (the operator manages its use on
+#: less-sensitive projects), so no host is banned. The mechanism stays: add a future retired
+#: gateway's host here to re-enable the check.
+BANNED_HOSTS: frozenset[str] = frozenset()
 
-#: Credentials for those gateways: any name here is a leftover provider reference.
-BANNED_ENV_VARS = frozenset({"FREEMODEL_API_KEY"})
+#: Credentials for banned gateways. Empty while FreeModel is allowed.
+BANNED_ENV_VARS: frozenset[str] = frozenset()
 
 #: The only names a directory scan inspects, relative to the directory being scanned.
 TARGET_FILES = (
@@ -64,9 +57,12 @@ MAX_DIRECTORIES = 250
 #: specific name is the useful one to report.
 _BANNED_HOSTS_BY_LENGTH = tuple(sorted(BANNED_HOSTS, key=len, reverse=True))
 
-_ENV_VAR_RULE = re.compile(
-    r"\b(" + "|".join(re.escape(name) for name in sorted(BANNED_ENV_VARS)) + r")\b"
-)
+if BANNED_ENV_VARS:
+    _ENV_VAR_RULE = re.compile(
+        r"\b(" + "|".join(re.escape(name) for name in sorted(BANNED_ENV_VARS)) + r")\b"
+    )
+else:  # nothing banned: a rule that never matches keeps scan_line unchanged
+    _ENV_VAR_RULE = re.compile(r"(?!)")
 
 #: kind, pattern, detail. The detail is a setting, never a credential.
 _CODEX_RULES = (

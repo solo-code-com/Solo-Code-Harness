@@ -133,7 +133,7 @@
       "tools/post_run_checks.py": 93.1,
       "tools/prose_lint.py": 78.79,
       "tools/protected_state.py": 86.06,
-      "tools/provider_audit.py": 85.21,
+      "tools/provider_audit.py": 81.0,
       "tools/restore.py": 90.0,
       "tools/retention.py": 80.5,
       "tools/review_check.py": 95.05,

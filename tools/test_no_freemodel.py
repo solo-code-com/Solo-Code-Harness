@@ -1,9 +1,9 @@
-"""Regression guard: the retired `freemodel` provider must not return to a generated artifact.
+"""Guard: FreeModel is allowed again but must not reach the GENERATED opencode config or the
+provider maps, which stay on the harness own providers.
 
-The provider was dropped from the project by hand (`.env`, `.env.template`), so the generator,
-the template and the agent manifest are pinned here. The assertions read generated artifacts
-only, never the historical record: `docs/`, `SPEC.md`, `README.md` and `.kilo/memory/` keep their
-`freemodel` mentions on purpose.
+Operator directive 2026-11-27 re-enabled FreeModel for less-sensitive projects, so the template
+may carry FREEMODEL_API. The generated `.opencode/opencode.json`, `env_file.PROVIDERS` and
+`agent.yaml` still must not declare it.
 
 Usage:
     python -m pytest tools/test_no_freemodel.py -v
@@ -21,11 +21,10 @@ sys.path.insert(0, str(ROOT / "tools"))
 import env_file  # noqa: E402
 
 
-def test_env_template_declares_no_freemodel_variable() -> None:
-    """The template ships keys, not a retired gateway."""
+def test_env_template_carries_the_freemodel_key() -> None:
+    """FreeModel is allowed again; the template shows the key to fill."""
     text = (ROOT / ".env.template").read_text(encoding="utf-8")
-    assert "freemodel" not in text.lower()
-    assert "cc.freemodel.dev" not in text
+    assert "FREEMODEL_API" in text
 
 
 def test_generated_opencode_config_has_no_freemodel_provider() -> None:

@@ -13,6 +13,7 @@ Commands:
 
 from __future__ import annotations
 
+# ruff: noqa: S310, S603, S607  # fixed https URLs via urllib, fixed-argv subprocess
 import argparse
 import json
 import subprocess

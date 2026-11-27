@@ -13,7 +13,7 @@ import json
 from tools import provider_audit as audit
 
 
-def test_banned_host_in_env_is_reported_without_any_value(tmp_path, capsys):
+def test_freemodel_host_is_now_allowed(tmp_path, capsys):
     env = tmp_path / ".env"
     env.write_text(
         "ANTHROPIC_BASE_URL=https://cc.freemodel.dev\n"
@@ -21,11 +21,10 @@ def test_banned_host_in_env_is_reported_without_any_value(tmp_path, capsys):
         encoding="utf-8",
     )
 
-    assert audit.main([str(tmp_path)]) == 1
+    assert audit.main([str(tmp_path)]) == 0
 
     out = capsys.readouterr().out
-    assert "banned-host" in out
-    assert "cc.freemodel.dev" in out
+    assert "banned-host" not in out
     assert "TAI_KHOAN" not in out
     assert "supersecretvalue" not in out
 
@@ -44,15 +43,14 @@ def test_env_without_a_banned_host_is_clean(tmp_path, capsys):
     assert payload["violations"] == []
 
 
-def test_banned_env_var_name_is_reported(tmp_path, capsys):
+def test_freemodel_key_is_now_allowed(tmp_path, capsys):
     env = tmp_path / ".env"
     env.write_text("FREEMODEL_API_KEY=x\n", encoding="utf-8")
 
-    assert audit.main([str(tmp_path)]) == 1
+    assert audit.main([str(tmp_path)]) == 0
 
     out = capsys.readouterr().out
-    assert "banned-env-var" in out
-    assert "FREEMODEL_API_KEY" in out
+    assert "banned-env-var" not in out
     assert "FREEMODEL_API_KEY=x" not in out
 
 
@@ -72,10 +70,12 @@ def test_codex_unsafe_settings_are_two_violations(tmp_path, capsys):
 
 
 def test_json_reports_the_documented_schema(tmp_path, capsys):
-    env = tmp_path / ".env"
-    env.write_text("FREEMODEL_API_KEY=x\n", encoding="utf-8")
+    config = tmp_path / "config.toml"
+    config.write_text(
+        '[sandbox]\nsandbox_mode = "danger-full-access"\n', encoding="utf-8"
+    )
 
-    assert audit.main([str(tmp_path), "--json"]) == 1
+    assert audit.main([str(config), "--json"]) == 1
 
     payload = json.loads(capsys.readouterr().out)
     assert set(payload) == {"ok", "checked", "violations"}
