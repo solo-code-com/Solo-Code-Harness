@@ -311,7 +311,7 @@ lớn kể từ v3.3.0:
 - **Không nới ngưỡng theo cửa sổ ngữ cảnh model lớn hơn** — chi phí lặp
   lại mỗi phiên, dùng chung cho engine yếu nhất (Kilo CLI); xem lý do đầy đủ
   ở MEMORY.md quyết định 2026-07-24.
-  > Kiểm chứng: `python -m pytest tools/test_claude_hooks.py tools/test_garden.py -q`.
+  > Kiểm chứng: `python -m pytest tools/test_memory_manager_hook.py tools/test_garden.py -q`.
 
 ## 9. Phân loại HARD vs SOFT trong tài liệu [SOFT]
 

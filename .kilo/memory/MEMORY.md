@@ -38,6 +38,10 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 - `Out-File -Encoding utf8` (PS 5.1) writes a BOM and `git commit -F` keeps it in the subject; write the message file with Python instead.
 
 ## Decisions
+- 2026-11-28: `dispatch.py` re-selected an arm its own filters had rejected (off,
+  missing tool, failed probe) and raised StopIteration on an unknown `--arms` name.
+  No usable arm now yields `family: null` + exit 2. `memory-manager.js` blocks with
+  exit 2, matching SPEC 8; both have tests.
 - 2026-11-28: A dispatch command is a contract with a wrapper parser. Three read-only
   audits found ChatGPT plans emitting codex-only `-c`, and DeepSeek/Gemini write plans
   claiming a fence they did not carry. `tools/test_dispatch_commands.py` now reads each

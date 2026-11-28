@@ -13,7 +13,8 @@
  * Usage:
  *   node .kilo/hooks/post-tool-use/memory-manager.js
  *
- * Exit codes: 0 (pass/warn), 1 (hard block)
+ * Exit codes: 0 (pass/warn), 2 (hard block -- the signal every other blocking
+ * hook in this repo uses; SPEC 8 and gate-guard both call that "BLOCK")
  */
 
 'use strict';
@@ -105,7 +106,7 @@ process.stdin.on('end', () => {
         `  Detailed how-to docs still belong in .kilo/instruction/, not here.\n\n`
       );
     }
-    process.exit(1); // Block the write
+    process.exit(2); // Block the write
   }
 
   process.exit(0);

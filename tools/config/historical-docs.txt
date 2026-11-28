@@ -21,3 +21,4 @@ docs/lifecycle-matrix-verification.md                         # dated lifecycle 
 .gemini/antigravity/handoff/outbox/full-project-audit-2026-10-03-report.md # dated report
 docs/audit-2026-09-11.md                                                   # dated audit
 docs/handoff-2026-09-11.md                                                 # dated handoff
+docs/INTEGRATION_PLAN.md    # Phase 0-3 porting plan written 2024-11-03 against engines since removed; kept as history, marked Historical Archive in docs/README.md

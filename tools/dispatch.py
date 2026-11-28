@@ -16,7 +16,9 @@ Swap a model or provider by editing config, never the code. Features:
                              review goes to a DIFFERENT family (review-by-different)
   --arms ...                 enabled set (else project file, then auto-detect)
 A FreeModel family whose configured model the probe marks non-ok is skipped; a core arm
-whose delegate file is missing is skipped; a family in "off" is skipped. All fall back.
+whose delegate file is missing is skipped; a family in "off" is skipped. When every
+arm is filtered out the plan says so (family null, exit 2) instead of emitting a
+command for the arm it just rejected.
 Prints the plan JSON. Read-only planner: the orchestrator or the operator runs the command.
 """
 
@@ -66,9 +68,9 @@ def probe_status() -> dict:
 
 def enabled_arms(spec, project, env, fleet) -> list:
     if spec:
-        return [
-            a for a in (x.strip() for x in spec.split(",")) if a in fleet["families"]
-        ]
+        # Keep an unknown name so plan() can report it as :unknown. Silently
+        # dropping it made `--arms typo` indistinguishable from an empty fleet.
+        return [x.strip() for x in spec.split(",") if x.strip()]
     if project.get("arms"):
         return [a for a in project["arms"] if a in fleet["families"]]
     legacy = load_json(LEGACY_ARMS).get("arms")
@@ -184,36 +186,64 @@ def order_preference(role, pref, last_write):
 
 def plan(task, enabled, fleet, project, probe, cost, last_write, directory="."):
     role = classify(task)
+    unknown = [a for a in enabled if a not in fleet["families"]]
     pref = order_preference(
         role, list(fleet.get("preference", {}).get(role, list(enabled))), last_write
     )
-    skipped = []
+    # Only an enabled arm is a candidate. Another family is not a fallback here,
+    # it is outside the set the caller asked for.
+    pref = [c for c in pref if c in enabled]
+    # Preference orders the fleet; it does not define membership. A family enabled
+    # by name but absent from the list would otherwise be silently unreachable.
+    pref += [c for c in enabled if c not in pref]
+    skipped: list[str] = []
+
+    def note(entry: str) -> None:
+        # One reason per arm: the loop and the unknown list can both see a name.
+        if entry not in skipped:
+            skipped.append(entry)
+
+    for a in unknown:
+        note(f"{a}:unknown")
     chosen = None
     off = set(project.get("off", []))
     for cand in pref:
-        if cand not in enabled or cand not in fleet["families"]:
-            skipped.append(
-                cand + (":not-enabled" if cand not in enabled else ":unknown")
-            )
+        if cand not in fleet["families"]:
+            note(cand + ":unknown")
             continue
         fam = fleet["families"][cand]
         if cand in off or fam.get("enabled", True) is False:
-            skipped.append(cand + ":off")
+            note(cand + ":off")
             continue
         tool = TOOL_FOR.get(cand)
         if tool and not (ROOT / tool).exists():
-            skipped.append(cand + ":tool-missing")
+            note(cand + ":tool-missing")
             continue
         model = pick_model(cand, role, fam, project, cost)
         if fam.get("kind") == "freemodel" and probe.get(model) not in (None, "ok"):
-            skipped.append(f"{cand}:{model}={probe.get(model)}")
+            note(f"{cand}:{model}={probe.get(model)}")
             continue
         chosen = (cand, fam, model)
         break
     if chosen is None:
-        fam_key = next(a for a in enabled if a in fleet["families"])
-        fam = fleet["families"][fam_key]
-        chosen = (fam_key, fam, pick_model(fam_key, role, fam, project, cost))
+        # Every arm was filtered out. Re-selecting one anyway (the old behaviour)
+        # printed a command for an arm marked off, missing, or failing its probe,
+        # and raised StopIteration when no name in --arms was known at all.
+        return {
+            "task": task,
+            "role": role,
+            "family": None,
+            "model": None,
+            "effort": None,
+            "cost": cost,
+            "last_writer": last_write,
+            "command": None,
+            "fence": "none (no usable arm)",
+            "enabled": enabled,
+            "skipped": skipped,
+            "reason": f"no usable arm; role={role}; enabled={enabled}; skipped={skipped}",
+            "error": "no usable arm",
+        }
     fam_key, fam, model = chosen
     effort = pick_effort(fam_key, role, fam, project)
     return {
@@ -269,6 +299,11 @@ def main(argv=None) -> int:
         last_write,
         args.directory,
     )
+    if decision["family"] is None:
+        print(json.dumps(decision) if args.json else json.dumps(decision, indent=2))
+        detail = ", ".join(decision["skipped"]) or "nothing enabled"
+        print(f"dispatch: no usable arm ({detail})", file=sys.stderr)
+        return 2
     if args.record and decision["role"] == "code":
         LAST_WRITE.parent.mkdir(parents=True, exist_ok=True)
         LAST_WRITE.write_text(
