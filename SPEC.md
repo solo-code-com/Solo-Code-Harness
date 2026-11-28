@@ -208,7 +208,7 @@ ngoài stdlib.
 
 #### 7.2.1 Document-truth gates
 
-Parity chỉ chứng minh 4 engine nói **giống nhau** — không chứng minh điều
+Parity chỉ chứng minh các engine còn lại nói **giống nhau** — không chứng minh điều
 chúng nói là **đúng**. Năm gate sau đóng khoảng trống đó; mỗi gate sinh ra
 từ một lỗi thật đã sống nhiều tháng với mọi gate xanh:
 
@@ -217,7 +217,7 @@ từ một lỗi thật đã sống nhiều tháng với mọi gate xanh:
 | `check_doc_counts()` | số đếm hardcode khớp thực tế (resolve **theo từng engine**) | `.gemini/` khai "32 skills, 15 agents" |
 | `check_doc_paths()` | path trong backtick phải resolve | `.opencode/*` sót lại sau khi gỡ engine ở v4.0.0; `.claude/state/` bị gọi là "existing convention" dù `git log --all` cho thấy chưa từng tồn tại |
 | `check_doc_flags()` | flag trong lệnh documented phải tồn tại | `garden.py --strict` trên script không hề đọc `sys.argv` |
-| `check_enforcement_claims()` | script được mô tả là "chặn" phải có exit khác 0 | `quality-gate.js` hứa chặn khi thiếu `ALGO-CHECK`, trong khi cả 3 exit đều là `process.exit(0)` |
+| `check_enforcement_claims()` | script được mô tả là "chặn" phải có exit khác 0 | `quality-gate.js` hứa chặn khi thiếu `ALGO-CHECK`, nhưng cả 3 exit đều là `process.exit(0)`; file này đã bị gỡ cùng engine Claude |
 | `check_skill_refs()` | tên được nêu **như một skill** phải tồn tại | router `using-agent-skills` trỏ tới 5 skill chưa từng có (104 tham chiếu × 4 engine) |
 
 Nguyên tắc thiết kế: **xác minh rộng rãi, báo lỗi hẹp.** Một gate báo bừa
@@ -279,11 +279,11 @@ lớn kể từ v3.3.0:
 - Đóng gap parity Gemini (`check_gemini()` trong `garden.py`); thêm
   file-based Claude↔Gemini/Antigravity handoff protocol
   (`.gemini/antigravity/handoff/{inbox,outbox}/`).
-- Thêm `PreCompact` hook (`pre_compact.py`) + Context Summary Struct
-  (`.solocode/context-checkpoint.json`, surfaced 1 lần bởi
-  `session_start.py` rồi xoá; hook gỡ 2026-11-24 cùng engine Claude).
-- Thêm `memory_gate.py`/`memory-manager.js` — size gate cứng cho memory
-  (WARN 4.000 / BLOCK 8.000 ký tự), cộng `garden.py`'s content-diff check
+- Compact checkpoint do plugin OpenCode đảm nhiệm
+  (`.opencode/plugins/harness/index.js` ghi `.solocode/context-checkpoint.json` trước
+  khi compaction). `PreCompact` hook và `session_start.py` đã bị gỡ cùng engine Claude.
+- Size gate cho memory nằm ở `.kilo/hooks/post-tool-use/memory-manager.js`
+  (WARN 4.000 / BLOCK 8.000 ký tự), cùng content-diff check của `garden.py`
   (không chỉ existence) cho `memory/`, `instruction/`, `skill/` (bỏ qua
   frontmatter hợp lệ khác biệt theo engine).
 - Thêm tầng `decisions-archive.md` — cold storage không auto-load, không
@@ -303,9 +303,9 @@ lớn kể từ v3.3.0:
   storage, KHÔNG auto-load, KHÔNG giới hạn kích thước).
 - **`MEMORY.md`/`project-conventions.md`/`harness-design-intent.md` bị
   giới hạn cứng**: WARN ở 4.000 ký tự, BLOCK (exit 2) ở 8.000 ký tự —
-  enforce bởi `.claude/hooks/memory_gate.py` (PostToolUse) và
-  `.kilo/hooks/post-tool-use/memory-manager.js`. Khi chạm ngưỡng: MOVE
+  enforce bởi `.kilo/hooks/post-tool-use/memory-manager.js` (PostToolUse). Khi chạm ngưỡng: MOVE
   (không xoá) entry cũ nhất/ít tham chiếu nhất sang `decisions-archive.md`.
+
 - Quy ước: nạp `MEMORY.md` đầu phiên (qua rulebook `AGENTS.md`),
   lệnh `/remember` để ghi. Format: YAML frontmatter `type`, `created`.
 - **Không nới ngưỡng theo cửa sổ ngữ cảnh model lớn hơn** — chi phí lặp

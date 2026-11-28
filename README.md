@@ -202,10 +202,10 @@ harness change required.
 Hai file SQLite local-only, đều nằm trong `.solocode/` (đã bị `.gitignore` chặn):
 
 - **`.solocode/shared-state.db`** — nhật ký sự kiện đa engine + khoá file:
-  - **`session_log`** — mỗi session được ghi lại: engine, model, files changed, verification (giữ tối đa 1000 dòng gần nhất); ghi qua `SharedState.add_session_entry` (hook lifecycle hoặc gọi trực tiếp).
-  - **`active_locks`** — ngăn 2 engine sửa cùng 1 file cùng lúc (tự hết hạn sau 2 giờ); do worker lấy/trả qua `acquire_lock`/`release_lock`.
+  - **`session_log`** - mỗi session được ghi lại: engine, model, files changed, verification (giữ tối đa 1000 dòng gần nhất). Writer hiện có: `free_delegate.py` ghi engine `free-claude`/`free-chatgpt` sau mỗi lần chạy có ghi file hoặc lỗi; các engine khác gọi `SharedState.add_session_entry` trực tiếp.
+  - **`active_locks`** - ngăn 2 engine sửa cùng 1 file cùng lúc (tự hết hạn sau 2 giờ); do worker lấy/trả qua `acquire_lock`/`release_lock`. `antigravity_delegate.py` và `free_delegate.py` (khi `--write`) đều lấy khoá thư mục trước khi chạy.
   - **`features`**, **`shared_memory_*`** — đã gỡ khỏi schema (bị `DROP TABLE IF EXISTS` khi mở DB từ 2026-11-25); không dùng. Task tracking dùng `git log` + `.kilo/memory/MEMORY.md`.
-- **`.solocode/sessions.db`** — registry phiên (`tools/session_registry.py`): model, files changed, status mỗi session.
+- **`.solocode/sessions.db`** - registry phiên (`tools/session_registry.py`): model, files changed, status mỗi session. Không có writer tự động; dùng khi cần tra cứu thủ công.
 
 ```bash
 python tools/shared_state.py show
