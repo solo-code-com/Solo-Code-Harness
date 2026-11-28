@@ -45,25 +45,16 @@ High-signal context for session start. History belongs in `decisions-archive.md`
   The wrapper snapshots ROOT, exits 4 out of fence, fails closed without a snapshot, and
   strips the zero-width watermark. `dispatch.py` emits `--enforce-scope` only below the repo
   root. Claude obeys the brief's fence, ChatGPT does not: enforce for ChatGPT writes.
+- 2026-11-28: FreeModel arm uses SQLite. `free_delegate` takes the shared-state
+  directory lock for a writing run (per-run session token, exit 5 when held) and logs
+  run_id/elapsed_s to `free_arm/runs.jsonl`; `portfolio.py` indexes that shared log once,
+  the arm coming from the entry (an unlabelled entry is skipped). A missing lock module
+  allows the run; a module that raises denies it - fail-open only for "no service".
 - 2026-11-26: Work item 3 (add `$ARGUMENTS`/`argument-hint` to the 15 `.kilo/command/`
   files) is DROPPED, decision C. Kilo is barely used here, and churn in a file no engine reads
   buys nothing: OpenCode V2 already appends non-empty arguments after a blank line when a
   template has no placeholder, so `/test auth.py` works today. `subtask:` stays untouched for
   the same reason -- it is a dead field in a copied file, not a deprecated one needing a rename.
-- 2026-11-26: Pi (earendil-works/pi) evaluated as a reference, not adopted. Only two
-  of its practices were portable: keep head+tail when truncating tool output, and enforce
-  the Agent Skills frontmatter caps. MEASURED facts behind that: `parse_frontmatter` returns
-  `|-` for a YAML block scalar, so a naive 1024-char check passes every skill and enforces
-  nothing (2 of 54 skills use block scalars). The Kilo CLI binary is the OpenCode runtime
-  (`kilo.exe --help` logs `process_role=main ... opencode`); its VS Code extension reads
-  `.kilo/skills/`, `.kilo/setup-script` and `.kilo/worktrees/` only, never `.kilo/command/`.
-  Therefore `.kilo/command/` is this harness's own convention: `$ARGUMENTS` reaches OpenCode
-  (verified in the V2 docs) but nothing proves Kilo expands it, and `subtask:` is carried by
-  nothing but the copy. Keep command frontmatter a harness convention, not an engine contract.
-- 2026-11-25: Working split: Gemini analyses the problem and writes the code by default;
-  DeepSeek takes the hard code and the adversarial review. A review covers features
-  (reachable, wired, tested, documented) as well as code. SQLite stays: it is the only
-  engine that supports concurrent writers for the lock table, and the index is 370 rows.
 - 2026-11-27: FreeModel re-allowed (operator-managed, less-sensitive projects); banned-host lists in `provider_audit.py` and `tier_gate.py` emptied, tier mechanism kept for a future retired gateway.
 - 2026-11-26: Routing adviser: `gemini-decision-1` primary, Jev backup, both advisory only.
   A low-confidence answer, an undeclared worker or a safety `noul` above 0.85 stops at `worker=none`

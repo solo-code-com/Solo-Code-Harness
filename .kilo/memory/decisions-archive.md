@@ -1483,3 +1483,18 @@ Moved verbatim out of `MEMORY.md`; the tooling these bullets name no longer exis
 - 2026-11-25: Skill proposals: an agent writes `.solocode/skill-proposals/<slug>` with a canary; promotion is manual; garden warns at 90 days.
 - 2026-11-24: P5 (no network control) accepted, reasoning in `tools/win_sandbox.py`. Regenerate the lock with `deploy.py --root-lock` after `git add`.
 - 2026-11-23: FreeModel removed; tier gate `tools/tier_gate.py`, missing marker = `client`.
+
+- 2026-11-26: Pi (earendil-works/pi) evaluated as a reference, not adopted. Only two
+  of its practices were portable: keep head+tail when truncating tool output, and enforce
+  the Agent Skills frontmatter caps. MEASURED facts behind that: `parse_frontmatter` returns
+  `|-` for a YAML block scalar, so a naive 1024-char check passes every skill and enforces
+  nothing (2 of 54 skills use block scalars). The Kilo CLI binary is the OpenCode runtime
+  (`kilo.exe --help` logs `process_role=main ... opencode`); its VS Code extension reads
+  `.kilo/skills/`, `.kilo/setup-script` and `.kilo/worktrees/` only, never `.kilo/command/`.
+  Therefore `.kilo/command/` is this harness's own convention: `$ARGUMENTS` reaches OpenCode
+  (verified in the V2 docs) but nothing proves Kilo expands it, and `subtask:` is carried by
+  nothing but the copy. Keep command frontmatter a harness convention, not an engine contract.
+- 2026-11-25: Working split: Gemini analyses the problem and writes the code by default;
+  DeepSeek takes the hard code and the adversarial review. A review covers features
+  (reachable, wired, tested, documented) as well as code. SQLite stays: it is the only
+  engine that supports concurrent writers for the lock table, and the index is 370 rows.
