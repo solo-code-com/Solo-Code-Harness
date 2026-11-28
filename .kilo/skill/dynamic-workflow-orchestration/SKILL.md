@@ -6,22 +6,21 @@ license: MIT
 
 > **Unavailable.** The Workflow tool belonged to the Claude Code engine, which was removed on 2026-11-24. Use CLI delegation (`tools/antigravity_delegate.py`, `tools/opencode_delegate.py`, `tools/free_delegate.py`) instead.
 
-# Dynamic Workflow Orchestration
+# Dynamic Workflow Orchestration (design reference)
 
-Use the native Workflow tool (not CLI delegation) when a task is genuinely
-parallel or adversarial and fits within Claude's context window. CLI delegation
-stays for cross-engine perspective, context exceeding Claude's window, or UI
-verification.
+There is no Workflow runtime to call. The five files in `.agents/workflows/` are
+designs for parallel and adversarial work, written against an API that only the
+removed Claude Code engine provided. Read them to choose a shape, then run it as
+parallel CLI delegations: one wrapper call per item, concurrently, each with its
+own fence.
 
-## Five template patterns
+## Five template shapes
 
-The templates lived in `.claude/workflows/`; that engine is gone, so the slash commands below no longer exist. Keep them as design references only.
-stem: `/crud-module`, `/api-from-spec`, `/data-migration`, `/compliance-audit`,
-`/adversarial-implementation`. The script reads its input from the `args`
-global, and `args` must be an object, not the sentence typed after the command:
-passed as one string, a run fails with "missing required arg". Name the keys
-explicitly when you ask, and if that error appears, ask for the arguments as an
-object. When `args` is omitted the script sees `undefined`.
+`crud-module`, `api-from-spec`, `data-migration`, `compliance-audit`,
+`adversarial-implementation`. Each file reads its input from an `args` global, so
+a script never parses the sentence typed after a command: `args` is an object with
+named keys, and a missing key throws before any work starts. Copy that discipline
+into a brief - name the keys, never pass a bare sentence.
 
 The `api-from-spec` and `crud-module` templates emit Express routes, so the
 target project needs `express` installed. Their tests use the built-in

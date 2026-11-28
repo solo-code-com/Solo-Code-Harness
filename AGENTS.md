@@ -253,24 +253,24 @@ the environment, and that is a prompt to consider delegation, not to always dele
 | Read >5 files, then summarize/compare/audit | **Antigravity CLI** | Large context through a headless worker |
 | Repo-wide survey — "where else does X appear?" | **Antigravity CLI** | Breadth is exactly its edge |
 | Independent review of a design or diff | **Antigravity CLI** | A second model catches different things |
-| Generate a CRUD module per entity | **Native Workflow** (`/crud-module`) | Five components in parallel, schema-enforced output |
-| Implement an API from a written spec | **Native Workflow** (`/api-from-spec`) | One endpoint per pipeline item, no barrier between endpoints |
-| Migrate data files to a new schema | **Native Workflow** (`/data-migration`) | One file per item, explicit output path, validated at the end |
-| Audit code or docs against rules | **Native Workflow** (`/compliance-audit`) | Parallel per directory, findings ranked in plain JS |
-| Implement a feature with adversarial review | **Native Workflow** (`/adversarial-implementation`) | Two independent reviewers, one fix pass |
+| Generate a CRUD module per entity | **OpenCode CLI**, one delegation per entity | One module per run; write the schema into the brief |
+| Implement an API from a written spec | **OpenCode CLI**, one delegation per endpoint group | Endpoint groups do not depend on each other |
+| Migrate data files to a new schema | **Antigravity CLI** with `--auto-approve --allow-dir` | One file per item, explicit output path |
+| Audit code or docs against rules | **Antigravity CLI** (read-only) | Parallel per directory, large context |
+| Implement a feature with adversarial review | **OpenCode CLI** to implement, **Antigravity CLI** to review | The reviewer is a different model from the author |
 | UI verification, screenshots, recordings | **Antigravity GUI handoff** | The CLI cannot verify a rendered UI |
 | Small mechanical edit, boilerplate, one test | **OpenCode CLI** | Headless — costs the user nothing |
 | Scoped code writing behind an explicit fence | Antigravity CLI if broad, OpenCode CLI if narrow | Both need the fence stated in writing |
 | Architecture / product / security decisions | **Neither — do it here** | Judgment is not delegable. The native advisor tool may be invoked for a second opinion; it pairs the main model with a stronger advisor model. |
 | Anything needing this conversation's history | **Neither — do it here** | Workers are context-blind |
 
-**Workflow vs CLI.** A workflow run caps at 4,096 items per `parallel()`/`pipeline()`, an agent cap of 1,000 per run and 16 concurrent. Use it when the work fits Claude's context and benefits from structured output or independent reviewers; delegate to the CLI when the work exceeds that context, needs a different model, or needs UI verification. Running both is normal. Thresholds: **workflow** under 200 items at ~1M tokens; **CLI** above 200, or for cross-engine perspective or UI verification. Templates: `.agents/skills/dynamic-workflow-orchestration/SKILL.md`.
+**Delegation, not workflow.** The native Workflow tool went with the Claude Code engine (removed 2026-11-24), so there is no `parallel()`/`pipeline()` runtime. Parallel work is parallel *delegations*: one wrapper call per item, run concurrently, each with its own fence. Thresholds that still hold: **one delegation** under ~200 items with the brief inside one context; **split it** above that, or when each item needs its own fence.
 
-## Using workflow templates
+## Workflow templates are reference only
 
-Templates live in `.agents/workflows/`. The five slash commands, their required
-arguments and the runtime limits are documented in the `dynamic-workflow-orchestration`
-skill; this file does not repeat them.
+`.agents/workflows/*.js` still exist, but no installed engine loads them: they call
+`parallel()`, `pipeline()`, `agent()` and `phase()`, which only the removed Workflow runtime
+provided. Read them as designs to copy into a brief or a script, never as runnable commands.
 
 ## Delegation lanes
 
