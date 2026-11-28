@@ -38,6 +38,16 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 - `Out-File -Encoding utf8` (PS 5.1) writes a BOM and `git commit -F` keeps it in the subject; write the message file with Python instead.
 
 ## Decisions
+- 2026-11-28: A dispatch command is a contract with a wrapper parser. Three read-only
+  audits found ChatGPT plans emitting codex-only `-c`, and DeepSeek/Gemini write plans
+  claiming a fence they did not carry. `tools/test_dispatch_commands.py` now reads each
+  wrapper's `--help` and fails on an undefined flag; mutation-tested by reverting the flag.
+  Lesson: a router that prints a command needs a test that parses it, not one that greps it.
+- 2026-11-28: Docs cleanup after the engine removals: AGENTS.md, SPEC.md, agent.yaml,
+  kilo.jsonc, SECURITY.md, harness-checklist and two skills still named Claude
+  Code/Copilot guards and `kilo.json`, and kilo.jsonc had an "orchestrator" agent key
+  matching no file. Fix at the `.kilo/` source, regenerate, then hand-fix the `.gemini`
+  skill frontmatter - the generator syncs bodies only.
 - 2026-11-28: Claude and ChatGPT are first-class arms through `tools/free_delegate.py`.
   Measured: Claude Code resolves paths from the git root and ignores cwd, so the fence is
   stated repo-relative in the brief; `codex exec` has no `-a` (approval is `approval_policy`);
