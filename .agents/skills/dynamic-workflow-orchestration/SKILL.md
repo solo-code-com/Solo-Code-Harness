@@ -4,7 +4,7 @@ description: "Orchestrate broad, parallel, or adversarial tasks using the native
 license: MIT
 ---
 
-> **Claude Code only.** Kilo and OpenCode do not have the Workflow tool - use CLI delegation (`tools/antigravity_delegate.py`, `tools/opencode_delegate.py`) instead.
+> **Unavailable.** The Workflow tool belonged to the Claude Code engine, which was removed on 2026-11-24. Use CLI delegation (`tools/antigravity_delegate.py`, `tools/opencode_delegate.py`, `tools/free_delegate.py`) instead.
 
 # Dynamic Workflow Orchestration
 
@@ -15,7 +15,7 @@ verification.
 
 ## Five template patterns
 
-Templates live in `.claude/workflows/` and run as slash commands, one per file
+The templates lived in `.claude/workflows/`; that engine is gone, so the slash commands below no longer exist. Keep them as design references only.
 stem: `/crud-module`, `/api-from-spec`, `/data-migration`, `/compliance-audit`,
 `/adversarial-implementation`. The script reads its input from the `args`
 global, and `args` must be an object, not the sentence typed after the command:

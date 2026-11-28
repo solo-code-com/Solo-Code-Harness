@@ -140,6 +140,21 @@ def fence_is_enforceable(directory: str | None) -> bool:
         return False
 
 
+def fence_state(fam_cfg, role: str, directory: str) -> str:
+    """Say what the emitted command actually guarantees, not what we wish it did.
+
+    A code task with no write template runs read-only, so calling it "enforced"
+    would claim a fence the command does not have.
+    """
+    if role != "code":
+        return "read-only"
+    if not fam_cfg.get("command_write"):
+        return "read-only (no write template)"
+    if not fence_is_enforceable(directory):
+        return "repo-root (no enforceable fence)"
+    return "enforced"
+
+
 def build_command(fam_cfg, role, model, effort, task, directory="."):
     """Format the family command. {dir} is only present in a write template."""
     q = task.replace('"', "'")
@@ -210,11 +225,7 @@ def plan(task, enabled, fleet, project, probe, cost, last_write, directory="."):
         "cost": cost,
         "last_writer": last_write,
         "command": build_command(fam, role, model, effort, task, directory),
-        "fence": (
-            "repo-root (no enforceable fence)"
-            if role == "code" and not fence_is_enforceable(directory)
-            else ("enforced" if role == "code" else "read-only")
-        ),
+        "fence": fence_state(fam, role, directory),
         "enabled": enabled,
         "skipped": skipped,
         "reason": f"role={role}; picked {fam_key}; cost={cost}; last_writer={last_write}; enabled={enabled}; skipped={skipped}",

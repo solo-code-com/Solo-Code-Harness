@@ -85,7 +85,7 @@
     }
   },
   "agent": {
-    "orchestrator": {
+    "solocode-orchestrator": {
       "permission": {
         "task": {
           "*": "deny",
@@ -98,8 +98,6 @@
           "typescript-reviewer": "allow",
           "database-reviewer": "allow",
           "architect": "allow",
-          "code-architect": "allow",
-          "code-explorer": "allow",
           "refactor-cleaner": "allow"
         }
       }

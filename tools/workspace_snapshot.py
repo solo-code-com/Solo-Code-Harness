@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import posixpath
 from pathlib import Path
 
 SNAPSHOT_IGNORED_DIRS = frozenset(
@@ -113,10 +114,23 @@ def changed_workspace_paths(before: dict[str, str], after: dict[str, str]) -> li
 
 
 def paths_outside_directory(paths: list[str], allowed_dir: str) -> list[str]:
-    """Return changed paths not contained by a relative allowed directory."""
+    """Return changed paths not contained by a relative allowed directory.
+
+    Paths are normalised first: a literal ``allowed/../outside.py`` starts with the
+    allowed prefix but points outside it, and a raw string check would pass it.
+    The original spelling is returned so the report matches what is on disk.
+    """
     if allowed_dir == ".":
         return []
     prefix = allowed_dir.rstrip("/") + "/"
-    return [
-        path for path in paths if path != allowed_dir and not path.startswith(prefix)
-    ]
+    outside: list[str] = []
+    seen: set[str] = set()
+    for path in paths:
+        normalised = posixpath.normpath(path)
+        if normalised == allowed_dir or normalised.startswith(prefix):
+            continue
+        if path in seen:
+            continue
+        seen.add(path)
+        outside.append(path)
+    return outside

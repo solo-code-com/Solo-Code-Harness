@@ -14,11 +14,11 @@
 
 - Harness là bộ **cấu hình + rule + skill + script** biến AI coding agent thành
   "Solo-Code Engineer có kỷ luật". KHÔNG phải app chạy độc lập.
-- Engine hỗ trợ thật (đã cài đặt + verify 2026-10-16): **Kilo Code** (nguồn gốc),
-  **Claude Code** (generate từ Kilo), **OpenCode v2** (engine chính: `@opencode/cli`
-  + `@opencode/plugin`, config sinh bởi `tools/opencode_engine.py`)
-  (mirror thủ công), **Gemini/Antigravity** (mirror thủ công + human-relay handoff, và
-  CLI headless `agy` dùng làm worker).
+- Engine hỗ trợ thật (đã verify 2026-10-16): **Kilo Code** (nguồn gốc), **OpenCode v2**
+  (engine chính: `@opencode/cli` + `@opencode/plugin`, config sinh bởi
+  `tools/opencode_engine.py`), **Gemini/Antigravity** (mirror thủ công + human-relay
+  handoff, và CLI headless `agy` dùng làm worker).
+- Claude Code và Copilot đã bị gỡ ngày 2026-11-24; `.claude/` và `.copilot/` không còn là engine.
 - `.opencode/` từng bị gỡ ở v4.0.0 rồi **đưa lại thành engine chính ở v4.2.0** — tài
   liệu nào còn nói "đã gỡ bỏ vật lý" là lỗi thời.
 - Cursor **không** được hỗ trợ thật (không có `.cursor/`) — nếu tài liệu cũ
@@ -100,15 +100,15 @@ Phải tồn tại các thư mục: `.github/` `.gemini/` `.kilo/` `.vscode/`
 
 ## 2. File cấu hình hợp lệ [HARD]
 
-- `.claude/settings.json` phải parse JSON hợp lệ.
-- `kilo.jsonc` phải tồn tại và parse được.
+- `kilo.jsonc` phải tồn tại và parse được (`.claude/settings.json` đã bị gỡ cùng engine Claude Code).
+  > Kiểm chứng: `python tools/validate_schemas.py` — 0 lỗi.
   > Kiểm chứng: `python tools/validate_schemas.py` — 0 lỗi.
 
 ## 3. Permission Guard (cơ chế an toàn cốt lõi) [HARD]
 
-- Guard thật nằm tại `.claude/hooks/guard.py` (Python, PreToolUse) — chặn
-  bằng `sys.exit(2)` (Claude Code hard-block), KHÔNG phải file JS ở
-  `.github/hooks/scripts/` (đường dẫn đó không tồn tại/đã lỗi thời).
+- Guard thật: `.kilo/hooks/pre-tool-use/executor-mode.js` chặn ghi khi executor mode BẬT,
+  và `.opencode/agents/solocode-orchestrator.md` khai báo `edit: deny` (không có hook layer).
+  `.claude/hooks/guard.py` đã bị gỡ cùng engine Claude Code ngày 2026-11-24.
 - Bản port song song cho Kilo: `.kilo/hooks/pre-tool-use/gate-guard.js`.
 - **Mọi hook phải deterministic** — không gọi LLM inline để quyết định
   block/allow (xem §0.1 loại trừ LLM-as-judge). Đây là lý do toàn bộ hook
@@ -126,7 +126,7 @@ một danh sách pattern:
 
 | Scanner | Vai trò | Hậu quả khi bỏ lọt |
 |---|---|---|
-| `.claude/hooks/guard.py` | PreToolUse (Claude Code) | Secret được ghi vào file |
+| `.kilo/hooks/pre-tool-use/executor-mode.js` | PreToolUse (Kilo) | Ghi file khi executor mode BẬT |
 | `.kilo/hooks/pre-tool-use/secret-scan.js` | PreToolUse (Kilo) | Secret được ghi vào file |
 | `.github/scripts/security_scan.py` | CI gate | Secret lọt vào merge |
 
@@ -294,10 +294,10 @@ lớn kể từ v3.3.0:
 
 ## 8. Memory xuyên phiên [SOFT — nghiệm thu tay, size cap HARD]
 
-- Mỗi nền tảng có thư mục memory riêng (`.kilo/memory/`, `.claude/memory/`,
-  `). `.kilo/memory/` là nguồn gốc; `.claude/` được
-  regenerate/sync, `.copilot/` giữ song song thủ công (`garden.py` kiểm
-  tra content, không chỉ tên file).
+- Memory chỉ còn một bản: `.kilo/memory/` là nguồn gốc. Các mirror `.claude/memory/`
+  và `.copilot/` đã bị gỡ cùng engine tương ứng; không còn bản sao nào để đồng bộ.
+  `garden.py` kiểm tra cap kích thước trên chính `.kilo/memory/`.
+
 - 4 file chính: `MEMORY.md`, `project-conventions.md`,
   `harness-design-intent.md`, **`decisions-archive.md`** (mới — cold
   storage, KHÔNG auto-load, KHÔNG giới hạn kích thước).

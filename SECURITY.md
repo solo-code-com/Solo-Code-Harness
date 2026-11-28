@@ -19,9 +19,9 @@ Please include:
 
 This policy covers security issues in:
 
-- The Solo-Code CLI harness (`tools/` scripts, `.kilo/`, `.claude/`)
+- The Solo-Code CLI harness (`tools/` scripts, `.kilo/`, `.opencode/`, `.gemini/`)
 - Verification scripts (`.github/scripts/`)
-- Guard hook (`.claude/hooks/guard.py`)
+- Guard hook (`.kilo/hooks/pre-tool-use/executor-mode.js`)
 - All agent, skill, hook, and instruction artifacts
 
 ## Response & Disclosure

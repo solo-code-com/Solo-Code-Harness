@@ -58,7 +58,7 @@
 
 ## Verification loop
 
-- [ ] Tests exist for the agent's outputs (`tools/test_*.py`, `eval_harness.py`, `check_skips.py`, `.claude/hooks/guard.py` behavior)
+- [ ] Tests exist for the agent's outputs (`tools/test_*.py`, `eval_harness.py`, `check_skips.py`, `.kilo/hooks/pre-tool-use/executor-mode.js` behavior)
 - [ ] The agent can run the verification command itself (`checklist.py`)
 - [ ] Verification runs automatically on task completion, not just on PR
 - [ ] Eval criteria are written down before the task starts, not after

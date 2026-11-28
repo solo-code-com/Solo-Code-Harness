@@ -1,7 +1,7 @@
 spec_version: "0.1.0"
 name: solo-code-harness
 version: 4.3.1
-description: "AI coding harness biến agent thành Solo-Code Engineer có kỷ luật. Multi-platform: OpenCode, Claude, Copilot, Gemini, Cursor, Kilo."
+description: "AI coding harness biến agent thành Solo-Code Engineer có kỷ luật. Multi-platform: OpenCode, Kilo, Gemini/Antigravity."
 author: "Solo-Code Team"
 license: MIT
 model:
@@ -90,6 +90,4 @@ tags:
   - cross-platform
   - kilo
   - opencode
-  - claude-code
-  - cursor
   - gemini

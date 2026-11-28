@@ -223,3 +223,38 @@ def test_snapshot_skips_a_file_that_cannot_be_read(tmp_path, monkeypatch):
 
     assert "sub/a.txt" not in snap
     assert "sub/b.txt" in snap
+
+
+def test_paths_outside_directory_normalises_dotdot():
+    """`allowed/../outside.py` starts with the prefix but is outside the fence."""
+    paths = ["allowed/../../outside.py", "allowed/ok.py"]
+    assert workspace_snapshot.paths_outside_directory(paths, "allowed") == [
+        "allowed/../../outside.py"
+    ]
+
+
+def test_paths_outside_directory_accepts_nested_paths():
+    assert (
+        workspace_snapshot.paths_outside_directory(["allowed/sub/a.py"], "allowed")
+        == []
+    )
+
+
+def test_paths_outside_directory_normalised_inside_is_not_outside():
+    """A path that normalises back inside the fence is inside it."""
+    assert (
+        workspace_snapshot.paths_outside_directory(["allowed/sub/../ok.py"], "allowed")
+        == []
+    )
+
+
+def test_paths_outside_directory_returns_each_path_once():
+    """A duplicate report must not repeat the same path."""
+    paths = ["outside.py", "outside.py"]
+    assert workspace_snapshot.paths_outside_directory(paths, "allowed") == [
+        "outside.py"
+    ]
+
+
+def test_paths_outside_directory_keeps_the_directory_itself_inside():
+    assert workspace_snapshot.paths_outside_directory(["allowed"], "allowed") == []

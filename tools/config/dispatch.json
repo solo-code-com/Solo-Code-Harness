@@ -1,5 +1,5 @@
 {
-  "_comment": "Fleet for tools/dispatch.py. Swap any model/provider/command here, or per project in .solocode/dispatch.json (models/effort/arms overrides), no code change. effort_fmt uses {e}; {effort} in command is the formatted effort or empty. Each family may carry a cost map {cheap,strong} for --cost cheap|strong. claude/chatgpt route through free_delegate.py (fence, scope check, watermark strip, retry); a write command needs the {dir} placeholder.",
+  "_comment": "Fleet for tools/dispatch.py. Swap any model/provider/command here, or per project in .solocode/dispatch.json (models/effort/arms overrides), no code change. effort_fmt uses {e}; {effort} in command is the formatted effort or empty. Each family may carry a cost map {cheap,strong} for --cost cheap|strong. claude/chatgpt route through free_delegate.py (fence, scope check, watermark strip, retry); a write command needs the {dir} placeholder. A code task needs command_write on the family; without one the plan says so instead of claiming a fence.",
   "preference": {
     "review": [
       "gemini",
@@ -39,7 +39,7 @@
         "code"
       ],
       "command": "python tools/opencode_delegate.py \"{task}\" --model {model}{effort}",
-      "command_write": "python tools/opencode_delegate.py \"{task}\" --agent solo-code-engineer --model {model}{effort}",
+      "command_write": "python tools/opencode_delegate.py \"{task}\" --agent solo-code-engineer --model {model} --directory {dir} --enforce-scope",
       "cost": {
         "cheap": "opencode-go/deepseek-v4.1-flash",
         "strong": "opencode-go/deepseek-v4-pro"
@@ -57,7 +57,8 @@
       "cost": {
         "cheap": "gemini-4-hydrogen-medium",
         "strong": "gemini-4-hydrogen-high"
-      }
+      },
+      "command_write": "python tools/antigravity_delegate.py \"{task}\" --auto-approve --allow-dir {dir} --model {model}"
     },
     "claude": {
       "kind": "freemodel",
@@ -95,7 +96,7 @@
         "discuss": "medium",
         "fast": "medium"
       },
-      "effort_fmt": " -c model_reasoning_effort=\"{e}\"",
+      "effort_fmt": " --effort {e}",
       "command": "python tools/free_delegate.py \"{task}\" --platform chatgpt --model {model}{effort}",
       "cost": {
         "cheap": "gpt-6-luna",

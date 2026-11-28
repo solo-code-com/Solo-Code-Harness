@@ -1,24 +1,23 @@
 ---
 name: solo-code-harness
-description: "Deploy, configure, and maintain the Solo-Code multi-agent harness across Copilot, Claude, Gemini, and Kilo. Use when: deploy harness, setup copilot, setup claude, setup gemini, setup kilo, configure AI agents, install AI harness, solo-code setup, initialize project."
+description: "Deploy, configure, and maintain the Solo-Code multi-agent harness across OpenCode, Gemini, and Kilo. Use when: deploy harness, setup gemini, setup kilo, configure AI agents, install AI harness, solo-code setup, initialize project."
 license: MIT
 ---
 
 # Solo-Code Harness — Multi-Agent AI Coding Framework
 
-You are an expert on the Solo-Code Harness framework. This project provides discipline, safety, and consistency rules for AI coding agents across four platforms: GitHub Copilot (VS Code), Claude Code, Gemini, and Kilo.
+You are an expert on the Solo-Code Harness framework. This project provides discipline, safety, and consistency rules for AI coding agents across three engines: Kilo, OpenCode, and Gemini/Antigravity.
 
 ---
 
 ## Architecture
 
-The harness lives in four platform-specific directories at the project root:
+The harness lives in three platform-specific directories at the project root:
 
 | Platform | Directory | Auto-loads |
 |----------|-----------|------------|
-| Claude Code | `.claude/` | `CLAUDE.md` |
 | Gemini | `.gemini/antigravity/` | `AGENTS.md` + skills |
-| Kilo | `.kilo/` + `kilo.json` + `AGENTS.md` | `AGENTS.md`, `command/`, `agent/`, `skill/` |
+| Kilo | `.kilo/` + `kilo.jsonc` + `AGENTS.md` | `AGENTS.md`, `command/`, `agent/`, `skill/` |
 
 Each harness includes: rulebook, skills (8-9), agents (2), memory, automation scripts.
 
@@ -33,7 +32,7 @@ Copy this entire repository's root contents (excluding `.git/`, `.github/workflo
 Copy to target project:
 ```
 AGENTS.md
-kilo.json
+kilo.jsonc
 .kilo/
 ```
 
@@ -46,7 +45,7 @@ The `.kilo/` directory is auto-discovered by Kilo. No additional config needed.
 ### Agents (`.kilo/agents/`)
 | Agent | Mode | Purpose |
 |-------|------|---------|
-| `orchestrator.md` | subagent | Breaks down complex tasks, coordinates parallel sub-agents |
+| `solocode-orchestrator.md` | primary | Breaks down complex tasks, coordinates parallel sub-agents |
 | `solo-code-engineer.md` | subagent | Template agent for project customization |
 
 ### Commands (`.kilo/command/`)
@@ -81,7 +80,7 @@ The `.kilo/` directory is auto-discovered by Kilo. No additional config needed.
 1. Copy the harness into your project
 2. Customize `.kilo/agents/solo-code-engineer.md` with your project's tech stack, architecture map, and conventions
 3. Update `.kilo/memory/project-conventions.md` with your project's specific rules
-4. Adjust `kilo.json` permissions if your project needs different bash command access
+4. Adjust `kilo.jsonc` permissions if your project needs different bash command access
 
 ### Adding a new skill
 Create `.kilo/skill/<name>/SKILL.md` with YAML frontmatter:
@@ -105,7 +104,7 @@ The command name is the filename (minus `.md`), invoked via `/name`.
 
 The harness uses three layers of protection:
 
-1. **Permission layer** (`kilo.json`) — Deny patterns evaluated before allow patterns. Destructive git/rm/DB/Windows-PowerShell operations blocked at the bash level.
+1. **Permission layer** (`kilo.jsonc`) - Deny patterns evaluated before allow patterns. Destructive git/rm/DB/Windows-PowerShell operations blocked at the bash level.
 2. **Behavioral layer** (`AGENTS.md`) — Rules instructing the AI: no destructive commands without permission, scan for secrets before commit, no runtime bypass of bash permissions.
 3. **Enforcement layer** (skills) — `permission-guard` halts execution for dangerous operations; `git-workflow-master` enforces secret scanning with `security_scan.py` before commits.
 
@@ -113,7 +112,6 @@ The harness uses three layers of protection:
 
 ## Cross-Harness Consistency
 
-When editing shared concepts (behavior rules, security rules, project conventions), update ALL four harnesses:
-- `CLAUDE.md`
+When editing shared concepts (behavior rules, security rules, project conventions), update EVERY engine that still exists:
 - `.gemini/antigravity/AGENTS.md`
 - `AGENTS.md` (Kilo root)

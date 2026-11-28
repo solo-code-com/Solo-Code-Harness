@@ -227,7 +227,6 @@ disable it. Bash is never gated; the orchestrator still runs its own verificatio
 
 Enforcement differs per engine:
 
-- **Claude Code**: `.claude/hooks/guard.py` (`PreToolUse`, matcher `Edit|Write|MultiEdit`).
 - **Kilo Code**: `.kilo/hooks/pre-tool-use/executor-mode.js` (same matcher, in every
   `hooks.json` profile except `minimal`).
 - **OpenCode**: no hook layer, so the state file does nothing. The split is

@@ -93,7 +93,7 @@ This runs `npx -y <package>` as a dry-run to confirm the npm package exists and 
 - **Max 8 active MCPs**: Never exceed this. Each MCP adds context overhead (~500-2000 tokens).
 - **API key awareness**: Warn clearly if a server requires an API key the user hasn't set.
 - **No blind enables**: Always get user confirmation before modifying `.mcp.json`.
-- **kilo.json and .mcp.json compatibility**: If the user's Kilo config defines MCPs in `kilo.json`, do NOT modify it — note that `.mcp.json` is the portable config file.
+- **kilo.jsonc and .mcp.json compatibility**: If the user's Kilo config defines MCPs in `kilo.jsonc`, do NOT modify it - note that `.mcp.json` is the portable config file.
 
 ---
 

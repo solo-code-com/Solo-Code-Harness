@@ -11,9 +11,9 @@
 [harness]
 version = "4.3.1"
 source = "solo-code-io/solo-code-cli"
-generated_at = "2026-11-28T00:06:29Z"
+generated_at = "2026-11-28T01:35:10Z"
 mode = "root"
-content_fingerprint = "sha256:03a0374cf0bf8334c7c2e5a21d795fb7e4829ccde26cde2c7be8b09ad011126c"
+content_fingerprint = "sha256:c8e2ff045fcc755f6ec478949b11f68bde3d544967a62443b8d8b1f21fb5a8bd"
 # sha256 over the sorted (path, content) pairs of [shared_files]; BOM stripped, CRLF->LF.
 
 # --- ENGINE STATUS (v4.3.1) ---
@@ -161,6 +161,7 @@ paths = [
     "tools/test_control_paths.py",
     "tools/test_coverage_gate.py",
     "tools/test_deploy.py",
+    "tools/test_dispatch_commands.py",
     "tools/test_dsh_delegate.py",
     "tools/test_e2e.py",
     "tools/test_env_file.py",
