@@ -375,6 +375,42 @@ def model_chain(primary: str, fallback: str | None) -> list[str]:
     return chain
 
 
+def log_session(
+    platform: str,
+    model: str,
+    session_id: str,
+    exit_code: int,
+    changed: list[str],
+    elapsed: float,
+    scope_note: str,
+) -> None:
+    """Write one session_log row for a run that wrote files or failed.
+
+    The table was populated historically and had no writer left. This is its
+    writer. A clean read-only answer is skipped on purpose: logging every read
+    would bury the writes that a later session actually needs.
+    """
+    if exit_code == 0 and not changed:
+        return
+    try:
+        module = _load_sibling("shared_state")
+        with module.SharedState() as state:
+            state.add_session_entry(
+                engine=f"free-{platform}",
+                model=model,
+                session_id=session_id,
+                summary=(
+                    f"{platform} {model} exit={exit_code} in {elapsed}s"
+                    + (f"; changed {len(changed)} file(s)" if changed else "")
+                    + (f"; {scope_note}" if scope_note else "")
+                )[:500],
+                files_changed=changed[:50],
+                verification={"scope_clean": exit_code == 0},
+            )
+    except Exception as exc:  # noqa: BLE001 - the log must never fail a run
+        _stderr(f"free_delegate: session log skipped ({type(exc).__name__})")
+
+
 def log_run(entry: dict) -> None:
     try:
         LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -548,6 +584,20 @@ def delegate(args: argparse.Namespace) -> int:
         scope_violated = bool(outside) and args.enforce_scope
         final_rc = SCOPE_EXIT_CODE if (scope_failed or scope_violated) else rc
         elapsed = round(time.time() - started, 1)
+        changed_paths = (
+            _load_sibling("workspace_snapshot").changed_workspace_paths(before, after)
+            if (before is not None and after is not None)
+            else []
+        )
+        log_session(
+            args.platform,
+            args.model,
+            run_token,
+            final_rc,
+            changed_paths,
+            elapsed,
+            scope_note,
+        )
         log_run(
             {
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),

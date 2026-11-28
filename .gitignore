@@ -4,6 +4,9 @@ __pycache__/
 *.pyo
 .pytest_cache/
 .pytest_temp*/
+# Left behind by a pytest run whose TMPDIR was not writable (owned by another SID).
+pytest-of-*/
+tmp????????/
 .ruff_cache/
 .coverage
 coverage.json

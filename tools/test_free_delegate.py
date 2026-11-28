@@ -264,6 +264,75 @@ def test_release_uses_the_same_session(tmp_path, monkeypatch):
     assert fd.acquire_lock(tmp_path / "work", "chatgpt", "m", "b") is True
 
 
+def test_session_log_skips_a_clean_read(monkeypatch):
+    """Logging every read would bury the writes a later session needs."""
+    calls = []
+
+    class State:
+        def add_session_entry(self, **kwargs):
+            calls.append(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+    fake = type("M", (), {"SharedState": lambda: State()})
+    monkeypatch.setattr(fd, "_load_sibling", lambda name: fake)
+    fd.log_session("claude", "m", "s", 0, [], 1.0, "")
+    assert calls == []
+
+
+def test_session_log_records_a_write(monkeypatch):
+    calls = []
+
+    class State:
+        def add_session_entry(self, **kwargs):
+            calls.append(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+    fake = type("M", (), {"SharedState": lambda: State()})
+    monkeypatch.setattr(fd, "_load_sibling", lambda name: fake)
+    fd.log_session("claude", "m", "s", 0, ["src/a.py"], 2.5, "")
+    assert len(calls) == 1
+    assert calls[0]["files_changed"] == ["src/a.py"]
+    assert calls[0]["verification"] == {"scope_clean": True}
+
+
+def test_session_log_records_a_failure(monkeypatch):
+    calls = []
+
+    class State:
+        def add_session_entry(self, **kwargs):
+            calls.append(kwargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+    fake = type("M", (), {"SharedState": lambda: State()})
+    monkeypatch.setattr(fd, "_load_sibling", lambda name: fake)
+    fd.log_session("chatgpt", "m", "s", 4, [], 2.0, "1 path changed outside")
+    assert len(calls) == 1
+    assert calls[0]["verification"] == {"scope_clean": False}
+
+
+def test_session_log_failure_never_raises(monkeypatch):
+    def boom(_name):
+        raise RuntimeError("db on fire")
+
+    monkeypatch.setattr(fd, "_load_sibling", boom)
+    fd.log_session("claude", "m", "s", 3, ["a"], 1.0, "")
+
+
 def test_ignored_fence_is_refused(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(fd, "ROOT", tmp_path)
     ignored = tmp_path / ".solocode" / "fence"
