@@ -1498,3 +1498,10 @@ Moved verbatim out of `MEMORY.md`; the tooling these bullets name no longer exis
   DeepSeek takes the hard code and the adversarial review. A review covers features
   (reachable, wired, tested, documented) as well as code. SQLite stays: it is the only
   engine that supports concurrent writers for the lock table, and the index is 370 rows.
+- 2026-11-27: Security gate rebuilt: 35 rules with ids and severities (18 secret, 8 code, 6 agent,
+  3 MCP), `--baseline` keyed on rule+line hash with a per-key count, `--sarif`, and a pruned
+  `os.walk` (78 s -> 4 s; `.solocode/restore/` held 360k snapshots). Id-based inline suppression was
+  removed after five review rounds showed it could not tell a rule id from a word in a reason and
+  failed open in six spellings - a marker now silences the code and agent rules on its line, never a
+  secret. Lesson: when one mechanism owns five of 21 review findings and no tracked file uses it,
+  delete it instead of patching it again.

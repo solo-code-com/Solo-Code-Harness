@@ -38,6 +38,14 @@ High-signal context for session start. History belongs in `decisions-archive.md`
 - `Out-File -Encoding utf8` (PS 5.1) writes a BOM and `git commit -F` keeps it in the subject; write the message file with Python instead.
 
 ## Decisions
+- 2026-11-28: `secret-scan.js` blocked only in config extensions, so a hardcoded
+  key in `.py`/`.js`/`.sh` was a warning. Two tiers now decide: a format pattern
+  (`sk-ant-`, `AKIA`, PEM, JWT, `user:pass@` URI, Bearer) blocks in any non-prose
+  file; a keyword pattern (`api_key = ...`) blocks only in a config file and warns
+  in code, because strict parity with guard_rules.py blocks ordinary lines like
+  `token = compute_token(payload)`. The placeholder allowlist is anchored to the
+  whole trailing value. Known gaps: a JSON `"api_key": "<unprefixed>"` is missed by
+  all three scanners; guard_rules.py keeps the loose URL userinfo.
 - 2026-11-28: `dispatch.py` re-selected an arm its own filters had rejected (off,
   missing tool, failed probe) and raised StopIteration on an unknown `--arms` name.
   No usable arm now yields `family: null` + exit 2. `memory-manager.js` blocks with
@@ -85,10 +93,3 @@ High-signal context for session start. History belongs in `decisions-archive.md`
   DEFAULT_RECEIPT_DIR` binds at import, so patching the constant changed nothing - both functions now take
   `None` and resolve it at call time. `docs/README.md` carried 55 `](docs/x)` links that resolved to
   `docs/docs/x`; rewritten to `](x)`.
-- 2026-11-27: Security gate rebuilt: 35 rules with ids and severities (18 secret, 8 code, 6 agent,
-  3 MCP), `--baseline` keyed on rule+line hash with a per-key count, `--sarif`, and a pruned
-  `os.walk` (78 s -> 4 s; `.solocode/restore/` held 360k snapshots). Id-based inline suppression was
-  removed after five review rounds showed it could not tell a rule id from a word in a reason and
-  failed open in six spellings - a marker now silences the code and agent rules on its line, never a
-  secret. Lesson: when one mechanism owns five of 21 review findings and no tracked file uses it,
-  delete it instead of patching it again.

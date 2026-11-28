@@ -121,20 +121,28 @@ def _run_guard(payload: dict) -> int:
     return proc.returncode
 
 
-def _run_secret_scan_js(content: str, file_path: str = "config.yml") -> int:
-    """Invoke the Kilo secret-scan hook. Uses a secret-prone extension so a
-    finding escalates to exit 2 (block) rather than a warning."""
+def _run_secret_scan_js_proc(
+    content: str, file_path: str = "app.py"
+) -> subprocess.CompletedProcess:
+    """Invoke the Kilo secret-scan hook on a code file by default.
+
+    The default used to be config.yml, where every finding escalates to a block,
+    so the code-file path -- the one that only warned -- was never exercised.
+    """
     payload = {
         "tool_name": "Write",
         "tool_input": {"file_path": file_path, "content": content},
     }
-    proc = subprocess.run(
+    return subprocess.run(
         ["node", str(SECRET_SCAN_JS)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
     )
-    return proc.returncode
+
+
+def _run_secret_scan_js(content: str, file_path: str = "app.py") -> int:
+    return _run_secret_scan_js_proc(content, file_path).returncode
 
 
 # ── 1. CI gate: .github/scripts/security_scan.py ─────────────────────────
@@ -189,6 +197,236 @@ def test_kilo_secret_scan_blocks(sample_id, line):
 )
 def test_kilo_secret_scan_allows(sample_id, line):
     assert _run_secret_scan_js(line) == 0, f"secret-scan.js false-blocked {sample_id}"
+
+
+# A format pattern identifies a credential by shape, so it blocks in code.
+# Before 2026-11-28 only config extensions blocked; .py/.js/.sh findings warned.
+CODE_EXTENSIONS = ["app.py", "src/index.ts", "src/App.tsx", "deploy.sh", "main.go"]
+
+
+@pytest.mark.parametrize("file_path", CODE_EXTENSIONS)
+def test_kilo_secret_scan_blocks_a_format_secret_in_code_files(file_path):
+    assert _run_secret_scan_js(MUST_DETECT[0][1], file_path) == 2, (
+        f"{file_path} let a format-identifiable secret through as a warning"
+    )
+
+
+# A keyword pattern blocks in a config file, where a literal value belongs.
+# Each entry was measured passing before the fix named in its comment.
+CONFIG_SECRETS = [
+    # An unbounded `secret[-_ ].*` allowlist waved the real Notion token shape
+    # (`secret_` + 43 chars) through.
+    (
+        "notion_token",
+        # Split so the fixture is not itself a token-shaped string: GitHub push
+        # protection blocks a contiguous `secret_` + 43 chars, and this file is
+        # pushed to a public remote.
+        'api_key = "secret_' + "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5zA7bC9d" + '"',
+    ),
+    # The value test took the longest run of the whole match, so the key NAME
+    # won and the punctuated value was never tested.
+    ("punctuated_password", 'password = "P@ss.w0rd!99"'),
+    ("api_key_value", 'api_key = "Xk9mQ2pL7vR4tN8w"'),
+    # A placeholder prefix is not a placeholder value.
+    ("placeholder_suffix", 'password = "test1234!A9$zQ"'),
+    # `your[-_ ].*` allowed any 40-char credential starting with `your_`.
+    ("your_prefixed", 'api_key = "your_aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU"'),
+    # `Authorization: Basic <b64>` has a space but is still a credential.
+    ("basic_scheme_value", 'api_key = "Basic dXNlcjpzM2NyM3RwYXNz"'),
+    # Unquoted assignment whose value is a bare literal.
+    ("unquoted_bare", "password = Xk9mQ2pL7vR4tN8w"),
+    # A synthetic first match must not hide a real second match on the line.
+    (
+        "two_secrets_one_line",
+        'cfg = {password: "test1234", secret: "Xk9mQ2pL7vR4tN8w"}',
+    ),
+    # Django's settings shape; the keyword list stopped at `secret`.
+    ("django_secret_key", 'SECRET_KEY = "a9F2kL8mP3qR7tV1wX5yZ0bC4dE6gH8j"'),
+    # The allowlist read the FIRST quoted value in the match, so an earlier
+    # placeholder hid the real key that follows it.
+    (
+        "placeholder_then_real",
+        'aws_env = "test", aws_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"',
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "sample_id,line", CONFIG_SECRETS, ids=[s[0] for s in CONFIG_SECRETS]
+)
+def test_kilo_secret_scan_blocks_heuristic_secrets_in_config(sample_id, line):
+    assert _run_secret_scan_js(line, ".env") == 2, f"hook allowed {sample_id}"
+
+
+# The same finding is a WARNING in code: `password = current_password` is
+# ordinary code, and a hook that blocks it is a hook people disable. The CI gate
+# catches `password = "new_password"` but not `password = current_password`; an
+# unprefixed value in code is a known gap.
+HEURISTIC_IN_CODE = [
+    ("unquoted_identifier", "password = current_password"),
+    ("js_identifier", "const token = defaultAccessToken;"),
+    ("header_name", 'api_key = "x-api-key"'),
+    ("field_constant", 'password = "new_password"'),
+    ("django_secret_key", 'SECRET_KEY = "a9F2kL8mP3qR7tV1wX5yZ0bC4dE6gH8j"'),
+    ("unprefixed_key", 'api_key = "Xk9mQ2pL7vR4tN8w"'),
+]
+
+
+@pytest.mark.parametrize(
+    "sample_id,line", HEURISTIC_IN_CODE, ids=[s[0] for s in HEURISTIC_IN_CODE]
+)
+def test_kilo_secret_scan_warns_but_does_not_block_heuristics_in_code(sample_id, line):
+    proc = _run_secret_scan_js_proc(line, "app.py")
+    assert proc.returncode == 0, f"false block on {sample_id}"
+    # A warning proves the pattern fired; silence would mean the test passes for
+    # the wrong reason.
+    assert "WARNING" in proc.stderr, f"{sample_id} did not even warn"
+
+
+# Ordinary code must never block, whatever the pattern tier.
+CODE_SHAPES = [
+    "token = compute_token(payload)",
+    "api_key = config.get_api_key()",
+    "return Client(api_key=api_key)",
+    "self.password = request.form['password']",
+    'DATABASE_URL = "postgres://localhost:5432/app"  # dev@example.com',
+]
+
+
+@pytest.mark.parametrize("line", CODE_SHAPES)
+def test_kilo_secret_scan_allows_ordinary_code(line):
+    assert _run_secret_scan_js(line) == 0, f"false block on {line}"
+
+
+# Values that DO match a keyword pattern and are waived by the allowlist, which
+# is anchored to the whole value.
+ALLOWLISTED_VALUES = [
+    'password = "test1234"',
+    'api_key = "dummy-key"',
+    'secret = "changeme"',
+    'api_key = "<your-key-here>"',
+    'api_key = "ANTHROPIC_API_KEY"',
+    'password = "Incorrect password"',
+    'aws_key = "0000000000000000000000000000000000000000"',
+]
+
+
+@pytest.mark.parametrize("line", ALLOWLISTED_VALUES)
+def test_kilo_secret_scan_allows_placeholder_values_in_config(line):
+    """In a config file these would block unless the allowlist waived them."""
+    assert _run_secret_scan_js(line, ".env") == 0, f"false block on {line}"
+
+
+# Runtime references are excluded by the patterns themselves (`(?!\$)` and
+# `[^\s"'$]`), not by the allowlist, so they never even produce a finding.
+RUNTIME_REFERENCES = [
+    'api_key = "${GITHUB_TOKEN}"',
+    "password = $DB_PASS",
+    'API_KEY="${API_KEY:-}"',
+    'api_key = os.environ["ANTHROPIC_API_KEY"]',
+]
+
+
+@pytest.mark.parametrize("line", RUNTIME_REFERENCES)
+def test_kilo_secret_scan_ignores_runtime_references(line):
+    assert _run_secret_scan_js(line, ".env") == 0, f"false block on {line}"
+
+
+# Promoting .vue/.html/.js/.ts to scanning turned a benign-URL false positive
+# into a block, so the URL patterns refuse `/`, `?` and `#` in the userinfo.
+BENIGN_URLS = [
+    (
+        "vue_click_attribute",
+        '<a href="http://localhost:3000" @click="open">Open</a>',
+        "App.vue",
+    ),
+    ("vite_client", 'import "http://localhost:3000/@vite/client"', "App.vue"),
+    ("path_at_sign", 'const u = "https://example.com/users/@me";', "src/index.ts"),
+    (
+        "postgres_host_port",
+        'DATABASE_URL = "postgres://localhost:5432/app"  # dev@example.com',
+        "db.py",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "sample_id,line,file_path", BENIGN_URLS, ids=[s[0] for s in BENIGN_URLS]
+)
+def test_kilo_secret_scan_does_not_block_benign_urls(sample_id, line, file_path):
+    assert _run_secret_scan_js(line, file_path) == 0, f"false block on {sample_id}"
+
+
+# A format pattern must still identify a credential by SHAPE. These lines are
+# prose, a constant name, or a template -- each blocked before the fix named in
+# its comment.
+FORMAT_LOOKALIKES = [
+    # `Bearer` followed by a 20-char snake_case word is a sentence.
+    (
+        "bearer_sentence",
+        'const err = "Invalid Bearer authorization_header";',
+        "auth.ts",
+    ),
+    ("bearer_reference", "// Bearer process.env.API_TOKEN", "auth.ts"),
+    # A constant name, not a token: no digit in the 20+ char tail.
+    (
+        "github_constant_name",
+        'GITHUB_TOKEN_AUTHENTICATION_HEADER = "Authorization"',
+        "config.py",
+    ),
+    ("github_variable_name", "github_token_environment_variable = read()", "config.py"),
+    # A runtime template, not a literal credential.
+    (
+        "postgres_template",
+        "const url = `postgres://${dbUser}:${dbPass}@localhost:5432/app`;",
+        "db.ts",
+    ),
+    (
+        "mongodb_template",
+        "const u = `mongodb://${user}:${pass}@cluster0.example.net/db`;",
+        "db.ts",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "sample_id,line,file_path",
+    FORMAT_LOOKALIKES,
+    ids=[s[0] for s in FORMAT_LOOKALIKES],
+)
+def test_kilo_secret_scan_does_not_block_format_lookalikes(sample_id, line, file_path):
+    assert _run_secret_scan_js(line, file_path) == 0, f"false block on {sample_id}"
+
+
+def test_basic_auth_still_matches_a_real_credential_url():
+    assert _run_secret_scan_js('url = "https://admin:s3cr3tpass@db.internal"') == 2
+
+
+def test_postgres_uri_still_matches_a_real_credential_url():
+    assert (
+        _run_secret_scan_js('url = "postgres://user:s3cr3t@db.internal:5432/app"') == 2
+    )
+
+
+def test_kilo_secret_scan_still_blocks_the_aws_documented_example():
+    """`AKIAIOSFODNN7EXAMPLE` is in the must-detect corpus; a format pattern is
+    never waived by the allowlist."""
+    assert _run_secret_scan_js("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE") == 2
+
+
+def test_kilo_secret_scan_warns_but_does_not_block_in_prose():
+    """Docs quote keys. A README edit must not be blocked over an example."""
+    proc = _run_secret_scan_js_proc(MUST_DETECT[0][1], "README.md")
+    assert proc.returncode == 0
+    assert "WARNING" in proc.stderr
+
+
+def test_kilo_secret_scan_blocks_a_json_config_secret_value():
+    """`"api_key": "..."` is missed by all three scanners when the value has no
+    recognisable prefix (a known gap), so this pins the half that works: a
+    format-identifiable key inside a .json config."""
+    line = '{"api_key": "sk-ant-api03-AbCdEf1234567890AbCdEfGh"}'
+    assert _run_secret_scan_js(line, "config.json") == 2
 
 
 # ── 4. Cross-scanner parity invariant ────────────────────────────────────
